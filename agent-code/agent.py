@@ -14,11 +14,52 @@ Uso:
 
 from __future__ import annotations
 
+import argparse
 import os
 from typing import Any
 
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
+
+# === DEMO PROMPT (recording determinístico) ===
+# Âncora pedagógica usada na gravação ao vivo do Capítulo 04 (Foundry Agent SDK).
+# NÃO é teste automatizado — é um prompt cravado para garantir reprodutibilidade
+# do output durante o recording: mesmo cenário, mesmas tools acionadas, mesmas
+# keywords esperadas na resposta. Permite que o aluno (e o professor) consigam
+# reproduzir a demo sem improviso e validem visualmente que o agente acionou
+# search_kb + (eventualmente) escalate_ticket no caminho esperado.
+#
+# Cenário HelpSphere (service desk B2B): cliente XPTO (lojista) reporta latência
+# alta no portal nas últimas 2 horas. O agente tier 1 deve consultar runbooks de
+# observabilidade, propor roteiro de diagnóstico e abrir ticket de incidente
+# via Service Bus se a sintomatologia exigir escalação para tier 2.
+DEMO_PROMPT_INPUT: str = (
+    "Cliente XPTO (lojista B2B Apex HelpSphere) está reportando latência alta "
+    "no portal nas últimas 2 horas — checkout demorando >8s e timeouts "
+    "intermitentes ao consultar pedidos. Liste, em ordem, a sequência de "
+    "ações que você deve tomar para: (1) diagnosticar a causa-raiz consultando "
+    "Application Insights e a base de runbooks corporativa, (2) recuperar o "
+    "histórico de tickets similares já resolvidos, e (3) abrir um ticket de "
+    "incidente no Service Bus topic 'ticket-escalations' caso a confiança da "
+    "resposta automática seja inferior a 0.5 ou o caso envolva degradação "
+    "ativa de produção. Cite as fontes consultadas."
+)
+
+# Keywords/tópicos que o output do agente DEVE conter para o smoke pós-execução
+# considerar a demo "PASS pedagógico". Não é assertion estrita — é um checklist
+# visual que o professor confere durante o recording.
+DEMO_PROMPT_EXPECTED_KEYS: list[str] = [
+    "service desk",
+    "Application Insights",
+    "runbook",
+    "search_kb",
+    "list_similar_tickets",
+    "Service Bus",
+    "ticket-escalations",
+    "escalate_ticket",
+    "confidence",
+    "tier 2",
+]
 
 
 def get_project_client() -> AIProjectClient:
@@ -133,5 +174,43 @@ def smoke_run() -> None:
     print("\n[smoke] OK — skeleton funcional. Implementação real: docs/04-foundry-agent-sdk.md")
 
 
-if __name__ == "__main__":
+def run_demo() -> None:
+    """Executa o prompt determinístico do recording (Capítulo 04).
+
+    No skeleton v0.1.0-init este método apenas imprime o prompt + keywords
+    esperadas e dispara o smoke_run() para validar imports/env. Quando o
+    handler real do agente (cap 04 Passo 4.6) estiver cravado em
+    agent_runner.py, esta função será expandida para invocar
+    `client.agents.create_and_process_run` com DEMO_PROMPT_INPUT como
+    user message e validar se as DEMO_PROMPT_EXPECTED_KEYS aparecem na
+    resposta final do agente.
+    """
+    print("=" * 72)
+    print("[demo] Capítulo 04 — Foundry Agent SDK (recording determinístico)")
+    print("=" * 72)
+    print("\n[demo] DEMO_PROMPT_INPUT:")
+    print(f"  {DEMO_PROMPT_INPUT}\n")
+    print("[demo] DEMO_PROMPT_EXPECTED_KEYS (checklist pós-resposta):")
+    for key in DEMO_PROMPT_EXPECTED_KEYS:
+        print(f"  - {key}")
+    print("\n[demo] Disparando smoke_run() para validar ambiente...\n")
     smoke_run()
+    print("\n[demo] Próximo passo: implementar agent_runner.py (cap 04 Passo 4.6)")
+    print("[demo] e plugar DEMO_PROMPT_INPUT como user message no run_agent().")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="HelpSphere Foundry Agent skeleton (cap 04 PILOTO)."
+    )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Executa o prompt determinístico cravado para o recording do Capítulo 04.",
+    )
+    args = parser.parse_args()
+
+    if args.demo:
+        run_demo()
+    else:
+        smoke_run()
