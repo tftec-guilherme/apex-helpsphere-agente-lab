@@ -12,10 +12,11 @@
 
 - ✅ Capítulo 01 concluído — Passo 1.3 confirma Copilot Studio Trial ativo (https://copilotstudio.microsoft.com/) e environment Power Platform visível em Admin center
 - ✅ Capítulo 02 concluído — RG `rg-lab-final` + ACR `acrhelpsphere<rand>` + ACA Environment `cae-helpsphere-final` provisionados (não bloqueante, mas confirma que você está no fluxo certo)
-- ✅ Conta Microsoft 365 corporativa OU tenant developer M365 grátis (https://developer.microsoft.com/microsoft-365/dev-program) — **NÃO** funciona com `live.com` / `outlook.com` / `hotmail.com`
+- ✅ Conta Microsoft 365 corporativa OU tenant developer M365 grátis (https://developer.microsoft.com/microsoft-365/dev-program) — **NÃO** funciona com `live.com` / `outlook.com` / `hotmail.com` (ver AMB-2 abaixo)
 - ✅ Browser desktop (Edge, Chrome ou Firefox) — Copilot Studio canvas **não é otimizado para mobile**
 
-> **Atenção warning conta pessoal `live.com`:** Copilot Studio é Power Platform — exige tenant Microsoft 365 ou Power Platform standalone. Conta Microsoft Account pessoal (`@outlook.com` / `@hotmail.com` / `@live.com`) é **rejeitada na criação do agent** com erro `Your account doesn't have access to Copilot Studio` ou `Power Platform is not available for this account type`. Não é uma limitação que dá para contornar dentro do Studio — é falta de licença Power Platform sob a conta. **Workaround padrão da disciplina:** criar tenant developer M365 grátis em https://developer.microsoft.com/microsoft-365/dev-program (90 dias renováveis indefinidamente, vem com Power Platform + 25 licenças E5 de teste). Esta decisão (AMB-2) está cravada no Capítulo 01 Passo 1.3 — se você caiu aqui sem revisitar, volte e confirme.
+> [!IMPORTANT] **Tier / Licenciamento**
+> Decisão `live.com` rejeitada + workaround tenant dev M365 consolidada em [`_disclaimers.md`](./_disclaimers.md). Veja **AMB-2** para detalhe completo + cleanup link.
 
 ---
 
@@ -57,7 +58,7 @@ Antes de tocar Copilot Studio, valide 2 coisas que matam 80% dos labs com erro "
 1. Abra `https://account.microsoft.com/profile` logado com a conta que você vai usar
 2. Confirme o tipo de conta no canto superior direito:
    - ✅ Aceitável: `<seunome>@<empresa>.com`, `<seunome>@<dev>.onmicrosoft.com`
-   - ❌ **Bloqueante:** `<seunome>@outlook.com`, `<seunome>@hotmail.com`, `<seunome>@live.com` — pare aqui e crie tenant dev (link Capítulo 01 Passo 1.3)
+   - ❌ **Bloqueante:** `<seunome>@outlook.com`, `<seunome>@hotmail.com`, `<seunome>@live.com` — pare aqui e crie tenant dev (ver [`_disclaimers.md`](./_disclaimers.md) **AMB-2**)
 3. Abra Power Platform Admin Center (https://admin.powerplatform.microsoft.com/) → menu **Policies** → **Data policies**
 4. Confirme se existe alguma DLP (Data Loss Prevention) policy ativa que bloqueia o conector **HTTP** ou **Custom Connectors**:
    - Se houver policy com `HTTP` na lista **Blocked connectors**, registre — vai bloquear o Capítulo 08 quando vincular `CallFoundryAgent` Action
@@ -328,7 +329,7 @@ customEvents
 
 ## Surpresas pedagógicas (capturadas em smoke runs)
 
-- ⚠️ **Conta `live.com` rejeitada — só workaround real é tenant developer M365** — erro `Your account doesn't have access to Copilot Studio` ao criar agent. Causa: tenant pessoal Microsoft Account (MSA) não tem licença Power Platform. Workaround único: criar tenant dev em https://developer.microsoft.com/microsoft-365/dev-program (90 dias renováveis, gratuito). **Não tente "ativar Power Platform" na MSA** — não existe esse fluxo. Decisão AMB-2 cravada na disciplina.
+- ⚠️ **Conta `live.com` rejeitada — só workaround real é tenant developer M365** — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-2** para causa-raiz, mensagem de erro completa e workaround único (tenant dev M365 90d renováveis).
 - ⚠️ **Default environment compartilha permissões com TODO o tenant** — em tenant corporate, qualquer colega com licença Power Platform pode editar/deletar seu agent acidentalmente se você criar em Default. Sintoma: agent some de um dia pro outro, ninguém assume autoria. Workaround: sempre criar em environment Development isolado (Power Platform Admin Center → New → type Developer). **Anti-pattern:** ignorar warning de environment achando que "depois eu mudo" — não dá pra mover agent entre environments sem export/import manual.
 - ⚠️ **Language mudada após criação quebra Topics declarativos** — se você cria agent com Language `English (US)` e depois muda para `Portuguese (Brazil)` em Settings, Topics existentes com `Trigger phrases` em pt-BR (`oi`, `olá`) param de matchar. Causa: orchestrator usa Language para tokenização/stemming de trigger phrases. Workaround: **decida Language no momento da criação** — replanejar é doloroso (deletar/recriar topics). Documentar em runbook do time.
 - ⚠️ **Generative AI mode `Classic` em alguns tenants é o default — surpresa silenciosa** — em tenants antigos ou com policy CoE, o agent vem com Mode = `Classic`. Sintoma: topic `Resolver_ticket` description-based **nunca dispara** (Classic não usa Description). Workaround: sempre confirmar Mode = `Generative (free-flowing)` no Passo 3.3 antes de criar topics description-based. Verificar via Settings → Generative AI no header.
@@ -345,7 +346,7 @@ customEvents
 
 | Sintoma | Causa provável | Fix |
 |---|---|---|
-| `Your account doesn't have access to Copilot Studio` | Conta MSA pessoal (`live.com`) | Criar tenant dev M365 em developer.microsoft.com |
+| `Your account doesn't have access to Copilot Studio` | Conta MSA pessoal (`live.com`) — ver AMB-2 em [`_disclaimers.md`](./_disclaimers.md) | Criar tenant dev M365 em developer.microsoft.com |
 | Agent não aparece em Topics → Resolver_ticket nunca dispara | Mode = `Classic` (não Generative) | Settings → Generative AI → mudar para `Generative (free-flowing)` |
 | Test panel responde em inglês mesmo com Language pt-BR | Cache do Maker UI pós-mudança de Language | Recarregar página com Ctrl+Shift+R |
 | `+ Add channel` em Teams retorna erro `Tenant policy denies bot installation` | Tenant corporate com Bot Framework policy | Trocar para tenant dev M365 OU pedir Tenant Admin ajuste |

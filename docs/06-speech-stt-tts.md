@@ -11,7 +11,7 @@
 ## Pré-requisitos
 
 - ✅ Capítulos 02 + 04 + 05 concluídos — RG `rg-lab-final`, MI cross-RG `mi-helpsphere-ia`, `agent-code/agent_runner.py` chamando MCP real do Cap 05
-- ✅ Capítulo 03 concluído — agente Copilot Studio `HelpSphere Tier 1 Agent` em tenant M365 dev (não `live.com` — AMB-2)
+- ✅ Capítulo 03 concluído — agente Copilot Studio `HelpSphere Tier 1 Agent` em tenant M365 dev (não `live.com` — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-2**)
 - ✅ `az` CLI logado, `curl` + `jq` instalados, microfone funcional no laptop, player de áudio local (`.mp3` reproduzível)
 
 > **Atenção preview pt-BR voices:** catálogo neural Microsoft muda trimestralmente. Q2-2026: voices canônicas `pt-BR-FranciscaNeural` (feminina, default Apex) e `pt-BR-AntonioNeural` (masculina, fallback). Voices novas como `pt-BR-ThalitaNeural` aparecem antes em `eastus`/`westus3`. Confira `https://speech.microsoft.com/portal/voicegallery`. **Não use `pt-PT-*` (Portugal)** — sotaque/prosódia divergem.
@@ -294,7 +294,8 @@ grep -i x-transcription headers.txt    # Esperado: X-Transcription: <transcriç�
 
 <!-- screenshot: cap06-passo6.7-copilot-voice-channel.png -->
 
-> **Atenção AMB-2:** Passo 6.7 não funciona em conta `live.com` MSA (Copilot Studio bloqueado). Use tenant M365 dev. Speech resource em si funciona em qualquer sub.
+> [!IMPORTANT] **Tier / Licenciamento**
+> Passo 6.7 (canal voice no Copilot Studio) não funciona em conta `live.com` MSA. Veja [`_disclaimers.md`](./_disclaimers.md) **AMB-2**. Speech resource em si funciona em qualquer sub.
 
 > **Custo:** Direct Line Speech é gratuito no Trial; Speech já contado em 6.4-6.5. Telephony via ACS = ~R$ 0,03/min.
 
@@ -371,7 +372,7 @@ curl -sS -X POST "https://eastus2.tts.speech.microsoft.com/cognitiveservices/v1"
 | `RecognitionStatus: NoMatch` com áudio claro | `language=pt-PT` por engano OU áudio muito baixo | Forçar `language=pt-BR` + gravar mais perto do mic |
 | `400 Bad Request: Invalid audio format` | Áudio em `.m4a`/`.mp3` enviado para STT | Converter para WAV PCM 16kHz mono via ffmpeg |
 | `Voice 'X' is not supported in region 'eastus2'` no TTS | Voice nova ainda não disponível na região | Trocar voice ou trocar Speech resource para `eastus`/`westus3` |
-| Copilot Studio Voice tab não aparece | Trial Power Platform expirado OR conta `live.com` | Renovar trial OR migrar para tenant M365 dev (AMB-2) |
+| Copilot Studio Voice tab não aparece | Trial Power Platform expirado OR conta `live.com` (ver AMB-2 em [`_disclaimers.md`](./_disclaimers.md)) | Renovar trial OR migrar para tenant M365 dev |
 | MP3 gerado mas player não reproduz | Output format `riff-*` em vez de `audio-*-mp3` | Trocar header `X-Microsoft-OutputFormat` para `audio-24khz-48kbitrate-mono-mp3` |
 | `403 Forbidden` ao chamar via Bearer Entra MI | Role assignment ainda propagando (<60s) ou role errado | Aguardar 1min + confirmar role = `Cognitive Services User` (não Speech User) |
 

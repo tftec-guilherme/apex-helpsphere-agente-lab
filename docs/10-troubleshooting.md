@@ -84,7 +84,7 @@ Erro/sintoma reportado
 | # | Sintoma | Causa | Fix | Cap fonte |
 |---|---|---|---|---|
 | A1 | `SubscriptionNotRegistered` em Foundry agent create | Free Trial USD 200 não suporta Foundry Agent Service | Converter sub para Pay-As-You-Go no Portal (botão Upgrade) | Cap 01 |
-| A2 | `Your account doesn't have access to Copilot Studio` | Conta MSA pessoal (`live.com`/`outlook.com`/`hotmail.com`) sem licença Power Platform | Criar tenant dev M365 grátis (https://developer.microsoft.com/microsoft-365/dev-program) — **AMB-2** cravado | Caps 01, 03 |
+| A2 | `Your account doesn't have access to Copilot Studio` | Conta MSA pessoal (`live.com`/`outlook.com`/`hotmail.com`) sem licença Power Platform | Criar tenant dev M365 grátis — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-2** | Caps 01, 03 |
 | A3 | `AuthorizationFailed` em `az role assignment create` | Contributor pelado sem User Access Administrator | Pedir admin tenant para `User Access Administrator` no scope da sub OU `Owner` direto | Caps 01, 02 |
 | A4 | `Insufficient privileges` em `az role assignment create --assignee <upn>` | Flag `--assignee` faz lookup Microsoft Graph (exige `Directory.Read.All`) | Trocar por `--assignee-object-id <objectId> --assignee-principal-type ServicePrincipal` (pula lookup) | Cap 02 |
 | A5 | Trial Copilot Studio expira **imediatamente** após signup remoto | Trial conta dias desde **primeiro acesso**, não signup | Confirmar dias restantes em Power Platform Admin Center → Licenses | Cap 03 |
@@ -104,7 +104,7 @@ Erro/sintoma reportado
 | P6 | `gpt-4.1-mini` quota request leva 24-72h | Aprovação manual Microsoft em sub nova | Fazer **Bloco 2 da disciplina antes** (passa pela aprovação); este lab só reusa | Cap 01 |
 | P7 | `pg-n8n-<rand>` PostgreSQL Burstable B1ms cobra parado mesmo idle | PG não tem free tier permanente; `Stop` reinicia automaticamente após 7 dias | Para zerar custo: `delete` (não `Stop`) — ver Cap 07 Passo 7.7 / Cap 09 | Caps 07, 09 |
 | P8 | Speech voice nova (`pt-BR-ThalitaNeural`) `400 Voice not supported` em eastus2 | Voices novas chegam primeiro em `eastus`/`westus3`/`francecentral` | Validar `learn.microsoft.com/azure/ai-services/speech-service/regions` antes de cravar voice | Cap 06 |
-| P9 | Service Bus Topic não cria — botão cinza no Portal | Tier Basic não suporta Topics (só Queues) — **AMB-4** detectado | **Sempre Standard** (~R$ 50/mês baseline) — não confunda nome "Basic" com "menor" | Cap 08 |
+| P9 | Service Bus Topic não cria — botão cinza no Portal | Tier Basic não suporta Topics (só Queues) — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-4** | Sempre Standard (~R$ 50/mês baseline) — não confunda nome "Basic" com "menor" | Cap 08 |
 
 ### §3.3 Containers (ACR + ACA + imagens)
 
@@ -151,7 +151,7 @@ Erro/sintoma reportado
 | N2 | Service Bus messages enfileiram, n8n nunca dispara | `min-replicas 0` + n8n não usa KEDA-aware patterns (long-polling para quando container dorme) | `min-replicas 1` no lab; em prod implementar KEDA Service Bus scaler com Function App wake-up | Cap 07 |
 | N3 | `N8N_ENCRYPTION_KEY` perdida = todas credentials viram lixo cifrado | Sem path de recuperação | Sempre gerar via `openssl rand -base64 32` + anotar em Key Vault/password manager **antes** de colar | Cap 07 |
 | N4 | Owner setup do n8n sem "esqueci minha senha" | n8n não tem fluxo password reset built-in | `psql -h <PG_HOST> -U n8nadmin n8n -c "DELETE FROM \"public\".\"user\" WHERE email='<email>';"` + refazer setup; em prod integrar SSO Entra | Cap 07 |
-| N5 | n8n node Service Bus Trigger polling falha silently com Topic | Campo `Subscription Name` vazio (Topic exige; Queue não) | Preencher com `n8n-escalation-sub` (decisão AMB-4) | Cap 07 |
+| N5 | n8n node Service Bus Trigger polling falha silently com Topic | Campo `Subscription Name` vazio (Topic exige; Queue não) | Preencher com `n8n-escalation-sub` (ver [`_disclaimers.md`](./_disclaimers.md) **AMB-4**) | Cap 07 |
 | N6 | PostgreSQL `Stop` reinicia automaticamente após 7 dias cobrando | Feature Microsoft anti server-órfão | Configurar **Azure Cost Anomaly Alert** (R$ 0) threshold R$ 50 OR delete (não Stop) ao fim da disciplina | Caps 07, 09 |
 | N7 | n8n Service Bus Trigger ainda não suporta MI (issue #7821 desde 2024-06) | Limitação upstream | Dual-stack: Connection String ativa + RBAC paralelo cravado (quando PR merge, troca sem mexer mais) | Cap 07 |
 
@@ -159,7 +159,7 @@ Erro/sintoma reportado
 
 | # | Sintoma | Causa | Fix | Cap fonte |
 |---|---|---|---|---|
-| S1 | `BadRequest: Topic creation is not allowed on basic SKU` | Service Bus Basic não suporta Topics — **bug no skeleton v0.1.0** | **Sempre Standard** (~R$ 50/mês) — AMB-4 cravado | Cap 08 |
+| S1 | `BadRequest: Topic creation is not allowed on basic SKU` | Service Bus Basic não suporta Topics — bug no skeleton v0.1.0 | Sempre Standard (~R$ 50/mês) — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-4** | Cap 08 |
 | S2 | Workflow JSON `escalation-servicebus-sheets.json` usa `topic: escalations` mas caps 07/08 usam `tickets-escalated` | Skeleton v0.1.0-init defasado | Editar node Service Bus Trigger no n8n UI direto (sobrescreve JSON); **gap follow-up prof:** atualizar JSON canônico | Cap 08 + §7 |
 | S3 | Lock duration 15s causa duplicação silent (linha duplicada Sheet, Adaptive Card duplicado) | n8n leva 25s processando (HelpSphere + MCP + Teams), SB reenvia antes do `complete` | `lock-duration ≥ 30s` no lab; em prod medir P99 e setar 5x | Cap 08 |
 | S4 | Google share manda email para `n8n-helpsphere-sheets@...iam.gserviceaccount.com` que dá bounce | Checkbox **Notify people** padrão marcado ao share | **Uncheck Notify** ao compartilhar planilha com Service Account | Cap 08 |
@@ -198,8 +198,8 @@ Erro/sintoma reportado
 
 > Lista priorizada por **frequência de incidência** + **tempo perdido em debug** observado nos smoke runs Wave 4. Crave essas dez antes do recording.
 
-1. **Conta `live.com` em Copilot Studio** (A2) — bloqueia 80% do Cap 03. Fix: tenant dev M365 grátis. **Tempo evitado: 1-2h**.
-2. **Service Bus Basic tentando criar Topic** (S1) — bug do skeleton v0.1.0 corrigido AMB-4. Fix: sempre Standard. **Tempo evitado: 30-60min** (debugging silent failure).
+1. **Conta `live.com` em Copilot Studio** (A2) — bloqueia 80% do Cap 03. Fix: tenant dev M365 grátis (ver [`_disclaimers.md`](./_disclaimers.md) **AMB-2**). **Tempo evitado: 1-2h**.
+2. **Service Bus Basic tentando criar Topic** (S1) — bug do skeleton v0.1.0 (ver [`_disclaimers.md`](./_disclaimers.md) **AMB-4**). Fix: sempre Standard. **Tempo evitado: 30-60min** (debugging silent failure).
 3. **AcrPull RBAC ainda propagando** (C1, C5) — 60s de espera economiza 20min de "por que não pulla?". Fix: aguardar antes de criar Container App.
 4. **Workload profile `Consumption + Dedicated` cobra parado** (P5) — R$ 250/mês silently. Fix: explicitamente `Consumption only`.
 5. **`EXPECTED_AUDIENCE` byte-a-byte com `aud` do token** (O2, O3) — trailing slash mata smokes inteiros. Fix: `jq '.aud'` vs Container App env var.
@@ -354,7 +354,7 @@ az ad app list --filter "startswith(displayName, 'app-mcp-helpsphere')" --query 
 - 🔄 **Dead-letter alerting não cravado neste lab** — Service Bus Subscription com `dead-letter ON` mas sem alerta de DLQ depth no Application Insights. **Production-grade:** mover para Lab Avançado D06 cap `apex-helpsphere-prod-lab/07` (Content Safety + App Insights). (Origem: Cap 08 §Gaps)
 - 🔄 **Smoke run real do `/api/agent/voice` (Cap 06) está gated** — endpoint que encadeia STT → agent → TTS depende de Function App `func-agent-runner` com Foundry Agent + MCP wired (Cap 08). Smoke voice playground via Copilot Studio funciona, mas pipeline programática completa precisa Cap 08 fechado. (Origem: Cap 06 checklist linha "(Opcional) Endpoint /api/agent/voice deployado")
 - 🔄 **Lab guide canônico Troubleshooting #7 (Confidence sempre 1.0)** ainda não foi cravado em nenhum cap específico do companion — fica só no `Lab_Final_Agente_Workflow_Guia_Portal.md`. Considerar adicionar como nota no Cap 04 (Foundry Agent SDK) Surpresas. (Origem: Lab guide linha 1835-1839)
-- 🔄 **AMB-2 (live.com) é mencionado em Caps 01, 03, 06 — risco de drift entre cópias** — toda vez que prof revisar política de tenant dev, atualizar em **3 lugares**. Considerar consolidar num único arquivo `_disclaimers.md` importado via cross-ref.
+- ✅ **AMB-1, AMB-2, AMB-3, AMB-4 consolidados em `_disclaimers.md`** (sessão noturna 2026-05-09) — capítulos agora referenciam IDs apontando para [`_disclaimers.md`](./_disclaimers.md), eliminando drift. Quando prof revisar tier/licenciamento, atualizar somente esse arquivo + bumpar `version-anchor`.
 
 ---
 

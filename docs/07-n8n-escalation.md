@@ -17,7 +17,8 @@
 - ✅ `openssl` disponível localmente (Git Bash, WSL ou macOS) — vamos gerar `N8N_ENCRYPTION_KEY` aleatória de 32 bytes base64
 - ✅ Permissão para criar role assignments na sub (Owner ou User Access Administrator) — necessária no Passo 7.4
 
-> **Atenção custo recorrente — pause/resume obrigatório:** este capítulo introduz o **maior custo fixo do Lab Final** (PostgreSQL B1ms ~R$ 60/mês ligado 24×7). Diferente de ACA Consumption (R$ 0 parado) e Container Apps com `min-replicas 0` (também R$ 0 parado), o **PostgreSQL Flexible Server cobra mesmo idle**. Use uma das duas estratégias **obrigatoriamente** ao fim de cada sessão de estudo — ver Passo 7.7 no fim deste capítulo.
+> [!IMPORTANT] **Tier / Licenciamento — custo recorrente**
+> Este capítulo introduz o maior custo fixo do Lab Final (PostgreSQL B1ms ~R$ 60/mês ligado 24×7). Decisão consolidada em [`_disclaimers.md`](./_disclaimers.md) **AMB-3** (cleanup obrigatório). Use uma das duas estratégias do Passo 7.7 obrigatoriamente ao fim de cada sessão.
 
 > **Atenção breaking — referência cruzada com Cap 08:** este capítulo cria o n8n e importa o workflow, mas o **Service Bus Topic `tickets-escalated` ainda não existe** quando você chega aqui. Vamos cravar a credential do Service Bus em modo "rascunho" no Passo 7.6 e a credential **só fica funcional após o Cap 08** terminar de criar o Topic + Subscription. Isso é proposital — separar o setup do n8n (infraestrutura pesada) da modelagem do mensageria (lógica de domínio) replica o pattern Microsoft de **infrastructure-first, integrations-last**.
 
@@ -35,7 +36,7 @@
 
 > **Nota pedagógica — por que PostgreSQL Flexible Server e não SQLite default do n8n?** A imagem `n8nio/n8n:latest` por padrão usa SQLite local no filesystem do container — perfeito em laptop dev, **falha catastroficamente no ACA**: cada restart do container (deploy, scale, manutenção da plataforma) **perde todo o estado** (workflows, credentials, executions). Em Container Apps, o filesystem é efêmero por design. PostgreSQL externo é o único caminho para n8n produzir resultado pedagogicamente válido neste lab — o aluno precisa sair com workflows persistidos. **Em produção:** mesma arquitetura. **Alternativa premium:** Azure Database for PostgreSQL com HA zona-redundante (~R$ 600/mês) — overkill para o lab.
 
-> **Nota pedagógica — Burstable B1ms vs General Purpose D2s_v3:** B1ms (1 vCore burstable + 2 GiB RAM) entrega ~R$ 60/mês e suporta **até 30 baseline credits/h** — mais que suficiente para n8n metadata + 5-10 workflows ativos do lab. General Purpose D2s_v3 (2 vCores dedicados + 8 GiB) custa ~R$ 350/mês e só faz sentido em produção com ≥100 workflows concorrentes. **Para o lab e produção pequena (single-tenant, ≤20 workflows): Burstable B1ms é canônico.**
+> **Nota pedagógica — Burstable B1ms vs General Purpose D2s_v3:** B1ms (1 vCore burstable + 2 GiB RAM) entrega ~R$ 60/mês e suporta até 30 baseline credits/h — mais que suficiente para n8n metadata + 5-10 workflows ativos do lab. General Purpose D2s_v3 (2 vCores dedicados + 8 GiB) custa ~R$ 350/mês e só faz sentido em produção com ≥100 workflows concorrentes. Para o lab e produção pequena (single-tenant, ≤20 workflows): Burstable B1ms é canônico. Cleanup obrigatório em [`_disclaimers.md`](./_disclaimers.md) **AMB-3**.
 
 > **Nota pedagógica — `min-replicas 1` quebra o scale-to-zero do ACA:** ACA Consumption normalmente é gratuito parado por causa do `min-replicas 0`. Aqui forçamos `1` porque n8n recebe **webhooks externos** (Service Bus polling + HTTP triggers de Adaptive Cards no Teams) — se o container dorme, mensagens enfileiram no Service Bus mas o **trigger node do n8n não desperta o container** (n8n não usa KEDA-aware patterns). Em produção real: implementar **KEDA Service Bus scaler** com min-replicas 0 e trigger por queue length. Para o lab, `min-replicas 1` mantém o n8n acordado durante a sessão e evita "por que minhas escalações não disparam?"
 
@@ -111,7 +112,7 @@
 > echo "PG_PASSWORD=$PG_PASSWORD"  # anote!
 > ```
 
-> **Custo:** PostgreSQL B1ms cobra **R$ 60/mês ligado 24×7**. No lab realista (provisiona+pause/delete no fim do dia), R$ 2-3 por sessão de 8h. **`Stop` zera compute, mas storage 32 GiB cobra R$ 5/mês mesmo parado** (chamado *idle storage*) — único jeito de zerar 100% é `delete`.
+> **Custo:** PostgreSQL B1ms cobra R$ 60/mês ligado 24×7. No lab realista (provisiona+pause/delete no fim do dia), R$ 2-3 por sessão de 8h. `Stop` zera compute, mas storage 32 GiB cobra R$ 5/mês mesmo parado (idle storage) — único jeito de zerar 100% é `delete`. Detalhes da decisão em [`_disclaimers.md`](./_disclaimers.md) **AMB-3**.
 
 > **Nota pedagógica — Public access "any Azure service" é seguro neste lab?** Não em produção. Em produção real, use **Private access (VNet)** com integração ao subnet do ACA Environment. Aqui no lab fazemos public porque (1) a VNet do ACA `cae-helpsphere-final` foi criada gerenciada (sem subnets manuais expostas), (2) Workload Profile Consumption não suporta VNet custom sem migrar para Dedicated. **A senha forte + Allow only Azure services + Firewall só com seu IP** é defesa em camada suficiente para o lab. **Cap do Lab Avançado** mostra a versão production-grade com Private Endpoint.
 
@@ -424,7 +425,7 @@ az group delete --name rg-lab-final --yes --no-wait
 
 > **Custo:** Opção A = ~R$ 5/mês (storage idle do PG) + R$ 0 ACA. Opção B = R$ 0 total mas re-setup ~30min na volta.
 
-> **Nota pedagógica — por que pausar e não baixar SKU para Free tier?** PostgreSQL Flexible Server **não tem Free tier no Azure** (Free Trial $200 USD cobre, mas só dá 30 dias e não regenera). A SKU mais barata permanente é Burstable B1ms. Para zerar custo, **precisa parar ou deletar**. Em produção real: dev/staging/prod usam Burstable e suspendem fora de horário comercial via **Azure Automation runbook** com schedule cron.
+> **Nota pedagógica — por que pausar e não baixar SKU para Free tier?** PostgreSQL Flexible Server não tem Free tier no Azure (ver [`_disclaimers.md`](./_disclaimers.md) **AMB-3** para a decisão completa). Em produção real: dev/staging/prod usam Burstable e suspendem fora de horário comercial via Azure Automation runbook com schedule cron.
 
 <!-- screenshot: cap07-passo7.7-stop-postgres-portal.png -->
 
@@ -501,8 +502,8 @@ az role assignment list \
 - ⚠️ **`WEBHOOK_URL` vazio gera URLs internas inacessíveis** — se você esquecer de atualizar `WEBHOOK_URL` para a Application Url real do ACA, n8n gera webhooks com host `0.0.0.0:5678` (do `N8N_HOST`) que **funcionam dentro do container mas não de fora**. Adaptive Cards do Teams clicam no webhook e dão 404. Workaround: sempre cravar `WEBHOOK_URL=https://<FQDN>/` (com barra final) **após** o ACA criar e ter FQDN.
 - ⚠️ **`N8N_ENCRYPTION_KEY` perdida = todas as credentials viram lixo cifrado** — não dá pra recuperar. Workaround: sempre gere via `openssl rand -base64 32`, **anote em Key Vault** ou password manager pessoal **antes** de colar no ACA Secret. Em prod: use `keyvaultRef` no ACA Secret apontando pra Azure Key Vault.
 - ⚠️ **Owner setup do n8n não tem "esqueci minha senha"** — se você perder a senha do owner, único caminho é `psql -h <PG_HOST> -U n8nadmin n8n -c "DELETE FROM \"public\".\"user\" WHERE email='<seu-email>';"` e refazer setup. Em prod: integre SSO Entra ID ou pelo menos external auth via webhook.
-- ⚠️ **Service Bus Topic vs Queue — confusão sem aviso no UI do n8n** — o n8n node `Azure Service Bus Trigger` aceita ambos no campo `Resource`, mas o **Topic exige `Subscription Name` adicional** (nem sempre visível no primeiro carregamento do node). Se você vier do Cap 08 e usou Topic (decisão AMB-4 cravada), preencha o campo `Subscription` com `n8n-escalation-sub` — **se deixar vazio, polling falha silently**.
-- ⚠️ **PostgreSQL `Stop` reinicia automaticamente após 7 dias** — feature da Microsoft (não bug) para evitar servers órfãos. Se você pausa um lab e volta em 10 dias, **PG está rodando e cobrando** sem você saber. Workaround: configurar **Azure Cost Anomaly Alert** (R$ 0) no RG `rg-lab-final` com threshold R$ 50 → notifica antes de cobrar muito.
+- ⚠️ **Service Bus Topic vs Queue — confusão sem aviso no UI do n8n** — o n8n node `Azure Service Bus Trigger` aceita ambos no campo `Resource`, mas o **Topic exige `Subscription Name` adicional** (nem sempre visível no primeiro carregamento do node). Se você vier do Cap 08 e usou Topic (ver [`_disclaimers.md`](./_disclaimers.md) **AMB-4**), preencha o campo `Subscription` com `n8n-escalation-sub` — **se deixar vazio, polling falha silently**.
+- ⚠️ **PostgreSQL `Stop` reinicia automaticamente após 7 dias** — feature da Microsoft (não bug) para evitar servers órfãos. Se você pausa um lab e volta em 10 dias, **PG está rodando e cobrando** sem você saber. Ver [`_disclaimers.md`](./_disclaimers.md) **AMB-3** para detalhe + Cost Anomaly Alert R$ 50 (proteção permanente).
 
 ---
 

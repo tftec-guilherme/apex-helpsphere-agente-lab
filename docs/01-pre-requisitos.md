@@ -31,7 +31,10 @@
 | 6 | Azure CLI 2.60+ + extensions `containerapp` + `ml` | `az --version` | Todos |
 | 7 | Stack dev local (Python 3.11+ / Node 18+ / Git / VS Code) | `python --version` etc | Cap 04+ |
 
-**Decisões cravadas neste lab:** ACR `Basic` (R$ 35/mês ligado · R$ 1 no lab — AMB-1) · Service Bus `Standard` obrigatório (R$ 55/mês · R$ 2 no lab — Cap 08 cria Topic `ticket-escalations`, e tier Basic NÃO suporta Topics — AMB-4).
+**Decisões cravadas neste lab:** ACR `Basic` + Service Bus `Standard` obrigatório (Cap 08 cria Topic `ticket-escalations`, e tier Basic NÃO suporta Topics).
+
+> [!IMPORTANT] **Tier / Licenciamento**
+> Decisões de tier e licenciamento consolidadas em [`_disclaimers.md`](./_disclaimers.md). Veja **AMB-1** (ACR Basic) e **AMB-4** (Service Bus Standard).
 
 > **Nota pedagógica — por que validar TUDO antes em vez de tropeçar capítulo a capítulo?** Lab Final tem 9h de duração e 8 partes com dependências cross-recurso (Foundry → MCP → Speech → Service Bus → n8n → Logic App). Cada falha de pré-requisito descoberta no meio custa 30-60min de retrabalho. **Front-load a validação aqui** e o resto do lab flui.
 
@@ -262,8 +265,8 @@ Se TODOS os 9 boxes estão marcados → siga para Capítulo 02. Se algum falhou 
 ## Surpresas pedagógicas (capturadas em smoke runs)
 
 - ⚠️ **Free Trial USD 200 não funciona neste lab** — Foundry Agent Service exige sub Pay-As-You-Go ativa. Tentativa em Free Trial dispara erro `SubscriptionNotRegistered` ao chamar `client.agents.create_agent`. Workaround: converter sub em PAYG no Portal (botão **Upgrade** → cartão de crédito).
-- ⚠️ **Conta `live.com` rejeitada em Copilot Studio** — erro `Your account doesn't have access to Copilot Studio`. Causa: tenant pessoal Microsoft Account (MSA) não tem Power Platform. Workaround: usar conta corporativa OU criar tenant developer M365 grátis em https://developer.microsoft.com/microsoft-365/dev-program.
-- ⚠️ **Service Bus Basic não suporta Topics** — apesar do nome confuso, "Basic" não tem Topics. Capítulo 08 cria **Topic** `ticket-escalations`, então tier obrigatório é **Standard** (R$ 55/mês ligado · R$ 2 no lab). Tentativa de criar Topic em Basic falha com `BadRequest: Topics are not supported on Basic tier`.
+- ⚠️ **Conta `live.com` rejeitada em Copilot Studio** — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-2** para causa-raiz, workaround (tenant dev M365 grátis) e referência cravada no Apêndice E.
+- ⚠️ **Service Bus Basic não suporta Topics** — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-4** para a decisão Standard obrigatório + custo + erro `BadRequest: Topics are not supported on Basic tier`.
 - ⚠️ **Contributor sem User Access Administrator falha em `az role assignment create`** — erro `AuthorizationFailed: client does not have authorization to perform action 'Microsoft.Authorization/roleAssignments/write'`. Workaround: peça ao admin do tenant para conceder `User Access Administrator` no scope da sub OU `Owner` direto.
 - ⚠️ **`gpt-4.1-mini` quota request leva 24-72h em sub nova** — se for primeira vez deployando Azure OpenAI nesta sub, Microsoft pode pedir aprovação manual. Workaround: faça o **Bloco 2 da disciplina antes** (já passa pela aprovação) — neste lab você só reusa o deployment existente.
 - ⚠️ **`az upgrade` não atualiza extensions** — comum: aluno roda `az upgrade`, comemora `2.60.0`, mas `containerapp` extension fica em versão antiga e dá erro `unknown command`. Sempre `az extension add --name <nome> --upgrade` em paralelo.

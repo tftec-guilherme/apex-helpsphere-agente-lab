@@ -8,15 +8,8 @@
 
 ---
 
-## DISCLAIMER AMB-4 — Service Bus tier Standard (NÃO Basic)
-
-> ⚠️ **Bug detectado no skeleton v0.1.0:** o outline anterior dizia "Service Bus Basic" — **isto está incorreto**. Service Bus **Basic NÃO suporta Topics + Subscriptions** (apenas Queues simples). O Lab usa Topics porque temos **múltiplos consumidores potenciais** da mesma escalação (n8n hoje; amanhã Logic App, Function, Power Automate). A decisão arquitetural cravada (AMB-4) é:
->
-> - **Service Bus tier:** `Standard` (R$ ~50/mês fixo + R$ 0,80/M operações)
-> - **NUNCA `Basic`** neste Lab (não roda — bloqueia o Topic)
-> - **`Premium`** (R$ ~3.500/mês) só faz sentido em produção real com VNet integration + zone redundancy + ≥1.000 msg/s
->
-> Pause/delete o namespace ao fim da sessão (Passo 8.7) para evitar R$ 50/mês ligado parado.
+> [!IMPORTANT] **Tier / Licenciamento**
+> Decisão **Service Bus tier Standard obrigatório** (Basic NÃO suporta Topics) consolidada em [`_disclaimers.md`](./_disclaimers.md). Veja **AMB-4** para detalhe completo: motivação fan-out, custo R$ 50/mês baseline, comparação Premium, e `delete-pause-recreate` strategy do Passo 8.7.
 
 ---
 
@@ -71,7 +64,7 @@
    - **Resource group:** `rg-lab-final` (mesmo dos Caps 02-07)
    - **Namespace name:** `sb-helpsphere-final` ⚠️ **literal — Cap 07 já referencia este nome**, NÃO mude
    - **Location:** `East US 2` (mesma região do `cae-helpsphere-final`)
-   - **Pricing tier:** ⚠️ **Standard** (NÃO `Basic` — Basic não suporta Topics; ver Disclaimer AMB-4 no topo)
+   - **Pricing tier:** ⚠️ **Standard** (NÃO `Basic` — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-4**)
 5. Tab **Advanced:** deixe defaults (sem zone redundancy — Standard não suporta, só Premium)
 6. Tab **Networking:**
    - **Connectivity method:** `Public access` (firewall padrão aceita tudo — para o lab OK; produção real usa Private Endpoint)
@@ -99,9 +92,7 @@
 > # Esperado: sb-helpsphere-final.servicebus.windows.net
 > ```
 
-> **Custo:** Service Bus Standard = **R$ ~50/mês fixo ligado 24×7** + R$ 0,80 por milhão de operações. No lab realista (provisiona + smoke + delete em 1-2 dias), custo efetivo **R$ 2-3 por sessão**. **Operações são gratuitas até 1M/mês** — o lab gera <100 msg/dia → operações ~R$ 0.
-
-> **Nota pedagógica — por que `Standard` e nunca `Basic` no Lab?** Basic (R$ ~3/mês ligado) é **só queues**, sem Topics, sem Subscriptions, sem dead-letter customizado, sem rules de filtro, sem auto-forwarding. **Faltam features core** do nosso pattern fan-out. Standard adiciona Topics + Subscriptions + 5GB queue size + transactions. **Premium** (R$ ~3.500/mês) adiciona zone redundancy + dedicated capacity + VNet integration + Geo-DR — só justifica em workloads ≥1.000 msg/s ou compliance que exige isolamento físico.
+> **Custo:** Service Bus Standard ~R$ 50/mês fixo ligado 24×7 + R$ 0,80/M operações. No lab realista (provisiona + smoke + delete em 1-2 dias), R$ 2-3 por sessão. Operações gratuitas até 1M/mês — lab gera <100 msg/dia → operações ~R$ 0. Detalhes da decisão tier em [`_disclaimers.md`](./_disclaimers.md) **AMB-4**.
 
 ---
 
@@ -564,14 +555,14 @@ az servicebus topic send \
 
 ## Surpresas pedagógicas (capturadas em smoke runs)
 
-- ⚠️ **Service Bus Basic NÃO suporta Topics — bug detectado no skeleton v0.1.0** — outline anterior dizia Basic, mas Topics são feature exclusiva Standard+. Tentar criar Topic em Basic dá erro 400 silently (Portal cinza o botão sem explicar; CLI retorna `BadRequest: Topic creation is not allowed on basic SKU`). **Workaround cravado:** sempre Standard (~R$ 50/mês). AMB-4 resolvido.
+- ⚠️ **Service Bus Basic NÃO suporta Topics — bug detectado no skeleton v0.1.0** — outline anterior dizia Basic, mas Topics são feature exclusiva Standard+. Tentar criar Topic em Basic dá erro 400 silently (Portal cinza o botão sem explicar; CLI retorna `BadRequest: Topic creation is not allowed on basic SKU`). Decisão cravada em [`_disclaimers.md`](./_disclaimers.md) **AMB-4** (sempre Standard ~R$ 50/mês).
 - ⚠️ **JSON do workflow no repo (`escalation-servicebus-sheets.json`) tem nomenclatura DESALINHADA com cap 07/08** — o JSON v0.1.0-init usa `topic: "escalations"` + `subscription: "n8n-consumer"`, mas Caps 07 e 08 cravam `tickets-escalated` + `n8n-escalation-sub`. **Workaround cravado:** Passo 8.3 instrui aluno a editar o node Service Bus Trigger no n8n UI direto (sobrescreve o JSON). **GAP para prof:** atualizar `n8n-workflows/escalation-servicebus-sheets.json` em pass dedicado para refletir nomes finais — caso contrário, alunos atentos vão estranhar o mismatch.
 - ⚠️ **`lock-duration < 30s` causa duplicação silent** — se o n8n trigger leva 25s para processar (HelpSphere API + MCP + Teams API encadeados), e a subscription tem lock 15s, o Service Bus reenvia a msg **antes** do n8n confirmar `complete`, e a escalação dispara duas vezes (linha duplicada no Sheet, Adaptive Card duplicado no Teams). **Workaround:** sempre `lock-duration ≥ 30s` no lab. Em produção: medir P99 do workflow e setar 5x.
 - ⚠️ **n8n `Azure Service Bus Trigger` ainda NÃO suporta Managed Identity (2026-Q2)** — issue [n8n-io/n8n#7821] aberto desde 2024-06. Por isso usamos **Connection String** mesmo tendo MI com role correta. **Workaround:** dual-stack — Connection String ativa + RBAC paralelo cravado. Quando o PR draft de MI no n8n der merge, trocamos sem mexer em mais nada (RBAC já está lá).
 - ⚠️ **Google Service Account NÃO recebe email de share — checkbox padrão é confuso** — quando você compartilha a planilha e deixa **`Notify people`** marcado (default), o Google tenta mandar email para `n8n-helpsphere-sheets@apex-helpsphere-lab.iam.gserviceaccount.com` e dá bounce. Não bloqueia o share, mas polui a inbox do owner com NDR (non-delivery report). **Workaround:** sempre **uncheck Notify** ao compartilhar com Service Account.
 - ⚠️ **`private_key` do JSON da Service Account quebra ao colar no n8n se editor remove `\n`** — alguns editores (VSCode com extensão JSON formatadora ativa) quebram a string `\n` literal em quebra de linha real ao colar. n8n esperando `-----BEGIN PRIVATE KEY-----\nAAAA...\n-----END...` falha com `Error: PEM_read_bio_PrivateKey`. **Workaround:** copie o valor da chave **direto do arquivo JSON cru** (Notepad), não passe por VSCode. Ou use o campo dedicado `Service Account JSON file upload` do n8n (se disponível na sua versão).
 - ⚠️ **`DefaultAzureCredential` em `agent_runner.py` local falha sem `az login` recente** — `AzureCliCredential` herda token do `az login`, mas se a sessão expirou (>1h), `DefaultAzureCredential` cai em `InteractiveBrowserCredential` e abre o browser do nada no meio do `python agent_runner.py`. Pior: se você rodou `az logout` por engano, falha com `CredentialUnavailableError` cifrado. **Workaround:** rode `az account get-access-token --resource https://servicebus.azure.net` antes do smoke para confirmar token válido.
-- ⚠️ **Service Bus Standard NÃO tem feature `Stop` (diferente do PG)** — você não consegue pausar parcialmente; única forma de zerar custo é deletar o namespace e recriar. **Workaround:** Opção A do Passo 8.7 (`az servicebus namespace delete` + recreate) é rápida (~3min) e zera R$ 50/mês. Em produção: orçar o R$ 50 fixo como custo operacional do Service Bus, ou migrar para **queue Storage Account** (R$ 1/mês, sem Topics) se Topics não são essenciais.
+- ⚠️ **Service Bus Standard NÃO tem feature `Stop` (diferente do PG)** — você não consegue pausar parcialmente; única forma de zerar custo é deletar o namespace e recriar. Workaround: Opção A do Passo 8.7 (`az servicebus namespace delete` + recreate) é rápida (~3min) e zera R$ 50/mês. Detalhes da decisão em [`_disclaimers.md`](./_disclaimers.md) **AMB-4**. Em produção: orçar o R$ 50 fixo como custo operacional, ou migrar para queue Storage Account (R$ 1/mês, sem Topics) se Topics não são essenciais.
 
 ---
 
