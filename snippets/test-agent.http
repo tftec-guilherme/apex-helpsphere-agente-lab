@@ -1,0 +1,52 @@
+### HelpSphere Agent — REST smoke tests
+### v0.1.0-init · Q2-2026
+###
+### Use VSCode REST Client extension (humao.rest-client) ou similar.
+### Substitua {{AGENT_ENDPOINT}} pelo endpoint real após capítulo 04.
+### Substitua {{ACCESS_TOKEN}} por Bearer token (DefaultAzureCredential).
+
+@AGENT_ENDPOINT = https://your-foundry-project.eastus2.api.azureml.ms
+@AGENT_ID = helpsphere-agent-v0.1
+@ACCESS_TOKEN = your-bearer-token-here
+
+### 1. Health check
+GET {{AGENT_ENDPOINT}}/agents/{{AGENT_ID}}/health
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+###
+
+### 2. POST chat (single turn — saudação)
+POST {{AGENT_ENDPOINT}}/agents/{{AGENT_ID}}/threads/messages
+Authorization: Bearer {{ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "role": "user",
+  "content": "Olá, sou Diego do time de Operações. Estou com problema na integração SAP FI."
+}
+
+###
+
+### 3. POST chat com tool calling expected (search_kb)
+POST {{AGENT_ENDPOINT}}/agents/{{AGENT_ID}}/threads/messages
+Authorization: Bearer {{ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "role": "user",
+  "content": "Como funciona a política de devolução de pedido pra lojista?"
+}
+
+###
+
+### 4. GET stats (conversations + escalations count)
+GET {{AGENT_ENDPOINT}}/agents/{{AGENT_ID}}/stats?since=2026-05-01T00:00:00Z
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+###
+
+### 5. DELETE conversation (cleanup test thread)
+DELETE {{AGENT_ENDPOINT}}/agents/{{AGENT_ID}}/threads/{{thread_id}}
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+###

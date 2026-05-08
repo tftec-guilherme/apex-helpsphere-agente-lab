@@ -1,0 +1,198 @@
+{
+  "name": "HelpSphere Escalation — Service Bus to Sheets/Slack/Email",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "receiveMessages",
+        "topic": "escalations",
+        "subscription": "n8n-consumer",
+        "options": {
+          "maxMessageCount": 10,
+          "lockDuration": 30
+        }
+      },
+      "id": "1a2b3c4d-trigger-servicebus",
+      "name": "Service Bus Trigger",
+      "type": "n8n-nodes-base.azureServiceBusTrigger",
+      "typeVersion": 1,
+      "position": [220, 300],
+      "credentials": {
+        "azureServiceBusApi": {
+          "id": "{{ $env.SERVICE_BUS_CRED_ID }}",
+          "name": "HelpSphere Service Bus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Filter: only process tickets with severity HIGH or CRITICAL\nconst items = $input.all();\nreturn items.filter(item => {\n  const sev = (item.json.severity || '').toUpperCase();\n  return ['HIGH', 'CRITICAL'].includes(sev);\n});"
+      },
+      "id": "2b3c4d5e-filter",
+      "name": "Function: Filter Severity",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "dataPropertyName": "severity",
+        "rules": {
+          "rules": [
+            {
+              "value2": "CRITICAL",
+              "operation": "equal"
+            },
+            {
+              "value2": "HIGH",
+              "operation": "equal"
+            }
+          ]
+        }
+      },
+      "id": "3c4d5e6f-switch",
+      "name": "Switch: Severity",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": "={{ $env.GOOGLE_SHEET_ID }}",
+        "sheetName": "Escalations",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $now.toISO() }}",
+            "ticket_id": "={{ $json.ticket_id }}",
+            "severity": "={{ $json.severity }}",
+            "category": "={{ $json.category }}",
+            "persona": "={{ $json.persona }}",
+            "summary": "={{ $json.summary }}",
+            "escalated_by": "helpsphere-agent-v0.1"
+          }
+        },
+        "options": {}
+      },
+      "id": "4d5e6f7a-sheets-append",
+      "name": "Google Sheets: Append Audit",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [880, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "{{ $env.SHEETS_OAUTH_CRED_ID }}",
+          "name": "HelpSphere Sheets OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "httpMethod": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=:rotating_light: *HelpSphere Escalation* :rotating_light:\\n*Ticket:* {{ $json.ticket_id }}\\n*Severity:* {{ $json.severity }}\\n*Category:* {{ $json.category }}\\n*Persona:* {{ $json.persona }}\\n*Summary:* {{ $json.summary }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5e6f7a8b-slack-notify",
+      "name": "HTTP: Slack Notify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.EMAIL_FROM }}",
+        "toEmail": "={{ $env.EMAIL_TO }}",
+        "subject": "=[HelpSphere CRITICAL] Ticket {{ $json.ticket_id }} — {{ $json.category }}",
+        "text": "=Ticket: {{ $json.ticket_id }}\\nSeverity: {{ $json.severity }}\\nCategory: {{ $json.category }}\\nPersona: {{ $json.persona }}\\nSummary:\\n{{ $json.summary }}\\n\\n--\\nHelpSphere Agent v0.1\\nEscalation timestamp: {{ $now.toISO() }}",
+        "options": {}
+      },
+      "id": "6f7a8b9c-email-notify",
+      "name": "Email: Notify Ops",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [880, 400],
+      "credentials": {
+        "smtp": {
+          "id": "{{ $env.SMTP_CRED_ID }}",
+          "name": "HelpSphere SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "result",
+              "value": "=Escalation processed for ticket {{ $json.ticket_id }} at {{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7a8b9c0d-set-result",
+      "name": "Set: Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1100, 300]
+    }
+  ],
+  "connections": {
+    "Service Bus Trigger": {
+      "main": [[{ "node": "Function: Filter Severity", "type": "main", "index": 0 }]]
+    },
+    "Function: Filter Severity": {
+      "main": [[{ "node": "Switch: Severity", "type": "main", "index": 0 }]]
+    },
+    "Switch: Severity": {
+      "main": [
+        [
+          { "node": "Google Sheets: Append Audit", "type": "main", "index": 0 },
+          { "node": "HTTP: Slack Notify", "type": "main", "index": 0 },
+          { "node": "Email: Notify Ops", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Google Sheets: Append Audit": {
+      "main": [[{ "node": "Set: Result", "type": "main", "index": 0 }]]
+    },
+    "HTTP: Slack Notify": {
+      "main": [[{ "node": "Set: Result", "type": "main", "index": 0 }]]
+    },
+    "Email: Notify Ops": {
+      "main": [[{ "node": "Set: Result", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "v0.1.0-init",
+  "meta": {
+    "templateCreatedBy": "tftec-guilherme/apex-helpsphere-agente-lab",
+    "_comment": "Importar via 'Import from File' no n8n. Configure credentials antes de ativar. Veja n8n-workflows/README.md."
+  },
+  "tags": [
+    { "name": "helpsphere" },
+    { "name": "escalation" },
+    { "name": "lab-final-d06" }
+  ]
+}

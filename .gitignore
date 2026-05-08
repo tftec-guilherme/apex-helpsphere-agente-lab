@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+.azure/
+*.log
+node_modules/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+agent-code/local-secrets.json
+mcp-server/local-tokens.txt
