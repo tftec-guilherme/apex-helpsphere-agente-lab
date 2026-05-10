@@ -15,7 +15,7 @@
 - ✅ HelpSphere SQL connection string disponível — capturada do Bloco 2 (apex-helpsphere SaaS): Portal → `rg-helpsphere-ia` → `sql-helpsphere-{rand}` → DB `helpsphere` → **Connection strings** → ADO.NET (autenticação SQL ou Entra com MI — ver Passo 5.4)
 - ✅ Permissão para criar **App Registrations** no tenant Entra (role mínima `Application Developer` ou `Cloud Application Administrator`; `Global Administrator` resolve mas é overkill)
 - ✅ Docker Desktop 4.30+ rodando (Capítulo 01) — usado **somente para inspeção local da imagem opcional**; o build oficial é remoto via `az acr build` (mais rápido + sem problema de WSL/proxy corporate)
-- ✅ `jq` instalado para parse dos curl smoke tests (`apt install jq` / `brew install jq` / `winget install jqlang.jq`)
+- ✅ `jq` instalado para parse dos curl smoke tests (`winget install jqlang.jq` no Windows · `brew install jq` no macOS · `apt install jq` no Linux/WSL) — ou use o fallback PowerShell nativo `ConvertFrom-Json` mostrado nos smoke tests
 
 > **Atenção breaking — `MCP_SERVER_URL` é o contrato do Capítulo 04:** o `agent_runner.py` do Cap 04 já consome `os.environ["MCP_SERVER_URL"]` com fallback para `placeholder`. O **valor canônico final** que vamos cravar aqui é `https://ca-mcp-helpsphere.<rand>.<region>.azurecontainerapps.io` (formato FQDN do ACA Consumption — Azure gera o `<rand>` automaticamente). **Não invente nome próprio** — o aluno copia da Overview do Container App no Portal (Passo 5.4).
 
@@ -134,21 +134,23 @@ requests>=2.31.0
 
 ## Passo 5.2 — Build da imagem via ACR Tasks remoto
 
-**No terminal local com `az` logado:**
+**No terminal local com `az` logado (Windows PowerShell 7):**
 
-```bash
+```powershell
 # Garante variáveis (substitua pelo seu sufixo do Cap 02)
-ACR_NAME="acrhelpsphere<rand>"   # ex.: acrhelpsphere8a3f2d
-RG_LAB="rg-lab-final"
+$AcrName = "acrhelpsphere<rand>"   # ex.: acrhelpsphere8a3f2d
+$RgLab = "rg-lab-final"
 
 # Build remoto — sobe o contexto via .tar.gz e builda no Azure
-cd mcp-server
-az acr build \
-  --registry "$ACR_NAME" \
-  --image mcp-helpsphere:v1 \
-  --file Dockerfile \
+Set-Location mcp-server
+az acr build `
+  --registry "$AcrName" `
+  --image mcp-helpsphere:v1 `
+  --file Dockerfile `
   .
 ```
+
+> **Linux/Mac/WSL:** substitua `$Var = "value"` por `VAR=value`, backticks (`` ` ``) por backslashes (`\`), e `Set-Location` por `cd`.
 
 Tempo: **~3-5 min** (msodbcsql18 é a etapa mais lenta — ~90s).
 
@@ -161,11 +163,11 @@ Run ID: ca1 was successful after 4m12s
 
 Validar imagem no registry:
 
-```bash
-az acr repository list --name "$ACR_NAME" -o table
+```powershell
+az acr repository list --name "$AcrName" -o table
 # Esperado: linha mcp-helpsphere
 
-az acr repository show-tags --name "$ACR_NAME" --repository mcp-helpsphere -o table
+az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o table
 # Esperado: tag v1
 ```
 
@@ -173,16 +175,16 @@ az acr repository show-tags --name "$ACR_NAME" --repository mcp-helpsphere -o ta
 
 > **Alternativa via build local (NÃO recomendado, mas documentado):**
 >
-> ```bash
+> ```powershell
 > # Build local
 > docker build -t mcp-helpsphere:v1 .
 >
 > # Login no ACR
-> az acr login --name "$ACR_NAME"
+> az acr login --name "$AcrName"
 >
 > # Tag + push
-> docker tag mcp-helpsphere:v1 "$ACR_NAME.azurecr.io/mcp-helpsphere:v1"
-> docker push "$ACR_NAME.azurecr.io/mcp-helpsphere:v1"
+> docker tag mcp-helpsphere:v1 "$AcrName.azurecr.io/mcp-helpsphere:v1"
+> docker push "$AcrName.azurecr.io/mcp-helpsphere:v1"
 > ```
 >
 > Por que **não recomendado**: build local exige Docker Desktop rodando + WSL 2 + proxy corporate liberado para `*.docker.io` — falha em ~30% dos laptops corporate em sala de aula. ACR Tasks builda na nuvem e funciona mesmo com Docker Desktop down.
@@ -237,21 +239,23 @@ az acr repository show-tags --name "$ACR_NAME" --repository mcp-helpsphere -o ta
 
 <!-- screenshot: cap05-passo5.3-scopes-3-criados.png -->
 
-> **Alternativa via Azure CLI** (parcial — scopes ainda exigem Portal):
+> **Alternativa via Azure CLI** (parcial — scopes ainda exigem Portal · Windows PowerShell 7):
 >
-> ```bash
+> ```powershell
 > # Cria server app reg
-> SERVER_APP_OBJECT_ID=$(az ad app create \
->   --display-name "app-mcp-helpsphere-server" \
->   --identifier-uris "api://mcp-helpsphere" \
->   --query id -o tsv)
+> $ServerAppObjectId = az ad app create `
+>   --display-name "app-mcp-helpsphere-server" `
+>   --identifier-uris "api://mcp-helpsphere" `
+>   --query id -o tsv
 >
-> MCP_SERVER_APP_ID=$(az ad app show --id "$SERVER_APP_OBJECT_ID" --query appId -o tsv)
-> TENANT_ID=$(az account show --query tenantId -o tsv)
+> $McpServerAppId = az ad app show --id "$ServerAppObjectId" --query appId -o tsv
+> $TenantId = az account show --query tenantId -o tsv
 >
-> echo "MCP_SERVER_APP_ID=$MCP_SERVER_APP_ID"
-> echo "TENANT_ID=$TENANT_ID"
+> Write-Host "MCP_SERVER_APP_ID=$McpServerAppId"
+> Write-Host "TENANT_ID=$TenantId"
 > ```
+>
+> **Linux/Mac/WSL:** substitua `$Var = az ...` por `VAR=$(az ...)` e backticks (`` ` ``) por backslashes (`\`).
 >
 > ⚠️ A CLI **não tem comando direto** para `oauth2PermissionScopes` (scopes `Expose an API`). Você ainda precisa abrir Portal → **Expose an API** → adicionar os 3 scopes manualmente. (Workaround avançado: editar o **Manifest** JSON e cravar `oauth2Permissions[]` direto, mas é frágil — Portal é mais confiável.)
 
@@ -323,41 +327,43 @@ az acr repository show-tags --name "$ACR_NAME" --repository mcp-helpsphere -o ta
 >
 > ⚠️ **Em produção** use Entra Auth com MI: troque connection string para `Server=tcp:sql-helpsphere-{rand}.database.windows.net,1433;Database=helpsphere;Authentication=Active Directory Default;` e cravar role `db_datareader`+`db_datawriter` para `mi-helpsphere-ia` no banco. **No lab,** SQL auth é aceitável pelo prazo curto (24-48h) + cleanup obrigatório no Cap 09.
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (Windows PowerShell 7):**
 >
-> ```bash
-> HELPSPHERE_SQL_CONN="Server=tcp:sql-helpsphere-{rand}.database.windows.net,1433;Database=helpsphere;User Id=apexadmin;Password=<senha>;Encrypt=True;"
-> MI_RESOURCE_ID=$(az identity show -n mi-helpsphere-ia -g rg-helpsphere-ia --query id -o tsv)
+> ```powershell
+> $HelpSphereSqlConn = "Server=tcp:sql-helpsphere-{rand}.database.windows.net,1433;Database=helpsphere;User Id=apexadmin;Password=<senha>;Encrypt=True;"
+> $MiResourceId = az identity show -n mi-helpsphere-ia -g rg-helpsphere-ia --query id -o tsv
 >
-> az containerapp create \
->   --name ca-mcp-helpsphere \
->   --resource-group rg-lab-final \
->   --environment cae-helpsphere-final \
->   --image "$ACR_NAME.azurecr.io/mcp-helpsphere:v1" \
->   --target-port 8000 \
->   --ingress external \
->   --transport http \
->   --registry-server "$ACR_NAME.azurecr.io" \
->   --registry-identity "$MI_RESOURCE_ID" \
->   --user-assigned "$MI_RESOURCE_ID" \
->   --env-vars \
->     HELPSPHERE_SQL_CONNECTION="$HELPSPHERE_SQL_CONN" \
->     AZURE_TENANT_ID="$TENANT_ID" \
->     EXPECTED_AUDIENCE="api://mcp-helpsphere" \
->   --min-replicas 0 \
->   --max-replicas 1 \
->   --cpu 0.5 \
+> az containerapp create `
+>   --name ca-mcp-helpsphere `
+>   --resource-group rg-lab-final `
+>   --environment cae-helpsphere-final `
+>   --image "$AcrName.azurecr.io/mcp-helpsphere:v1" `
+>   --target-port 8000 `
+>   --ingress external `
+>   --transport http `
+>   --registry-server "$AcrName.azurecr.io" `
+>   --registry-identity "$MiResourceId" `
+>   --user-assigned "$MiResourceId" `
+>   --env-vars `
+>     "HELPSPHERE_SQL_CONNECTION=$HelpSphereSqlConn" `
+>     "AZURE_TENANT_ID=$TenantId" `
+>     "EXPECTED_AUDIENCE=api://mcp-helpsphere" `
+>   --min-replicas 0 `
+>   --max-replicas 1 `
+>   --cpu 0.5 `
 >   --memory 1Gi
 >
 > # Capturar o FQDN gerado
-> MCP_FQDN=$(az containerapp show \
->   --name ca-mcp-helpsphere \
->   --resource-group rg-lab-final \
->   --query "properties.configuration.ingress.fqdn" -o tsv)
+> $McpFqdn = az containerapp show `
+>   --name ca-mcp-helpsphere `
+>   --resource-group rg-lab-final `
+>   --query "properties.configuration.ingress.fqdn" -o tsv
 >
-> MCP_SERVER_URL="https://$MCP_FQDN"
-> echo "MCP_SERVER_URL=$MCP_SERVER_URL"
+> $McpServerUrl = "https://$McpFqdn"
+> Write-Host "MCP_SERVER_URL=$McpServerUrl"
 > ```
+>
+> **Linux/Mac/WSL:** substitua `$Var = "value"` por `VAR=value`, `$Var = az ...` por `VAR=$(az ...)`, backticks por backslashes, e `Write-Host` por `echo`.
 
 > **Custo:** ACA Consumption com 0,5 vCPU + 1 GiB cobra **~R$ 0,02/min ativo** (escalado para 1 replica) e **R$ 0 parado** (scale-to-zero após ~5min sem requests). No lab realista (smoke runs ~10min/dia × 3 dias) o custo total fica **~R$ 0,60**. ACR Basic já está no fixo de R$ 35/mês do Cap 02 — pull de imagem está incluso. **Anti-pattern:** trocar `min-replicas 0` para `1` "só por segurança" → cobrança vira ~R$ 30/mês.
 
@@ -420,36 +426,41 @@ az acr repository show-tags --name "$ACR_NAME" --repository mcp-helpsphere -o ta
 
 ## Passo 5.6 — Obter Bearer token client-credentials (smoke)
 
-**No terminal local:**
+**No terminal local (Windows PowerShell 7):**
 
-```bash
-TENANT_ID="<TENANT_ID-do-Passo-5.3>"
-CLIENT_APP_ID="<CLIENT_APP_ID-do-Passo-5.5>"
-CLIENT_SECRET="<CLIENT_SECRET-do-Passo-5.5>"
+```powershell
+$TenantId = "<TENANT_ID-do-Passo-5.3>"
+$ClientAppId = "<CLIENT_APP_ID-do-Passo-5.5>"
+$ClientSecret = "<CLIENT_SECRET-do-Passo-5.5>"
 
-TOKEN=$(curl -s -X POST "https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token" \
-  -d "grant_type=client_credentials" \
-  -d "client_id=${CLIENT_APP_ID}" \
-  -d "client_secret=${CLIENT_SECRET}" \
-  -d "scope=api://mcp-helpsphere/.default" \
-  | jq -r .access_token)
+$TokenResponse = curl.exe -s -X POST "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token" `
+  -d "grant_type=client_credentials" `
+  -d "client_id=$ClientAppId" `
+  -d "client_secret=$ClientSecret" `
+  -d "scope=api://mcp-helpsphere/.default"
 
-echo "Token (primeiros 50 chars): ${TOKEN:0:50}..."
-echo ""
+$Token = ($TokenResponse | ConvertFrom-Json).access_token
+
+Write-Host "Token (primeiros 50 chars): $($Token.Substring(0, 50))..."
+Write-Host ""
+
 # Validar payload do token (decode base64 do middle segment)
-echo "$TOKEN" | cut -d'.' -f2 | base64 -d 2>/dev/null | jq '.aud, .iss, .roles'
+$Segments = $Token.Split('.')
+# Padding base64url para base64 standard (PowerShell exige length múltiplo de 4)
+$PayloadB64 = $Segments[1].Replace('-', '+').Replace('_', '/')
+switch ($PayloadB64.Length % 4) { 2 { $PayloadB64 += '==' } 3 { $PayloadB64 += '=' } }
+$Payload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PayloadB64))
+$Payload | ConvertFrom-Json | Select-Object aud, iss, roles
 ```
 
-Saída esperada do `jq`:
+> **Nota:** `jq` requer instalação no Windows. Instale via `winget install jqlang.jq` ou use o fallback PowerShell nativo `ConvertFrom-Json` (já aplicado acima).
+
+Saída esperada (objeto com `aud`, `iss`, `roles`):
 
 ```text
-"api://mcp-helpsphere"
-"https://sts.windows.net/<TENANT_ID>/"
-[
-  "helpsphere.tickets.read",
-  "helpsphere.tickets.write",
-  "helpsphere.kb.read"
-]
+aud   : api://mcp-helpsphere
+iss   : https://sts.windows.net/<TENANT_ID>/
+roles : {helpsphere.tickets.read, helpsphere.tickets.write, helpsphere.kb.read}
 ```
 
 > **Atenção troubleshooting:** se o token vier `null` ou se aparecer `AADSTS7000215: Invalid client secret`, **a causa é 99% das vezes copy-paste com espaço final** ou secret expirado. Workaround: regenere o secret no Passo 5.5 e copie com cuidado (Portal coloca um botão de copy direto — use ele). Se vier `AADSTS500011: The resource principal named api://mcp-helpsphere was not found`, falta admin consent → Passo 5.5 último item.
@@ -462,20 +473,30 @@ Saída esperada do `jq`:
 
 **No terminal local (token já capturado no Passo 5.6):**
 
-**Smoke 1 — listar tools:**
+**Smoke 1 — listar tools (Windows PowerShell 7):**
 
-```bash
-MCP_SERVER_URL="https://ca-mcp-helpsphere.<rand>.eastus2.azurecontainerapps.io"
+```powershell
+$McpServerUrl = "https://ca-mcp-helpsphere.<rand>.eastus2.azurecontainerapps.io"
 
-curl -sS -X POST "${MCP_SERVER_URL}/mcp" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/list",
-    "id": 1
-  }' | jq '.result.tools[].name'
+$Body = @{
+  jsonrpc = "2.0"
+  method  = "tools/list"
+  id      = 1
+} | ConvertTo-Json -Compress
+
+$Response = curl.exe -sS -X POST "$McpServerUrl/mcp" `
+  -H "Authorization: Bearer $Token" `
+  -H "Content-Type: application/json" `
+  -d $Body
+
+# Parse via PowerShell nativo (sem dependência de jq):
+($Response | ConvertFrom-Json).result.tools | ForEach-Object { $_.name }
+
+# Alternativa com jq (se instalado via `winget install jqlang.jq`):
+# $Response | jq '.result.tools[].name'
 ```
+
+> **Nota:** `jq` requer instalação no Windows. Instale via `winget install jqlang.jq` ou use o fallback PowerShell nativo `ConvertFrom-Json` (aplicado acima).
 
 Saída esperada:
 
@@ -488,19 +509,23 @@ Saída esperada:
 
 **Smoke 2 — chamar `get_ticket`:**
 
-```bash
-curl -sS -X POST "${MCP_SERVER_URL}/mcp" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "get_ticket",
-      "arguments": {"ticket_id": 1}
-    },
-    "id": 2
-  }' | jq '.result'
+```powershell
+$CallBody = @{
+  jsonrpc = "2.0"
+  method  = "tools/call"
+  params  = @{
+    name      = "get_ticket"
+    arguments = @{ ticket_id = 1 }
+  }
+  id      = 2
+} | ConvertTo-Json -Compress -Depth 5
+
+$CallResponse = curl.exe -sS -X POST "$McpServerUrl/mcp" `
+  -H "Authorization: Bearer $Token" `
+  -H "Content-Type: application/json" `
+  -d $CallBody
+
+($CallResponse | ConvertFrom-Json).result
 ```
 
 Saída esperada (depende do seed do HelpSphere SQL):
@@ -518,10 +543,11 @@ Saída esperada (depende do seed do HelpSphere SQL):
 
 **Smoke 3 — confirmar negação sem token (auth ativa):**
 
-```bash
-curl -sS -o /dev/null -w "%{http_code}\n" -X POST "${MCP_SERVER_URL}/mcp" \
-  -H "Content-Type: application/json" \
+```powershell
+$HttpCode = curl.exe -sS -w "%{http_code}" -o $null -X POST "$McpServerUrl/mcp" `
+  -H "Content-Type: application/json" `
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+Write-Host $HttpCode
 # Esperado: 401
 ```
 
@@ -539,7 +565,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" -X POST "${MCP_SERVER_URL}/mcp" \
 
 Abra `agent-code/.env` e edite as 2 linhas que estavam em placeholder:
 
-```bash
+```dotenv
 # ANTES (Passo 4.4):
 MCP_SERVER_URL="https://placeholder.azurecontainerapps.io"
 MCP_TOKEN=""
@@ -549,12 +575,14 @@ MCP_SERVER_URL="https://ca-mcp-helpsphere.<rand>.eastus2.azurecontainerapps.io"
 MCP_TOKEN="<TOKEN-capturado-no-Passo-5.6>"
 ```
 
-**Re-rodar o smoke do agente do Cap 04 (`agent_runner.py`):**
+**Re-rodar o smoke do agente do Cap 04 (`agent_runner.py`) — Windows PowerShell 7:**
 
-```bash
-cd agent-code
+```powershell
+Set-Location agent-code
 python agent_runner.py
 ```
+
+> **Linux/Mac/WSL:** `cd agent-code && python agent_runner.py`
 
 Agora o agente deve **conseguir chamar `get_ticket` via MCP** — observe o stdout:
 
@@ -579,30 +607,31 @@ Para reembolso após 7 dias sem entrega, siga estes passos:
 
 ## Validação end-to-end
 
-```bash
+```powershell
 # 1. Imagem no ACR
-az acr repository show-tags --name "$ACR_NAME" --repository mcp-helpsphere -o tsv
+az acr repository show-tags --name $AcrName --repository mcp-helpsphere -o tsv
 # Esperado: v1
 
 # 2. Container App rodando
-az containerapp show --name ca-mcp-helpsphere --resource-group rg-lab-final \
+az containerapp show --name ca-mcp-helpsphere --resource-group rg-lab-final `
   --query "{name:name, fqdn:properties.configuration.ingress.fqdn, state:properties.runningStatus, mi:identity.userAssignedIdentities}" -o table
 # Esperado: state=Running, fqdn populado, mi com mi-helpsphere-ia
 
 # 3. Health do MCP via curl (sem auth — espera 401, confirma que auth ativa)
-curl -sS -o /dev/null -w "%{http_code}\n" "https://${MCP_FQDN}/mcp" \
+curl.exe -sS -w "%{http_code}" -o $null "https://$MCP_FQDN/mcp" `
   -X POST -H "Content-Type: application/json" -d '{}'
 # Esperado: 401
 
 # 4. tools/list autenticado
-curl -sS -X POST "https://${MCP_FQDN}/mcp" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}' | jq '.result.tools | length'
+$ValidationResp = curl.exe -sS -X POST "https://$MCP_FQDN/mcp" `
+  -H "Authorization: Bearer $Token" `
+  -H "Content-Type: application/json" `
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+($ValidationResp | ConvertFrom-Json).result.tools.Count
 # Esperado: 4
 
 # 5. Re-smoke do agente Cap 04 com MCP real
-cd agent-code && python agent_runner.py | grep '\[tool\] get_ticket'
+cd agent-code; python agent_runner.py | Select-String '\[tool\] get_ticket'
 # Esperado: 1+ linhas com [tool] get_ticket(...)
 
 # 6. App Regs criadas

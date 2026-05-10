@@ -67,11 +67,11 @@ Antes de qualquer comando destrutivo, confirme o checklist:
 
 <!-- screenshot: cap09-passo9.2-delete-rg-portal.png -->
 
-> **Alternativa via Azure CLI (recomendada — mais rápida e síncrona):**
+> **Alternativa via Azure CLI (PowerShell 7 — Windows-first, recomendada — mais rápida e síncrona):**
 >
-> ```bash
+> ```powershell
 > # Pré-flight: listar o que vai morrer (NÃO destrutivo)
-> az resource list --resource-group rg-lab-final \
+> az resource list --resource-group rg-lab-final `
 >   --query "[].{name:name, type:type, location:location}" -o table
 >
 > # Delete síncrono (você acompanha o progresso)
@@ -82,9 +82,11 @@ Antes de qualquer comando destrutivo, confirme o checklist:
 > az group delete --name rg-lab-final --yes --no-wait
 >
 > # Validar que sumiu (~5 min depois para o Azure CRP propagar)
-> az group show --name rg-lab-final 2>&1 | grep -E "(could not be found|ResourceGroupNotFound)"
+> az group show --name rg-lab-final 2>&1 | Select-String -Pattern "could not be found|ResourceGroupNotFound"
 > # Esperado: "Resource group 'rg-lab-final' could not be found."
 > ```
+>
+> **Linux/Mac/WSL:** troque `` ` `` (backtick) por `\` e `Select-String -Pattern` por `grep -E`.
 
 > **Custo:** R$ 0 — operação delete em si é gratuita. **Economia:** ~R$ 145/mês recorrente que para imediatamente (compute) e em ~24h no billing report.
 
@@ -107,21 +109,23 @@ Antes de qualquer comando destrutivo, confirme o checklist:
 
 <!-- screenshot: cap09-passo9.3-delete-foundry-project.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (PowerShell 7 — Windows-first):**
 >
-> ```bash
-> az ml workspace delete \
->   --name aifproj-helpsphere-agente \
->   --resource-group rg-helpsphere-ia \
->   --yes \
+> ```powershell
+> az ml workspace delete `
+>   --name aifproj-helpsphere-agente `
+>   --resource-group rg-helpsphere-ia `
+>   --yes `
 >   --no-wait
 >
 > # Validar que sumiu
-> az ml workspace list \
->   --resource-group rg-helpsphere-ia \
+> az ml workspace list `
+>   --resource-group rg-helpsphere-ia `
 >   --query "[?kind=='Project'].{name:name, kind:kind}" -o table
 > # Esperado: linha aifproj-helpsphere-agente NÃO aparece
 > ```
+>
+> **Linux/Mac/WSL:** troque `` ` `` (backtick) por `\` no fim das linhas.
 
 > **Custo:** R$ 0 — Project é metadata gratuita. Se o Project tinha **threads ativas** (conversas), elas usam storage do Hub (~R$ 1-2/mês até delete). Após Project delete, threads são purgadas em ~24h.
 
@@ -154,12 +158,12 @@ O Passo 9.2 deletou recursos Azure RM mas **App Registrations vivem no tenant En
 
 <!-- screenshot: cap09-passo9.4-delete-app-registrations.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (PowerShell 7 — Windows-first):**
 >
-> ```bash
+> ```powershell
 > # Listar candidatas órfãs (nomes contendo "helpsphere" ou "n8n-graph")
-> az ad app list \
->   --filter "startswith(displayName, 'app-mcp-helpsphere') or startswith(displayName, 'app-n8n')" \
+> az ad app list `
+>   --filter "startswith(displayName, 'app-mcp-helpsphere') or startswith(displayName, 'app-n8n')" `
 >   --query "[].{name:displayName, appId:appId}" -o table
 >
 > # Delete por appId (repita para cada uma)
@@ -168,11 +172,13 @@ O Passo 9.2 deletou recursos Azure RM mas **App Registrations vivem no tenant En
 > az ad app delete --id <appId-de-app-n8n-graph>  # se Cap 08 executado
 >
 > # Validar que sumiram
-> az ad app list \
->   --filter "startswith(displayName, 'app-mcp-helpsphere')" \
+> az ad app list `
+>   --filter "startswith(displayName, 'app-mcp-helpsphere')" `
 >   --query "length(@)"
 > # Esperado: 0
 > ```
+>
+> **Linux/Mac/WSL:** troque `` ` `` (backtick) por `\` no fim das linhas.
 
 > **Custo:** R$ 0 — App Registrations são gratuitas (sem cobrança independente do número).
 
@@ -231,7 +237,7 @@ Cost Management tem **delay de 24-48h** entre delete e dado refletido. Validaç�
 
 ## Validação end-to-end
 
-```bash
+```powershell
 # 1. RG rg-lab-final sumiu
 az group exists --name rg-lab-final                                          # false
 # 2. Foundry Project sumiu (mas Hub continua)

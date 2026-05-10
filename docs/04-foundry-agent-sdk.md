@@ -51,16 +51,21 @@
 
 <!-- screenshot: cap04-passo4.1-criar-foundry-project.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (PowerShell 7 — Windows-first):**
 >
-> ```bash
-> az ml workspace create \
->   --kind project \
->   --hub-id "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/rg-helpsphere-ia/providers/Microsoft.MachineLearningServices/workspaces/aifhub-apex-prod" \
->   --name aifproj-helpsphere-agente \
->   --resource-group rg-helpsphere-ia \
+> ```powershell
+> $SubId = az account show --query id -o tsv
+> $HubId = "/subscriptions/$SubId/resourceGroups/rg-helpsphere-ia/providers/Microsoft.MachineLearningServices/workspaces/aifhub-apex-prod"
+>
+> az ml workspace create `
+>   --kind project `
+>   --hub-id $HubId `
+>   --name aifproj-helpsphere-agente `
+>   --resource-group rg-helpsphere-ia `
 >   --location eastus2
 > ```
+>
+> **Linux/Mac/WSL:** troque `$Var` por `VAR=`, `` ` `` (backtick) por `\`, e use `$(...)` no lugar de `$SubId = az ...`.
 
 > **Custo:** Project é gratuito (cobrança vem de deployments de modelo + storage de threads). No lab, R$ 0 só pelo Project.
 
@@ -90,26 +95,28 @@
 
 <!-- screenshot: cap04-passo4.2-confirmar-deployment-gpt41mini.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (PowerShell 7 — Windows-first):**
 >
-> ```bash
+> ```powershell
 > # Verificar deployments existentes
-> az cognitiveservices account deployment list \
->   --name aifhub-apex-prod \
->   --resource-group rg-helpsphere-ia \
+> az cognitiveservices account deployment list `
+>   --name aifhub-apex-prod `
+>   --resource-group rg-helpsphere-ia `
 >   -o table
 >
 > # Criar se não existe
-> az cognitiveservices account deployment create \
->   --name aifhub-apex-prod \
->   --resource-group rg-helpsphere-ia \
->   --deployment-name gpt-4.1-mini \
->   --model-name gpt-4.1-mini \
->   --model-version "2025-04-14" \
->   --model-format OpenAI \
->   --sku-capacity 30 \
+> az cognitiveservices account deployment create `
+>   --name aifhub-apex-prod `
+>   --resource-group rg-helpsphere-ia `
+>   --deployment-name gpt-4.1-mini `
+>   --model-name gpt-4.1-mini `
+>   --model-version "2025-04-14" `
+>   --model-format OpenAI `
+>   --sku-capacity 30 `
 >   --sku-name Standard
 > ```
+>
+> **Linux/Mac/WSL:** troque `` ` `` (backtick) por `\` no fim das linhas.
 
 > **Custo:** `gpt-4.1-mini` cobra por 1M tokens (input + output). Para o lab, **R$ 5-8** total com cap em 30K TPM. Para comparação, `gpt-4.1` (não-mini) custa ~5x mais — fique no mini.
 
@@ -148,24 +155,23 @@ agent-code/
 └── .env                     # SEU env (gitignored)
 ```
 
-**No terminal local (PowerShell ou bash):**
+**No terminal local (Windows PowerShell 7 — Windows-first):**
 
-```bash
+```powershell
 # Na raiz do clone de apex-helpsphere-agente-lab
-cd agent-code
+Set-Location agent-code
 
 # Criar virtualenv
 python -m venv .venv
 
 # Ativar (Windows PowerShell)
-.venv\Scripts\Activate.ps1
-
-# Ativar (macOS/Linux/WSL)
-source .venv/bin/activate
+.\.venv\Scripts\Activate.ps1
 
 # Instalar deps
 pip install -r requirements.txt
 ```
+
+> **Linux/Mac/WSL:** troque `Set-Location` por `cd`, e ative o venv com `source .venv/bin/activate` no lugar de `.\.venv\Scripts\Activate.ps1`.
 
 `requirements.txt` (já está no scaffold deste repo, conferir conteúdo):
 
@@ -178,9 +184,9 @@ requests>=2.31.0
 python-dotenv>=1.0.0
 ```
 
-`.env.example` (copie para `.env` e preencha):
+`.env.example` (copie para `.env` e preencha — formato dotenv padrão lido por `python-dotenv`, independente de shell):
 
-```bash
+```dotenv
 # Foundry Project (Passo 4.3)
 AI_PROJECT_CONNECTION_STRING="eastus2.api.azureml.ms;<sub-id>;rg-helpsphere-ia;aifproj-helpsphere-agente"
 MODEL_DEPLOYMENT_NAME="gpt-4.1-mini"
@@ -323,9 +329,9 @@ print(f"")
 print(f"    >>> Adicione ao .env: AGENT_ID={agent.id}")
 ```
 
-**Rodar o script:**
+**Rodar o script (Windows PowerShell 7):**
 
-```bash
+```powershell
 # Garantir login Azure (DefaultAzureCredential usa az login na precedence)
 az login
 
@@ -345,7 +351,7 @@ Saída esperada:
 
 Anote o `agent.id` (formato `asst_xxxxxxx`) e atualize seu `.env`:
 
-```bash
+```dotenv
 AGENT_ID=asst_xxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
@@ -500,9 +506,9 @@ if __name__ == "__main__":
     print(f"\n=== Response ===\n{response}")
 ```
 
-**Rodar smoke:**
+**Rodar smoke (Windows PowerShell 7):**
 
-```bash
+```powershell
 python agent_runner.py
 ```
 
@@ -547,27 +553,29 @@ Para iniciar o reembolso de pedido não entregue após 7 dias:
 
 ## Validação end-to-end
 
-```bash
+```powershell
 # 1. Confirmar Project no Azure
-az ml workspace show \
-  --name aifproj-helpsphere-agente \
-  --resource-group rg-helpsphere-ia \
+az ml workspace show `
+  --name aifproj-helpsphere-agente `
+  --resource-group rg-helpsphere-ia `
   --query "{name:name, kind:kind, location:location}" -o table
 # Esperado: kind=project, location=eastus2
 
 # 2. Confirmar deployment do modelo
-az cognitiveservices account deployment show \
-  --name aifhub-apex-prod \
-  --resource-group rg-helpsphere-ia \
-  --deployment-name gpt-4.1-mini \
+az cognitiveservices account deployment show `
+  --name aifhub-apex-prod `
+  --resource-group rg-helpsphere-ia `
+  --deployment-name gpt-4.1-mini `
   --query "{name:name, status:properties.provisioningState, model:properties.model.name}" -o table
 # Esperado: status=Succeeded, model=gpt-4.1-mini
 
 # 3. Smoke run do agente
-cd agent-code
+Set-Location agent-code
 python agent_runner.py
 # Esperado: print da Thread + tool call search_kb + Response em pt-BR com citações
 ```
+
+> **Linux/Mac/WSL:** troque `` ` `` (backtick) por `\` e `Set-Location` por `cd`.
 
 ---
 

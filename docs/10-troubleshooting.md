@@ -149,7 +149,7 @@ Erro/sintoma reportado
 |---|---|---|---|---|
 | N1 | n8n container loop de restart `connection refused` no PG | PG firewall **Allow public access from any Azure service** = No | Ativar flag em PG → Networking; em prod use VNet + Private Endpoint | Cap 07 |
 | N2 | Service Bus messages enfileiram, n8n nunca dispara | `min-replicas 0` + n8n não usa KEDA-aware patterns (long-polling para quando container dorme) | `min-replicas 1` no lab; em prod implementar KEDA Service Bus scaler com Function App wake-up | Cap 07 |
-| N3 | `N8N_ENCRYPTION_KEY` perdida = todas credentials viram lixo cifrado | Sem path de recuperação | Sempre gerar via `openssl rand -base64 32` + anotar em Key Vault/password manager **antes** de colar | Cap 07 |
+| N3 | `N8N_ENCRYPTION_KEY` perdida = todas credentials viram lixo cifrado | Sem path de recuperação | Sempre gerar via PowerShell `[Convert]::ToBase64String((1..32 \| ForEach-Object {[byte](Get-Random -Maximum 256)}))` (ou `openssl rand -base64 32` em Git Bash/WSL) + anotar em Key Vault/password manager **antes** de colar | Cap 07 |
 | N4 | Owner setup do n8n sem "esqueci minha senha" | n8n não tem fluxo password reset built-in | `psql -h <PG_HOST> -U n8nadmin n8n -c "DELETE FROM \"public\".\"user\" WHERE email='<email>';"` + refazer setup; em prod integrar SSO Entra | Cap 07 |
 | N5 | n8n node Service Bus Trigger polling falha silently com Topic | Campo `Subscription Name` vazio (Topic exige; Queue não) | Preencher com `n8n-escalation-sub` (ver [`_disclaimers.md`](./_disclaimers.md) **AMB-4**) | Cap 07 |
 | N6 | PostgreSQL `Stop` reinicia automaticamente após 7 dias cobrando | Feature Microsoft anti server-órfão | Configurar **Azure Cost Anomaly Alert** (R$ 0) threshold R$ 50 OR delete (não Stop) ao fim da disciplina | Caps 07, 09 |
@@ -215,13 +215,13 @@ Erro/sintoma reportado
 
 ### §5.1 Inventário rápido do `rg-lab-final`
 
-```bash
+```powershell
 # Listar todos recursos do RG do Lab Final (cobre 80% dos diagnósticos iniciais)
-az resource list --resource-group rg-lab-final \
+az resource list --resource-group rg-lab-final `
   --query "[].{name:name, type:type, state:provisioningState}" -o table
 
 # Listar recursos do RG compartilhado (Bloco 2) — onde Foundry Hub + MI + LA vivem
-az resource list --resource-group rg-helpsphere-ia \
+az resource list --resource-group rg-helpsphere-ia `
   --query "[].{name:name, type:type}" -o table
 
 # Confirmar sub correta + tipo
@@ -229,39 +229,46 @@ az account show --query "{name:name, state:state, type:subscriptionPolicies.quot
 # Esperado: state=Enabled, type=PayAsYouGo_2014-09-01 (NÃO FreeTrial_*)
 ```
 
+> **Linux/Mac/WSL:** substitua backticks (`` ` ``) por backslashes (`\`).
+
 ### §5.2 RBAC — quem tem o quê em quem
 
-```bash
+```powershell
 # Capturar Principal ID da MI cross-RG (Bloco 2)
-MI_PRINCIPAL=$(az identity show -n mi-helpsphere-ia -g rg-helpsphere-ia --query principalId -o tsv)
+$MiPrincipal = az identity show -n mi-helpsphere-ia -g rg-helpsphere-ia --query principalId -o tsv
 
 # Listar TODAS roles atribuídas à MI (espera-se: AcrPull + Cognitive Services User + Service Bus Receiver + Service Bus Sender)
-az role assignment list --assignee "$MI_PRINCIPAL" \
+az role assignment list --assignee "$MiPrincipal" `
   --query "[].{role:roleDefinitionName, scope:scope}" -o table
 
 # Listar suas próprias roles na sub (debugging permissão)
-az role assignment list --assignee $(az account show --query user.name -o tsv) \
+$MyUpn = az account show --query user.name -o tsv
+az role assignment list --assignee "$MyUpn" `
   --query "[].{role:roleDefinitionName, scope:scope}" -o table
 ```
 
+> **Linux/Mac/WSL:** substitua `$Var = az ...` por `VAR=$(az ...)` e backticks por backslashes.
+
 ### §5.3 Container Apps — estado + logs
 
-```bash
+```powershell
 # Estado dos Container Apps (MCP + n8n)
-az containerapp list --resource-group rg-lab-final \
+az containerapp list --resource-group rg-lab-final `
   --query "[].{name:name, state:properties.runningStatus, fqdn:properties.configuration.ingress.fqdn, image:properties.template.containers[0].image}" -o table
 
 # Logs ao vivo (substitua <NAME>: ca-mcp-helpsphere ou ca-n8n-helpsphere)
 az containerapp logs show --name <NAME> --resource-group rg-lab-final --follow
 
 # Inspecionar env vars do MCP (debug audience mismatch)
-az containerapp show --name ca-mcp-helpsphere --resource-group rg-lab-final \
+az containerapp show --name ca-mcp-helpsphere --resource-group rg-lab-final `
   --query "properties.template.containers[0].env" -o table
 ```
 
+> **Linux/Mac/WSL:** substitua backticks (`` ` ``) por backslashes (`\`).
+
 ### §5.4 Foundry Hub + Project (cross-RG)
 
-```bash
+```powershell
 # Hub aifhub-apex-prod existe?
 az ml workspace show --name aifhub-apex-prod -g rg-helpsphere-ia --query "{name:name, kind:kind, state:provisioningState}" -o table
 
@@ -270,59 +277,69 @@ az ml workspace show --name aifproj-helpsphere-agente -g rg-helpsphere-ia --quer
 # Esperado: kind=project
 
 # Deployment gpt-4.1-mini ativo
-az cognitiveservices account deployment show \
-  --name aifhub-apex-prod -g rg-helpsphere-ia --deployment-name gpt-4.1-mini \
+az cognitiveservices account deployment show `
+  --name aifhub-apex-prod -g rg-helpsphere-ia --deployment-name gpt-4.1-mini `
   --query "properties.provisioningState" -o tsv
 # Esperado: Succeeded
 ```
 
+> **Linux/Mac/WSL:** substitua backticks (`` ` ``) por backslashes (`\`).
+
 ### §5.5 App Registrations (tenant Entra)
 
-```bash
+```powershell
 # Listar 2 App Regs do MCP (Cap 05)
-az ad app list --filter "startswith(displayName,'app-mcp-helpsphere')" \
+az ad app list --filter "startswith(displayName,'app-mcp-helpsphere')" `
   --query "[].{name:displayName, appId:appId}" -o table
 # Esperado: 2 linhas (server + client)
 
-# Decode token (debug audience/roles) — substitua TOKEN
-echo "$TOKEN" | cut -d'.' -f2 | base64 -d 2>/dev/null | jq '{aud,iss,roles,exp}'
+# Decode token (debug audience/roles) — substitua $Token (PowerShell nativo, sem jq/base64 -d)
+$Segments = $Token.Split('.')
+$PayloadB64 = $Segments[1].Replace('-', '+').Replace('_', '/')
+switch ($PayloadB64.Length % 4) { 2 { $PayloadB64 += '==' } 3 { $PayloadB64 += '=' } }
+$Payload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PayloadB64))
+$Payload | ConvertFrom-Json | Select-Object aud, iss, roles, exp
 # Esperado: aud == EXPECTED_AUDIENCE do Container App; roles não-vazio
 ```
 
 ### §5.6 Service Bus + n8n + PostgreSQL
 
-```bash
+```powershell
 # Service Bus namespace + Topic + Subscription
-az servicebus namespace show --name sb-helpsphere-final -g rg-lab-final \
+az servicebus namespace show --name sb-helpsphere-final -g rg-lab-final `
   --query "{name:name, sku:sku.name, status:status}" -o table
 # Esperado: sku=Standard, status=Active
 
 # PostgreSQL Flexible Server estado (Cap 07)
-az postgres flexible-server show --name pg-n8n-<rand> -g rg-lab-final \
+az postgres flexible-server show --name pg-n8n-<rand> -g rg-lab-final `
   --query "{state:state, sku:sku.name}" -o table
 # Esperado: state=Ready, sku=Standard_B1ms
 
 # Smoke n8n /healthz
-curl -i "https://<N8N_FQDN>/healthz"
+curl.exe -i "https://<N8N_FQDN>/healthz"
 # Esperado: HTTP/2 200 + body { "status": "ok" }
 ```
 
+> **Linux/Mac/WSL:** substitua backticks por backslashes e `curl.exe` por `curl`.
+
 ### §5.7 Smoke da pipeline end-to-end (após Cap 08)
 
-```bash
+```powershell
 # Publica msg sintética no SB Topic — pipeline SB → n8n → Sheet roda
-az servicebus topic send \
-  --namespace-name sb-helpsphere-final --resource-group rg-lab-final \
-  --topic-name tickets-escalated \
+az servicebus topic send `
+  --namespace-name sb-helpsphere-final --resource-group rg-lab-final `
+  --topic-name tickets-escalated `
   --body '{"ticket_id":9999,"severity":"HIGH","category":"smoke-diag","persona":"validador","summary":"Diagnóstico §5","escalated_by":"troubleshooting-cap10"}'
 # Esperado: ~10s depois, linha nova na planilha Google Sheets + Adaptive Card no Teams
 ```
+
+> **Linux/Mac/WSL:** substitua backticks (`` ` ``) por backslashes (`\`).
 
 ---
 
 ## §6 Cleanup obrigatório (recap rápido — detalhe completo no Cap 09)
 
-```bash
+```powershell
 # Path completo (ordem importa para não deixar órfão)
 az group delete --name rg-lab-final --yes --no-wait                              # Passo 1: RG do lab
 az ml workspace delete --name aifproj-helpsphere-agente -g rg-helpsphere-ia      # Passo 2: Foundry Project (Hub fica)
@@ -335,11 +352,13 @@ az ad app delete --id <app-n8n-graph-id>                                        
 
 Confirme via:
 
-```bash
+```powershell
 az group exists --name rg-lab-final                                              # false
 az ml workspace list -g rg-helpsphere-ia --query "[?name=='aifproj-helpsphere-agente']" -o tsv  # vazio
 az ad app list --filter "startswith(displayName, 'app-mcp-helpsphere')" --query "length(@)"    # 0
 ```
+
+> **Linux/Mac/WSL:** comandos `az` funcionam idênticos; remova os comentários inline em `#` se quebrar parser do shell.
 
 > **Regra de ouro:** se você delete o RG mas não deletou o Foundry Project, App Regs, e Copilot agent, o lab continua **drenando ~R$ 1-3/mês idle** + secrets órfãos vivos 90d. Cap 09 é não-opcional.
 
@@ -355,6 +374,37 @@ az ad app list --filter "startswith(displayName, 'app-mcp-helpsphere')" --query 
 - 🔄 **Smoke run real do `/api/agent/voice` (Cap 06) está gated** — endpoint que encadeia STT → agent → TTS depende de Function App `func-agent-runner` com Foundry Agent + MCP wired (Cap 08). Smoke voice playground via Copilot Studio funciona, mas pipeline programática completa precisa Cap 08 fechado. (Origem: Cap 06 checklist linha "(Opcional) Endpoint /api/agent/voice deployado")
 - 🔄 **Lab guide canônico Troubleshooting #7 (Confidence sempre 1.0)** ainda não foi cravado em nenhum cap específico do companion — fica só no `Lab_Final_Agente_Workflow_Guia_Portal.md`. Considerar adicionar como nota no Cap 04 (Foundry Agent SDK) Surpresas. (Origem: Lab guide linha 1835-1839)
 - ✅ **AMB-1, AMB-2, AMB-3, AMB-4 consolidados em `_disclaimers.md`** (sessão noturna 2026-05-09) — capítulos agora referenciam IDs apontando para [`_disclaimers.md`](./_disclaimers.md), eliminando drift. Quando prof revisar tier/licenciamento, atualizar somente esse arquivo + bumpar `version-anchor`.
+
+---
+
+## PowerShell vs Bash — armadilhas comuns
+
+Esta disciplina usa **Windows PowerShell 7** como shell padrão. Se você copiar comandos bash de outros guias (StackOverflow, docs Linux, READMEs upstream), vai esbarrar nestas diferenças:
+
+| Antipadrão bash | Equivalente PowerShell |
+|---|---|
+| `curl -X POST ...` (com flags) | `curl.exe -X POST ...` — em pwsh, `curl` é alias de `Invoke-WebRequest` |
+| `--data-binary @file.json` | `--data-binary "@file.json"` — `@` em pwsh é splatting operator, precisa estar entre aspas |
+| `export VAR="value"` | `$env:VAR = "value"` |
+| `cmd \` (line continuation) | `` cmd ` `` (backtick) |
+| `2>/dev/null` ou `> /dev/null` | `2>$null` ou `\| Out-Null` |
+| `head -5` | `\| Select-Object -First 5` |
+| `<<EOF ... EOF` heredoc | `@'...'@` here-string (com `@` na coluna 0) |
+| `cmd1 \| cut -d'.' -f2` | `($cmd1).Split('.')[1]` |
+| `base64 -d` | `[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($var))` |
+| `mkdir -p path` | `New-Item -ItemType Directory -Path path -Force` |
+| `~/path` | `$HOME\path` ou `$env:USERPROFILE\path` |
+| `openssl rand -base64 32` | `[Convert]::ToBase64String((1..32 \| ForEach-Object {[byte](Get-Random -Maximum 256)}))` |
+
+**`jq` no Windows:** não vem instalado por default. Instale com `winget install jqlang.jq` ou `choco install jq`. Como alternativa PowerShell nativa, use `ConvertFrom-Json`:
+
+```powershell
+# Bash: response | jq '.tools[].name'
+# PowerShell:
+$response | ConvertFrom-Json | Select-Object -ExpandProperty tools | ForEach-Object { $_.name }
+```
+
+**Por que `curl.exe` e não `curl`?** Em PowerShell 7, `curl` é um alias para `Invoke-WebRequest` (cmdlet nativo do PowerShell) — ele não aceita as flags do curl Unix (`-X`, `-H`, `-d`, `--data-binary`). Para usar o curl real (que vem com Windows 10+ via `C:\Windows\System32\curl.exe`), invoque sempre como `curl.exe` explicitamente. **Anti-pattern silencioso:** rodar `curl -X POST ...` em pwsh "funciona" mas com semântica errada, retornando objetos `HtmlWebResponseObject` que confundem o parse.
 
 ---
 

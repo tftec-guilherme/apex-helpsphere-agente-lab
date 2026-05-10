@@ -14,7 +14,7 @@
 - ✅ Capítulo 04 concluído — agente `helpsphere-tier1-agent` existe e tem schema da tool `escalate_ticket` registrada (mas ainda em placeholder até Cap 08)
 - ✅ Capítulo 05 concluído — MCP Server `ca-mcp-helpsphere` rodando; o workflow do n8n vai chamá-lo em alguns nodes para enriquecer dados de ticket
 - ✅ HelpSphere SQL connection string disponível (do Bloco 2) — o workflow precisa consultar tickets resolvidos similares
-- ✅ `openssl` disponível localmente (Git Bash, WSL ou macOS) — vamos gerar `N8N_ENCRYPTION_KEY` aleatória de 32 bytes base64
+- ✅ Geração de `N8N_ENCRYPTION_KEY` aleatória de 32 bytes — PowerShell 7 nativo (`[Convert]::ToBase64String((1..32 | ForEach-Object {[byte](Get-Random -Maximum 256)}))`) ou `openssl rand -base64 32` se disponível (Git Bash/WSL/`choco install openssl`)
 - ✅ Permissão para criar role assignments na sub (Owner ou User Access Administrator) — necessária no Passo 7.4
 
 > [!IMPORTANT] **Tier / Licenciamento — custo recorrente**
@@ -83,34 +83,39 @@
 - `PG_USER` = `n8nadmin`
 - `PG_PASSWORD` = senha que você definiu
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (Windows PowerShell 7):**
 >
-> ```bash
-> RAND=8a3f2d  # use o mesmo <rand> do ACR do Cap 02
-> PG_NAME="pg-n8n-${RAND}"
-> PG_PASSWORD=$(openssl rand -base64 16 | tr -d '/+=' | head -c 20)Aa1!  # 20+ chars seguros
+> ```powershell
+> $Rand = "8a3f2d"  # use o mesmo <rand> do ACR do Cap 02
+> $PgName = "pg-n8n-$Rand"
+> # Gera 20 chars seguros + sufixo "Aa1!" para garantir requisito de complexidade
+> $RawBytes = 1..16 | ForEach-Object { [byte](Get-Random -Maximum 256) }
+> $Base64 = [Convert]::ToBase64String($RawBytes) -replace '[/+=]', ''
+> $PgPassword = $Base64.Substring(0, [Math]::Min(20, $Base64.Length)) + "Aa1!"
 >
-> az postgres flexible-server create \
->   --name "$PG_NAME" \
->   --resource-group rg-lab-final \
->   --location eastus2 \
->   --admin-user n8nadmin \
->   --admin-password "$PG_PASSWORD" \
->   --sku-name Standard_B1ms \
->   --tier Burstable \
->   --storage-size 32 \
->   --version 16 \
->   --public-access 0.0.0.0  # demo only — em prod, VNet
+> az postgres flexible-server create `
+>   --name "$PgName" `
+>   --resource-group rg-lab-final `
+>   --location eastus2 `
+>   --admin-user n8nadmin `
+>   --admin-password "$PgPassword" `
+>   --sku-name Standard_B1ms `
+>   --tier Burstable `
+>   --storage-size 32 `
+>   --version 16 `
+>   --public-access 0.0.0.0   # demo only — em prod, VNet
 >
-> az postgres flexible-server db create \
->   --resource-group rg-lab-final \
->   --server-name "$PG_NAME" \
+> az postgres flexible-server db create `
+>   --resource-group rg-lab-final `
+>   --server-name "$PgName" `
 >   --database-name n8n
 >
-> PG_HOST="${PG_NAME}.postgres.database.azure.com"
-> echo "PG_HOST=$PG_HOST"
-> echo "PG_PASSWORD=$PG_PASSWORD"  # anote!
+> $PgHost = "$PgName.postgres.database.azure.com"
+> Write-Host "PG_HOST=$PgHost"
+> Write-Host "PG_PASSWORD=$PgPassword"  # anote!
 > ```
+>
+> **Linux/Mac/WSL:** troque `$Var = "value"` por `VAR=value`, backtick (`` ` ``) por backslash (`\`), e gere senha com `openssl rand -base64 16 | tr -d '/+=' | head -c 20`.
 
 > **Custo:** PostgreSQL B1ms cobra R$ 60/mês ligado 24×7. No lab realista (provisiona+pause/delete no fim do dia), R$ 2-3 por sessão de 8h. `Stop` zera compute, mas storage 32 GiB cobra R$ 5/mês mesmo parado (idle storage) — único jeito de zerar 100% é `delete`. Detalhes da decisão em [`_disclaimers.md`](./_disclaimers.md) **AMB-3**.
 
@@ -144,7 +149,7 @@
      - `DB_POSTGRESDB_USER` = `n8nadmin`
      - `DB_POSTGRESDB_PASSWORD` = `<PG_PASSWORD>` ⚠️ **marque como Secret reference** (não plain text — clique no link "Secret reference" e crie secret `pg-password`)
      - `DB_POSTGRESDB_SSL_CA` = (deixe vazio — PG Flexible Server usa CA pública confiável pelo container)
-     - `N8N_ENCRYPTION_KEY` = gere localmente: `openssl rand -base64 32` → cole o resultado ⚠️ **marque como Secret reference** `n8n-encryption-key`
+     - `N8N_ENCRYPTION_KEY` = gere localmente: PowerShell `[Convert]::ToBase64String((1..32 | ForEach-Object {[byte](Get-Random -Maximum 256)}))` (ou `openssl rand -base64 32` em Git Bash/WSL/Linux/macOS) → cole o resultado ⚠️ **marque como Secret reference** `n8n-encryption-key`
      - `N8N_HOST` = `0.0.0.0`
      - `N8N_PROTOCOL` = `https`
      - `WEBHOOK_URL` = (deixe vazio por enquanto — atualizamos no fim deste Passo)
@@ -170,47 +175,50 @@
 
 <!-- screenshot: cap07-passo7.2-update-webhook-url.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (Windows PowerShell 7):**
 >
-> ```bash
-> ENC_KEY=$(openssl rand -base64 32)
+> ```powershell
+> # Opção PowerShell nativa (não requer OpenSSL):
+> $EncKey = [Convert]::ToBase64String((1..32 | ForEach-Object { [byte](Get-Random -Maximum 256) }))
+> # Ou se OpenSSL estiver disponível (Git Bash / WSL / choco install openssl):
+> # $EncKey = openssl rand -base64 32
 >
-> az containerapp create \
->   --name ca-n8n-helpsphere \
->   --resource-group rg-lab-final \
->   --environment cae-helpsphere-final \
->   --image n8nio/n8n:1.6 \
->   --target-port 5678 \
->   --ingress external \
->   --secrets pg-password="$PG_PASSWORD" n8n-encryption-key="$ENC_KEY" \
->   --env-vars \
->     DB_TYPE=postgresdb \
->     DB_POSTGRESDB_HOST="$PG_HOST" \
->     DB_POSTGRESDB_DATABASE=n8n \
->     DB_POSTGRESDB_USER=n8nadmin \
->     DB_POSTGRESDB_PASSWORD=secretref:pg-password \
->     DB_POSTGRESDB_SSL_CA="" \
->     N8N_ENCRYPTION_KEY=secretref:n8n-encryption-key \
->     N8N_HOST="0.0.0.0" \
->     N8N_PROTOCOL=https \
->     WEBHOOK_URL="" \
->     GENERIC_TIMEZONE="America/Sao_Paulo" \
->   --min-replicas 1 \
->   --max-replicas 1 \
->   --cpu 0.5 \
+> az containerapp create `
+>   --name ca-n8n-helpsphere `
+>   --resource-group rg-lab-final `
+>   --environment cae-helpsphere-final `
+>   --image n8nio/n8n:1.6 `
+>   --target-port 5678 `
+>   --ingress external `
+>   --secrets "pg-password=$PgPassword" "n8n-encryption-key=$EncKey" `
+>   --env-vars `
+>     DB_TYPE=postgresdb `
+>     "DB_POSTGRESDB_HOST=$PgHost" `
+>     DB_POSTGRESDB_DATABASE=n8n `
+>     DB_POSTGRESDB_USER=n8nadmin `
+>     DB_POSTGRESDB_PASSWORD=secretref:pg-password `
+>     DB_POSTGRESDB_SSL_CA="" `
+>     N8N_ENCRYPTION_KEY=secretref:n8n-encryption-key `
+>     N8N_HOST=0.0.0.0 `
+>     N8N_PROTOCOL=https `
+>     WEBHOOK_URL="" `
+>     GENERIC_TIMEZONE=America/Sao_Paulo `
+>   --min-replicas 1 `
+>   --max-replicas 1 `
+>   --cpu 0.5 `
 >   --memory 1Gi
 >
-> N8N_FQDN=$(az containerapp show \
->   --name ca-n8n-helpsphere \
->   --resource-group rg-lab-final \
->   --query "properties.configuration.ingress.fqdn" -o tsv)
+> $N8nFqdn = az containerapp show `
+>   --name ca-n8n-helpsphere `
+>   --resource-group rg-lab-final `
+>   --query "properties.configuration.ingress.fqdn" -o tsv
 >
-> az containerapp update \
->   --name ca-n8n-helpsphere \
->   --resource-group rg-lab-final \
->   --set-env-vars WEBHOOK_URL="https://${N8N_FQDN}/"
+> az containerapp update `
+>   --name ca-n8n-helpsphere `
+>   --resource-group rg-lab-final `
+>   --set-env-vars "WEBHOOK_URL=https://$N8nFqdn/"
 >
-> echo "N8N_URL=https://${N8N_FQDN}"
+> Write-Host "N8N_URL=https://$N8nFqdn"
 > ```
 
 > **Custo:** ACA n8n com `min-replicas 1` cobra ~R$ 80/mês ligado (não faz scale-to-zero). No lab, ~R$ 0,02/min × 8h sessão = ~R$ 10/dia. **Ao parar o PG no fim do dia, o n8n quebra (DB indisponível) — então pause AMBOS juntos** (Passo 7.7).
@@ -265,25 +273,27 @@
 
 <!-- screenshot: cap07-passo7.4-rbac-sb-data-receiver.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (Windows PowerShell 7):**
 >
-> ```bash
-> MI_ID=$(az identity show \
->   --name mi-helpsphere-ia \
->   --resource-group rg-helpsphere-ia \
->   --query principalId -o tsv)
+> ```powershell
+> $MiId = az identity show `
+>   --name mi-helpsphere-ia `
+>   --resource-group rg-helpsphere-ia `
+>   --query principalId -o tsv
 >
-> SB_SCOPE=$(az servicebus namespace show \
->   --name sb-helpsphere-final \
->   --resource-group rg-lab-final \
->   --query id -o tsv)
+> $SbScope = az servicebus namespace show `
+>   --name sb-helpsphere-final `
+>   --resource-group rg-lab-final `
+>   --query id -o tsv
 >
-> az role assignment create \
->   --assignee-object-id "$MI_ID" \
->   --assignee-principal-type ServicePrincipal \
->   --role "Azure Service Bus Data Receiver" \
->   --scope "$SB_SCOPE"
+> az role assignment create `
+>   --assignee-object-id "$MiId" `
+>   --assignee-principal-type ServicePrincipal `
+>   --role "Azure Service Bus Data Receiver" `
+>   --scope "$SbScope"
 > ```
+>
+> **Linux/Mac/WSL:** substitua `$Var = az ...` por `VAR=$(az ...)` e backticks (`` ` ``) por backslashes (`\`).
 
 > **Custo:** R$ 0 — RBAC do Azure é gratuito sem limite de assignments.
 
@@ -390,21 +400,25 @@ Para o PG E o ACA do n8n. Storage do PG continua cobrando ~R$ 5/mês mas compute
    - Status muda para **Inactive** em ~10s
    - Custo zera (replicas = 0)
 
-**No CLI:**
+**No CLI (Windows PowerShell 7):**
 
-```bash
-az postgres flexible-server stop \
-  --name "pg-n8n-${RAND}" \
+```powershell
+az postgres flexible-server stop `
+  --name "pg-n8n-$Rand" `
   --resource-group rg-lab-final
 
-az containerapp revision deactivate \
-  --name ca-n8n-helpsphere \
-  --resource-group rg-lab-final \
-  --revision $(az containerapp revision list \
-    --name ca-n8n-helpsphere \
-    --resource-group rg-lab-final \
-    --query "[?properties.active].name | [0]" -o tsv)
+$ActiveRevision = az containerapp revision list `
+  --name ca-n8n-helpsphere `
+  --resource-group rg-lab-final `
+  --query "[?properties.active].name | [0]" -o tsv
+
+az containerapp revision deactivate `
+  --name ca-n8n-helpsphere `
+  --resource-group rg-lab-final `
+  --revision "$ActiveRevision"
 ```
+
+> **Linux/Mac/WSL:** substitua `$Var = az ...` por `VAR=$(az ...)` e backticks (`` ` ``) por backslashes (`\`).
 
 **Para retomar:** **Start** no PG (5min provisioning), depois **Activate revision** no ACA (1min). Workflow estado preservado integralmente.
 
@@ -417,9 +431,9 @@ Deleta tudo. Storage zera. **Você perde o estado do n8n** (workflows, credentia
 1. RG `rg-lab-final` → **Overview** → **Delete resource group** → digitar nome → **Delete**
 2. ⚠️ Isto deleta **TODOS** os recursos do Lab Final: ACR, ACA Env, n8n, MCP Server, Speech (Cap 06). Se ainda quiser preservar partes, **delete recursos individualmente** em vez do RG inteiro.
 
-**No CLI:**
+**No CLI (Windows PowerShell 7 ou Bash):**
 
-```bash
+```powershell
 az group delete --name rg-lab-final --yes --no-wait
 ```
 
@@ -433,43 +447,45 @@ az group delete --name rg-lab-final --yes --no-wait
 
 ## Validação end-to-end
 
-```bash
+```powershell
 # 1. PostgreSQL existe e está Ready/Running
-az postgres flexible-server show \
-  --name "pg-n8n-${RAND}" \
-  --resource-group rg-lab-final \
+az postgres flexible-server show `
+  --name "pg-n8n-$Rand" `
+  --resource-group rg-lab-final `
   --query "{name:name, state:state, sku:sku.name, version:version}" -o table
 # Esperado: state=Ready, sku=Standard_B1ms, version=16
 
 # 2. Database n8n criado dentro do server
-az postgres flexible-server db list \
-  --resource-group rg-lab-final \
-  --server-name "pg-n8n-${RAND}" \
+az postgres flexible-server db list `
+  --resource-group rg-lab-final `
+  --server-name "pg-n8n-$Rand" `
   -o table
 # Esperado: linha com name=n8n
 
 # 3. Container App n8n rodando
-az containerapp show \
-  --name ca-n8n-helpsphere \
-  --resource-group rg-lab-final \
+az containerapp show `
+  --name ca-n8n-helpsphere `
+  --resource-group rg-lab-final `
   --query "{fqdn:properties.configuration.ingress.fqdn, replicas:properties.template.scale, image:properties.template.containers[0].image}" -o json
 # Esperado: fqdn=ca-n8n-helpsphere.<rand>.eastus2.azurecontainerapps.io, image=n8nio/n8n:1.6, scale.minReplicas=1
 
 # 4. n8n responde HTTP 200 na rota /healthz
-curl -i "https://${N8N_FQDN}/healthz"
+curl.exe -i "https://$N8nFqdn/healthz"
 # Esperado: HTTP/2 200 + body { "status": "ok" }
 
 # 5. Workflow importado aparece via n8n REST API (Bearer = email/password do owner em Basic Auth)
-curl -u "<owner-email>:<owner-password>" \
-  "https://${N8N_FQDN}/rest/workflows" | jq '.data[] | {id, name, active}'
-# Esperado: linha { id: "...", name: "Ticket Escalation", active: false }
+$WorkflowsJson = curl.exe -u "<owner-email>:<owner-password>" "https://$N8nFqdn/rest/workflows"
+($WorkflowsJson | ConvertFrom-Json).data | Select-Object id, name, active
+# Esperado: linha com name=Ticket Escalation, active=False
 
 # 6. Role assignment do MI (apenas se Cap 08 já feito + Passo 7.4 cravado)
-az role assignment list \
-  --assignee "$MI_ID" \
+az role assignment list `
+  --assignee "$MiId" `
   --query "[?roleDefinitionName=='Azure Service Bus Data Receiver']" -o table
 # Esperado: 1 linha com scope contendo sb-helpsphere-final
 ```
+
+> **Linux/Mac/WSL:** substitua `$Var = "value"` por `VAR=value`, backticks por backslashes, e use `curl ... | jq '.data[] | {id, name, active}'` no item 5.
 
 ---
 
@@ -500,7 +516,7 @@ az role assignment list \
 - ⚠️ **PostgreSQL `Allow public access from any Azure service: No` quebra ACA** — se você esquecer essa flag, o n8n container sobe mas **fica em loop de restart** com erro `connection refused` (PG firewall bloqueia). Workaround: ative a flag em **Networking** do PG. Em prod real, use VNet integration + Private Endpoint em vez disso.
 - ⚠️ **`min-replicas 0` perde Service Bus messages mesmo com `Active workflow` no n8n** — n8n usa long-polling no Service Bus trigger, não KEDA. Quando `min-replicas 0`, container dorme após 5min idle, polling para, mensagens enfileiram mas **dead-letter após 3 retries** sem nunca acordar o n8n. Workaround: `min-replicas 1` no lab. Em prod: implementar KEDA Service Bus scaler com **separate Function App** que desperta o n8n via webhook.
 - ⚠️ **`WEBHOOK_URL` vazio gera URLs internas inacessíveis** — se você esquecer de atualizar `WEBHOOK_URL` para a Application Url real do ACA, n8n gera webhooks com host `0.0.0.0:5678` (do `N8N_HOST`) que **funcionam dentro do container mas não de fora**. Adaptive Cards do Teams clicam no webhook e dão 404. Workaround: sempre cravar `WEBHOOK_URL=https://<FQDN>/` (com barra final) **após** o ACA criar e ter FQDN.
-- ⚠️ **`N8N_ENCRYPTION_KEY` perdida = todas as credentials viram lixo cifrado** — não dá pra recuperar. Workaround: sempre gere via `openssl rand -base64 32`, **anote em Key Vault** ou password manager pessoal **antes** de colar no ACA Secret. Em prod: use `keyvaultRef` no ACA Secret apontando pra Azure Key Vault.
+- ⚠️ **`N8N_ENCRYPTION_KEY` perdida = todas as credentials viram lixo cifrado** — não dá pra recuperar. Workaround: sempre gere via PowerShell `[Convert]::ToBase64String((1..32 | ForEach-Object {[byte](Get-Random -Maximum 256)}))` (ou `openssl rand -base64 32` em Git Bash/WSL), **anote em Key Vault** ou password manager pessoal **antes** de colar no ACA Secret. Em prod: use `keyvaultRef` no ACA Secret apontando pra Azure Key Vault.
 - ⚠️ **Owner setup do n8n não tem "esqueci minha senha"** — se você perder a senha do owner, único caminho é `psql -h <PG_HOST> -U n8nadmin n8n -c "DELETE FROM \"public\".\"user\" WHERE email='<seu-email>';"` e refazer setup. Em prod: integre SSO Entra ID ou pelo menos external auth via webhook.
 - ⚠️ **Service Bus Topic vs Queue — confusão sem aviso no UI do n8n** — o n8n node `Azure Service Bus Trigger` aceita ambos no campo `Resource`, mas o **Topic exige `Subscription Name` adicional** (nem sempre visível no primeiro carregamento do node). Se você vier do Cap 08 e usou Topic (ver [`_disclaimers.md`](./_disclaimers.md) **AMB-4**), preencha o campo `Subscription` com `n8n-escalation-sub` — **se deixar vazio, polling falha silently**.
 - ⚠️ **PostgreSQL `Stop` reinicia automaticamente após 7 dias** — feature da Microsoft (não bug) para evitar servers órfãos. Se você pausa um lab e volta em 10 dias, **PG está rodando e cobrando** sem você saber. Ver [`_disclaimers.md`](./_disclaimers.md) **AMB-3** para detalhe + Cost Anomaly Alert R$ 50 (proteção permanente).

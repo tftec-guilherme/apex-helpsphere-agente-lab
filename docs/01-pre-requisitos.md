@@ -8,6 +8,14 @@
 
 ---
 
+## ⚙️ Sintaxe de comandos shell
+
+> **Os blocos shell deste guia usam PowerShell** (Windows-first, alinhado ao público da disciplina). Continuação de linha é `` ` `` (backtick), variáveis de ambiente via `$env:VAR = "..."`, substituição de comando via `(cmd)` ou `$(cmd)`.
+>
+> **Linux / Mac / WSL:** troque `$env:VAR = "..."` por `export VAR="..."`, `$env:VAR = (cmd)` por `export VAR=$(cmd)`, e `` ` `` por `\` no fim das linhas.
+
+---
+
 ## Pré-requisitos (este capítulo é o root — pré-condições externas ao repo)
 
 - ✅ Você completou o **Bloco 2 da Disciplina 06** (apex-helpsphere SaaS provisionado em `rg-helpsphere-ia`) — fornece Foundry Hub `aifhub-apex-prod` + Managed Identity `mi-helpsphere-ia` + Log Analytics `log-helpsphere-ia` que serão **reusados** neste lab.
@@ -42,15 +50,15 @@
 
 ## Passo 1.1 — Validar sub Azure Pay-As-You-Go + roles
 
-**No terminal local (PowerShell ou bash com Azure CLI logado):**
+**No terminal local (PowerShell com Azure CLI logado):**
 
-```bash
+```powershell
 # 1. Sub correta + tipo PAYG
 az account show --query "{name:name, state:state, type:subscriptionPolicies.quotaId}" -o table
 # Esperado: state=Enabled, type=PayAsYouGo_2014-09-01 (se aparecer FreeTrial_*, PARE — converta no Portal)
 
 # 2. Role Owner ou Contributor+UAA
-az role assignment list --assignee $(az account show --query user.name -o tsv) \
+az role assignment list --assignee $(az account show --query user.name -o tsv) `
   --query "[].{role:roleDefinitionName, scope:scope}" -o table
 # Esperado: Owner OU (Contributor + User Access Administrator) no scope da sub
 ```
@@ -83,15 +91,15 @@ Se você só tem `Reader` ou `Contributor` sem UAA, **peça ao admin do tenant**
 <!-- screenshot: cap01-passo1.2-foundry-hub-aifhub-apex-prod.png -->
 
 > **Alternativa via Azure CLI:**
-> ```bash
+> ```powershell
 > # Confirma os 4 recursos do Bloco 2 existindo
-> az resource list --resource-group rg-helpsphere-ia \
+> az resource list --resource-group rg-helpsphere-ia `
 >   --query "[].{name:name, type:type}" -o table
 >
 > # Confirma deployment gpt-4.1-mini
-> az cognitiveservices account deployment list \
->   --name aifhub-apex-prod \
->   --resource-group rg-helpsphere-ia \
+> az cognitiveservices account deployment list `
+>   --name aifhub-apex-prod `
+>   --resource-group rg-helpsphere-ia `
 >   -o table
 > ```
 
@@ -127,7 +135,7 @@ Se você só tem `Reader` ou `Contributor` sem UAA, **peça ao admin do tenant**
 
 **No terminal local** (substitua `<SEU-USER>` pelo seu username GitHub):
 
-```bash
+```powershell
 git clone https://github.com/<SEU-USER>/apex-helpsphere-agente-lab.git
 cd apex-helpsphere-agente-lab
 git remote add upstream https://github.com/tftec-guilherme/apex-helpsphere-agente-lab.git
@@ -144,7 +152,7 @@ git remote -v    # Esperado: origin=<SEU-USER>, upstream=tftec-guilherme
 
 **No terminal local:**
 
-```bash
+```powershell
 docker version    # Esperado: Client 4.30+ / Server Engine 25.x+
 ```
 
@@ -162,7 +170,7 @@ Se aparecer `Cannot connect to the Docker daemon`, abra Docker Desktop no menu I
 
 **No terminal local:**
 
-```bash
+```powershell
 az --version                                          # Esperado: 2.60.0+
 az extension add --name containerapp --upgrade
 az extension add --name ml --upgrade
@@ -183,7 +191,7 @@ Se CLI < 2.60: `az upgrade` (Windows: novo MSI em https://aka.ms/installazurecli
 
 **No terminal local, validar as 4 ferramentas:**
 
-```bash
+```powershell
 python --version    # Esperado: Python 3.11.x+
 node --version      # Esperado: v18.x+
 git --version       # Esperado: git 2.40+ (qualquer 2.x recente serve)
@@ -194,7 +202,7 @@ Se Python < 3.11, baixe https://www.python.org/downloads/ e marque **Add Python 
 
 **VS Code extensions exigidas no lab:**
 
-```bash
+```powershell
 code --install-extension ms-python.python
 code --install-extension ms-azuretools.vscode-bicep
 code --install-extension ms-azuretools.vscode-docker
@@ -212,24 +220,24 @@ code --install-extension ms-azuretools.vscode-azurecontainerapps
 
 Rode este bloco depois de completar Passos 1.1 a 1.7. **Todos** os comandos devem retornar sucesso:
 
-```bash
+```powershell
 # 1. Sub PAYG + role correta
 az account show --query "{state:state, name:name}" -o table
 # Esperado: state=Enabled
 
 # 2. RG do Bloco 2 existindo com Foundry Hub
-az resource show \
-  --resource-group rg-helpsphere-ia \
-  --name aifhub-apex-prod \
-  --resource-type "Microsoft.MachineLearningServices/workspaces" \
+az resource show `
+  --resource-group rg-helpsphere-ia `
+  --name aifhub-apex-prod `
+  --resource-type "Microsoft.MachineLearningServices/workspaces" `
   --query "{name:name, location:location}" -o table
 # Esperado: linha com aifhub-apex-prod / eastus2
 
 # 3. Deployment gpt-4.1-mini ativo
-az cognitiveservices account deployment show \
-  --name aifhub-apex-prod \
-  --resource-group rg-helpsphere-ia \
-  --deployment-name gpt-4.1-mini \
+az cognitiveservices account deployment show `
+  --name aifhub-apex-prod `
+  --resource-group rg-helpsphere-ia `
+  --deployment-name gpt-4.1-mini `
   --query "properties.provisioningState" -o tsv
 # Esperado: Succeeded
 
@@ -239,7 +247,7 @@ docker version --format '{{.Server.Version}}'
 
 # 5. Az CLI extensions
 az extension list --query "[?contains(['containerapp','ml'], name)].name" -o tsv
-# Esperado: containerapp\nml (2 linhas)
+# Esperado: containerapp`nml (2 linhas)
 ```
 
 ---

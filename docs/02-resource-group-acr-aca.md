@@ -72,13 +72,13 @@
 
 > **Alternativa via Azure CLI:**
 >
-> ```bash
+> ```powershell
 > az login
 > az account set --subscription "<sua-sub-id>"
 >
-> az group create \
->   --name rg-lab-final \
->   --location eastus2 \
+> az group create `
+>   --name rg-lab-final `
+>   --location eastus2 `
 >   --tags cost-center=apex-helpsphere-ia environment=lab application=helpsphere-ia course=D06
 > ```
 
@@ -99,7 +99,7 @@
    - **Resource group:** `rg-lab-final`
    - **Registry name:** `acrhelpsphere<rand>` — substitua `<rand>` por 6 chars hex (ex.: `acrhelpsphere8a3f2d`)
      - **Regras:** globalmente único, lowercase, **sem hífen**, 5-50 caracteres, alfanumérico
-     - **Sugestão de geração:** abra um terminal e rode `openssl rand -hex 3` (ou no PowerShell: `-join ((48..57)+(97..102) | Get-Random -Count 6 | ForEach-Object {[char]$_})`)
+     - **Sugestão de geração (PowerShell):** `-join ((48..57)+(97..102) | Get-Random -Count 6 | ForEach-Object {[char]$_})` (alternativa Linux/Mac/WSL: `openssl rand -hex 3`)
    - **Location:** `East US 2`
    - **Pricing plan:** `Basic` ⚠️ **(não troque para Standard/Premium — custo do lab pula 3x)**
 4. Tab **Networking:**
@@ -116,20 +116,20 @@
 
 > **Alternativa via Azure CLI:**
 >
-> ```bash
-> # Gera sufixo aleatório de 6 hex chars
-> RAND=$(openssl rand -hex 3)
-> ACR_NAME="acrhelpsphere${RAND}"
+> ```powershell
+> # Gera sufixo aleatório de 6 hex chars (PowerShell-only, sem dependência de openssl)
+> $Rand = -join ((48..57) + (97..102) | Get-Random -Count 6 | ForEach-Object { [char]$_ })
+> $AcrName = "acrhelpsphere$Rand"
 >
-> az acr create \
->   --name "$ACR_NAME" \
->   --resource-group rg-lab-final \
->   --location eastus2 \
->   --sku Basic \
+> az acr create `
+>   --name $AcrName `
+>   --resource-group rg-lab-final `
+>   --location eastus2 `
+>   --sku Basic `
 >   --admin-enabled false
 >
-> echo "ACR criado: $ACR_NAME.azurecr.io"
-> echo "Anote este valor — vai entrar nos .env dos próximos capítulos"
+> Write-Host "ACR criado: $AcrName.azurecr.io"
+> Write-Host "Anote este valor — vai entrar nos .env dos próximos capítulos"
 > ```
 
 > **Custo:** ACR Basic = R$ 35/mês fixo (cobra parado, não tem scale-to-zero). No lab, fique no Basic — delete o RG no Cap 09 para não acumular cobrança. Detalhes do trade-off Standard/Premium em [`_disclaimers.md`](./_disclaimers.md) **AMB-1**.
@@ -166,25 +166,25 @@
 
 > **Alternativa via Azure CLI:**
 >
-> ```bash
+> ```powershell
 > # Capturar customerId + sharedKey do Log Analytics existente do Bloco 2
-> WORKSPACE_ID=$(az monitor log-analytics workspace show \
->   --resource-group rg-helpsphere-ia \
->   --workspace-name log-helpsphere-ia \
->   --query customerId -o tsv)
+> $WorkspaceId = az monitor log-analytics workspace show `
+>   --resource-group rg-helpsphere-ia `
+>   --workspace-name log-helpsphere-ia `
+>   --query customerId -o tsv
 >
-> WORKSPACE_KEY=$(az monitor log-analytics workspace get-shared-keys \
->   --resource-group rg-helpsphere-ia \
->   --workspace-name log-helpsphere-ia \
->   --query primarySharedKey -o tsv)
+> $WorkspaceKey = az monitor log-analytics workspace get-shared-keys `
+>   --resource-group rg-helpsphere-ia `
+>   --workspace-name log-helpsphere-ia `
+>   --query primarySharedKey -o tsv
 >
-> az containerapp env create \
->   --name cae-helpsphere-final \
->   --resource-group rg-lab-final \
->   --location eastus2 \
->   --logs-destination log-analytics \
->   --logs-workspace-id "$WORKSPACE_ID" \
->   --logs-workspace-key "$WORKSPACE_KEY"
+> az containerapp env create `
+>   --name cae-helpsphere-final `
+>   --resource-group rg-lab-final `
+>   --location eastus2 `
+>   --logs-destination log-analytics `
+>   --logs-workspace-id $WorkspaceId `
+>   --logs-workspace-key $WorkspaceKey
 > ```
 
 > **Custo:** ACA Environment em si = **R$ 0 parado** (sem replicas rodando = sem cobrança). Quando você deployar o MCP Server (Cap 05) e n8n (Cap 07), o billing vira: **R$ 0,000024/vCPU-segundo + R$ 0,0000028/GiB-segundo** apenas durante execução (scale-to-zero quando ocioso). Estimativa para o lab: ~R$ 5-10/dia ligado, ~R$ 0,50/dia ocioso.
@@ -220,30 +220,30 @@ A Managed Identity `mi-helpsphere-ia` (criada no Bloco 2 no RG `rg-helpsphere-ia
 
 > **Alternativa via Azure CLI** (mais robusta — recomendada porque captura IDs dinamicamente):
 >
-> ```bash
+> ```powershell
 > # Capturar Principal ID do MI do Bloco 2
-> PRINCIPAL_ID=$(az identity show \
->   --name mi-helpsphere-ia \
->   --resource-group rg-helpsphere-ia \
->   --query principalId -o tsv)
+> $PrincipalId = az identity show `
+>   --name mi-helpsphere-ia `
+>   --resource-group rg-helpsphere-ia `
+>   --query principalId -o tsv
 >
-> # Capturar Resource ID do ACR recém-criado (substitua ACR_NAME)
-> ACR_ID=$(az acr show \
->   --name "$ACR_NAME" \
->   --resource-group rg-lab-final \
->   --query id -o tsv)
+> # Capturar Resource ID do ACR recém-criado (use $AcrName do Passo 2.2)
+> $AcrId = az acr show `
+>   --name $AcrName `
+>   --resource-group rg-lab-final `
+>   --query id -o tsv
 >
 > # Atribuir role AcrPull
-> az role assignment create \
->   --assignee-object-id "$PRINCIPAL_ID" \
->   --assignee-principal-type ServicePrincipal \
->   --role AcrPull \
->   --scope "$ACR_ID"
+> az role assignment create `
+>   --assignee-object-id $PrincipalId `
+>   --assignee-principal-type ServicePrincipal `
+>   --role AcrPull `
+>   --scope $AcrId
 >
 > # Validar
-> az role assignment list \
->   --assignee "$PRINCIPAL_ID" \
->   --scope "$ACR_ID" \
+> az role assignment list `
+>   --assignee $PrincipalId `
+>   --scope $AcrId `
 >   --query "[].{role:roleDefinitionName, scope:scope}" -o table
 > # Esperado: 1 linha com role=AcrPull
 > ```
@@ -277,31 +277,31 @@ A Managed Identity `mi-helpsphere-ia` (criada no Bloco 2 no RG `rg-helpsphere-ia
 
 ## Validação end-to-end
 
-```bash
+```powershell
 # 1. RG existe
-az group show --name rg-lab-final \
+az group show --name rg-lab-final `
   --query "{name:name, location:location, state:properties.provisioningState}" -o table
 # Esperado: rg-lab-final, eastus2, Succeeded
 
 # 2. ACR existe e SKU correto
-az acr show --name "$ACR_NAME" --resource-group rg-lab-final \
+az acr show --name $AcrName --resource-group rg-lab-final `
   --query "{name:name, sku:sku.name, loginServer:loginServer, adminEnabled:adminUserEnabled}" -o table
 # Esperado: name=acrhelpsphere<rand>, sku=Basic, adminEnabled=false
 
 # 3. ACA Environment existe e linka ao Log Analytics correto
-az containerapp env show --name cae-helpsphere-final --resource-group rg-lab-final \
+az containerapp env show --name cae-helpsphere-final --resource-group rg-lab-final `
   --query "{name:name, state:properties.provisioningState, logsCustomerId:properties.appLogsConfiguration.logAnalyticsConfiguration.customerId}" -o table
 # Esperado: state=Succeeded, customerId = mesmo do log-helpsphere-ia
 
 # 4. AcrPull role assignment cravado
-PRINCIPAL_ID=$(az identity show --name mi-helpsphere-ia --resource-group rg-helpsphere-ia --query principalId -o tsv)
-ACR_ID=$(az acr show --name "$ACR_NAME" --resource-group rg-lab-final --query id -o tsv)
-az role assignment list --assignee "$PRINCIPAL_ID" --scope "$ACR_ID" \
+$PrincipalId = az identity show --name mi-helpsphere-ia --resource-group rg-helpsphere-ia --query principalId -o tsv
+$AcrId = az acr show --name $AcrName --resource-group rg-lab-final --query id -o tsv
+az role assignment list --assignee $PrincipalId --scope $AcrId `
   --query "[].roleDefinitionName" -o tsv
 # Esperado: AcrPull
 
 # 5. Smoke pull anônimo (deve falhar — confirma que admin disabled está respeitado)
-az acr login --name "$ACR_NAME" 2>&1 | head -5
+az acr login --name $AcrName 2>&1 | Select-Object -First 5
 # Esperado: erro "admin user is disabled" OU sucesso via az credential (ambos OK — confirma que não há fallback público)
 ```
 

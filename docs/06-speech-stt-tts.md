@@ -49,11 +49,12 @@
 
 <!-- screenshot: cap06-passo6.1-criar-speech-portal.png -->
 
-> **Alternativa via Azure CLI:**
-> ```bash
-> az cognitiveservices account create -n spch-helpsphere -g rg-lab-final \
+> **Alternativa via Azure CLI (Windows PowerShell 7):**
+> ```powershell
+> az cognitiveservices account create -n spch-helpsphere -g rg-lab-final `
 >   --kind SpeechServices --sku S0 --location eastus2 --yes
 > ```
+> **Linux/Mac/WSL:** substitua backticks (`` ` ``) por backslashes (`\`).
 
 > **Custo:** S0 cobra só por uso · R$ 0 parado · ~R$ 5/hora STT · ~R$ 16/1M chars TTS Neural · ~R$ 80/1M chars Custom Voice. **Lab realista: R$ 4-6** total.
 
@@ -76,7 +77,7 @@
 
 **Adicionar ao `.env` do `agent-code/`:**
 
-```bash
+```dotenv
 # Speech Service (Cap 06)
 SPEECH_KEY="<KEY-1-do-Portal>"
 SPEECH_REGION="eastus2"
@@ -100,12 +101,13 @@ SPEECH_REGION="eastus2"
 
 <!-- screenshot: cap06-passo6.3-rbac-cognitive-services-user.png -->
 
-> **Alternativa via Azure CLI:**
-> ```bash
-> SPCH_ID=$(az cognitiveservices account show -n spch-helpsphere -g rg-lab-final --query id -o tsv)
-> MI_PRINCIPAL=$(az identity show -n mi-helpsphere-ia -g rg-helpsphere-ia --query principalId -o tsv)
-> az role assignment create --assignee "$MI_PRINCIPAL" --role "Cognitive Services User" --scope "$SPCH_ID"
+> **Alternativa via Azure CLI (Windows PowerShell 7):**
+> ```powershell
+> $SpchId = az cognitiveservices account show -n spch-helpsphere -g rg-lab-final --query id -o tsv
+> $MiPrincipal = az identity show -n mi-helpsphere-ia -g rg-helpsphere-ia --query principalId -o tsv
+> az role assignment create --assignee "$MiPrincipal" --role "Cognitive Services User" --scope "$SpchId"
 > ```
+> **Linux/Mac/WSL:** substitua `$Var = az ...` por `VAR=$(az ...)`.
 
 > **Custo:** R$ 0 (RBAC é gratuito).
 
@@ -131,20 +133,29 @@ Salve como `sample-question-pt.wav` na pasta `agent-code/` do clone local. `ffmp
 
 ### 6.4.b — Transcrever via cURL
 
-**No terminal local:**
+**No terminal local (Windows PowerShell 7):**
 
-```bash
+```powershell
 # Variáveis (ajuste conforme seu .env)
-SPEECH_KEY="<KEY-1-do-Passo-6.2>"
-SPEECH_REGION="eastus2"
+$SpeechKey = "<KEY-1-do-Passo-6.2>"
+$SpeechRegion = "eastus2"
 
 # Smoke STT
-curl -sS -X POST \
-  "https://${SPEECH_REGION}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=pt-BR" \
-  -H "Ocp-Apim-Subscription-Key: ${SPEECH_KEY}" \
-  -H "Content-Type: audio/wav" \
-  --data-binary @sample-question-pt.wav | jq '.'
+# Nota: @ em PowerShell precisa estar entre aspas para evitar splatting operator
+$SttResponse = curl.exe -sS -X POST `
+  "https://$SpeechRegion.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=pt-BR" `
+  -H "Ocp-Apim-Subscription-Key: $SpeechKey" `
+  -H "Content-Type: audio/wav" `
+  --data-binary "@sample-question-pt.wav"
+
+# Parse via PowerShell nativo (sem dependência de jq):
+$SttResponse | ConvertFrom-Json
+
+# Alternativa com jq (se instalado via `winget install jqlang.jq`):
+# $SttResponse | jq '.'
 ```
+
+> **Nota:** `jq` requer instalação no Windows. Instale via `winget install jqlang.jq` ou use o fallback PowerShell nativo `ConvertFrom-Json` (aplicado acima).
 
 Saída esperada (campos relevantes):
 
@@ -174,19 +185,24 @@ Saída esperada (campos relevantes):
 
 ## Passo 6.5 — Smoke TTS: gerar MP3 com voice `pt-BR-FranciscaNeural`
 
-**No terminal local:**
+**No terminal local (Windows PowerShell 7):**
 
-```bash
-curl -sS -X POST "https://${SPEECH_REGION}.tts.speech.microsoft.com/cognitiveservices/v1" \
-  -H "Ocp-Apim-Subscription-Key: ${SPEECH_KEY}" \
-  -H "Content-Type: application/ssml+xml" \
-  -H "X-Microsoft-OutputFormat: audio-24khz-48kbitrate-mono-mp3" \
-  -d '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="pt-BR">
-        <voice name="pt-BR-FranciscaNeural">Olá, sou a assistente do HelpSphere. Como posso ajudar você hoje?</voice>
-      </speak>' \
-  --output greeting-francisca.mp3
+```powershell
+# SSML em here-string literal (single-quoted) — evita interpolação de $ e backticks
+$Ssml = @'
+<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="pt-BR">
+  <voice name="pt-BR-FranciscaNeural">Olá, sou a assistente do HelpSphere. Como posso ajudar você hoje?</voice>
+</speak>
+'@
 
-# Reproduzir: Windows `start greeting-francisca.mp3` · macOS `open ...` · Linux `xdg-open ...`
+curl.exe -sS -X POST "https://$SpeechRegion.tts.speech.microsoft.com/cognitiveservices/v1" `
+  -H "Ocp-Apim-Subscription-Key: $SpeechKey" `
+  -H "Content-Type: application/ssml+xml" `
+  -H "X-Microsoft-OutputFormat: audio-24khz-48kbitrate-mono-mp3" `
+  -d $Ssml --output greeting-francisca.mp3
+
+# Reproduzir no Windows: Start-Process greeting-francisca.mp3
+# (macOS: `open greeting-francisca.mp3` · Linux: `xdg-open greeting-francisca.mp3`)
 ```
 
 Você deve ouvir a frase com voz feminina pt-BR neural.
@@ -254,13 +270,14 @@ def voice(req: func.HttpRequest) -> func.HttpResponse:
 
 **Smoke end-to-end** após `func azure functionapp publish func-agent-runner --python`:
 
-```bash
-FUNC_URL=$(az functionapp show -n func-agent-runner -g rg-lab-final --query defaultHostName -o tsv)
-FUNC_KEY=$(az functionapp keys list -n func-agent-runner -g rg-lab-final --query functionKeys.default -o tsv)
-curl -sS -X POST "https://${FUNC_URL}/api/agent/voice?code=${FUNC_KEY}" \
-  -H "Content-Type: audio/wav" --data-binary @sample-question-pt.wav \
+```powershell
+$FuncUrl = az functionapp show -n func-agent-runner -g rg-lab-final --query defaultHostName -o tsv
+$FuncKey = az functionapp keys list -n func-agent-runner -g rg-lab-final --query functionKeys.default -o tsv
+curl.exe -sS -X POST "https://$FuncUrl/api/agent/voice?code=$FuncKey" `
+  -H "Content-Type: audio/wav" --data-binary "@sample-question-pt.wav" `
   --output response-agent.mp3 -D headers.txt
-grep -i x-transcription headers.txt    # Esperado: X-Transcription: <transcrição pt-BR>
+Select-String -Path headers.txt -Pattern 'x-transcription' -CaseSensitive:$false
+# Esperado: X-Transcription: <transcrição pt-BR>
 ```
 
 <!-- screenshot: cap06-passo6.6-endpoint-voice-smoke.png -->
@@ -305,30 +322,34 @@ grep -i x-transcription headers.txt    # Esperado: X-Transcription: <transcriç�
 
 ## Validação end-to-end
 
-```bash
+```powershell
 # 1. Speech resource OK + SKU S0
-az cognitiveservices account show -n spch-helpsphere -g rg-lab-final \
+az cognitiveservices account show -n spch-helpsphere -g rg-lab-final `
   --query "{sku:sku.name, region:location, state:properties.provisioningState}" -o table
 # Esperado: sku=S0, region=eastus2, state=Succeeded
 
 # 2. Role cravado para MI cross-RG
-SPCH_ID=$(az cognitiveservices account show -n spch-helpsphere -g rg-lab-final --query id -o tsv)
-MI_PRINCIPAL=$(az identity show -n mi-helpsphere-ia -g rg-helpsphere-ia --query principalId -o tsv)
-az role assignment list --assignee "$MI_PRINCIPAL" --scope "$SPCH_ID" \
+$SpchId = az cognitiveservices account show -n spch-helpsphere -g rg-lab-final --query id -o tsv
+$MiPrincipal = az identity show -n mi-helpsphere-ia -g rg-helpsphere-ia --query principalId -o tsv
+az role assignment list --assignee $MiPrincipal --scope $SpchId `
   --query "[].roleDefinitionName" -o tsv
 # Esperado: Cognitive Services User
 
 # 3. STT smoke (transcrição não-vazia)
-curl -sS -X POST "https://eastus2.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=pt-BR" \
-  -H "Ocp-Apim-Subscription-Key: ${SPEECH_KEY}" -H "Content-Type: audio/wav" \
-  --data-binary @sample-question-pt.wav | jq -r '.DisplayText'
+$SttCheck = curl.exe -sS -X POST "https://eastus2.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=pt-BR" `
+  -H "Ocp-Apim-Subscription-Key: $SpeechKey" -H "Content-Type: audio/wav" `
+  --data-binary "@sample-question-pt.wav"
+($SttCheck | ConvertFrom-Json).DisplayText
 
 # 4. TTS smoke + tamanho > 5 KB
-curl -sS -X POST "https://eastus2.tts.speech.microsoft.com/cognitiveservices/v1" \
-  -H "Ocp-Apim-Subscription-Key: ${SPEECH_KEY}" -H "Content-Type: application/ssml+xml" \
-  -H "X-Microsoft-OutputFormat: audio-24khz-48kbitrate-mono-mp3" \
-  -d '<speak version="1.0" xml:lang="pt-BR"><voice name="pt-BR-FranciscaNeural">teste</voice></speak>' \
-  --output _check.mp3 && ls -la _check.mp3
+$SsmlCheck = @'
+<speak version="1.0" xml:lang="pt-BR"><voice name="pt-BR-FranciscaNeural">teste</voice></speak>
+'@
+curl.exe -sS -X POST "https://eastus2.tts.speech.microsoft.com/cognitiveservices/v1" `
+  -H "Ocp-Apim-Subscription-Key: $SpeechKey" -H "Content-Type: application/ssml+xml" `
+  -H "X-Microsoft-OutputFormat: audio-24khz-48kbitrate-mono-mp3" `
+  -d $SsmlCheck --output _check.mp3
+Get-Item _check.mp3 | Select-Object Name, Length
 ```
 
 ---

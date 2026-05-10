@@ -8,6 +8,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v0.2.0] — 2026-05-10
+
+### Changed
+
+**Refactor PowerShell-First dos guias do Lab Final** (Story 06.15 — alinhado ao público Windows da Disciplina D06).
+
+Após audit cross-lab `@aiox-master` em 2026-05-10 detectar 12 CRITICAL findings de bash residual que quebravam quando alunos copiavam-colavam em Windows PowerShell 7 (cenário do "show de horror" da aula 2026-05-09 com o Lab Inter), aplicamos o mesmo padrão de refactor consolidado pela Story 06.13 no `apex-rag-lab` (commits `02b22a7`, `a42d349`, `61c5845`, `b72a341`).
+
+- **`docs/01-pre-requisitos.md`** — adicionada nota global "⚙️ Sintaxe de comandos shell" no topo (padrão `apex-rag-lab/docs/00-guia-completo.md:219-223`) + 7 blocos shell convertidos `bash` → `powershell` (line continuations `\` → backtick, fence trocado)
+- **`docs/02-resource-group-acr-aca.md`** — F-001 (`RAND=$(openssl rand)` → `$Rand = -join (...) | Get-Random`) + F-012 (`head -5` → `Select-Object -First 5`) + 4 blocos extras convertidos
+- **`docs/05-mcp-server-deploy.md`** — F-002/F-003/F-004/F-005 (`curl` → `curl.exe`, pipeline `cut | base64 -d | jq` → `[Convert]::FromBase64String()` + `ConvertFrom-Json`, `-o /dev/null` → `-o $null`) + Passos 5.2/5.3/5.4 ACR build & alternativas CLI convertidos
+- **`docs/06-speech-stt-tts.md`** — F-006/F-007/F-008/F-009 (curl multiline com backtick, `--data-binary "@file"` com aspas para evitar splatting, SSML em here-string `@'...'@`, `--output`) + Passos 6.1/6.3 alternativas CLI convertidos
+- **`docs/07-n8n-escalation.md`** — F-010 (`openssl rand -base64 32` → `[Convert]::ToBase64String((1..32 | ForEach-Object {...}))`) + Passos 7.1 PostgreSQL CLI, 7.4 RBAC SB, 7.7 stop/resume, validação end-to-end convertidos
+- **`docs/10-troubleshooting.md`** — F-011 (mesmo padrão F-004) + diagnóstico §5.1-§5.7 convertidos + **nova seção "PowerShell vs Bash — armadilhas comuns"** com tabela de 12 antipadrões, nota sobre instalação `jq` no Windows (winget/choco) e alternativa `ConvertFrom-Json` nativa
+
+### Verification
+
+- `grep '^\`\`\`bash'` nos 6 arquivos retorna apenas referências documentais propositais (notas Linux/Mac/WSL na seção de armadilhas)
+- `grep ' \\$'` (line continuation bash) retorna zero matches
+- `grep 'export [A-Z_]+='` retorna apenas referências documentais
+- Padrões aplicados consistentes com gold-standard `apex-rag-lab/snippets/test_translator.ps1` + `test_vision_ocr.ps1`
+
+### Pedagogical impact
+
+- **Bloqueante removido** para próxima gravação Bloco 4-5 D06 (Lab Final agente autônomo). Alunos Windows-first copiam-colam sem quebrar.
+- Linha de tradução para Linux/Mac/WSL preservada via nota global em `01-pre-requisitos.md` e seção de armadilhas em `10-troubleshooting.md`.
+- AC10 da Story 06.15 (smoke test manual PowerShell 7 dos 3 comandos críticos representativos) fica **GATED** para sessão QA separada com aprovação do prof.
+
+### Cross-references
+
+- Story 06.15: `azure-retail/docs/stories/06.15.lab-final-powershell-refactor.md`
+- Audit fonte: subagente Explore `a5537f367845a4085` em 2026-05-10 (12 CRITICAL)
+- Padrão de fix: Story 06.13 do `apex-rag-lab` (HEAD `61c5845` na época)
+- Análoga pendente: Story 06.16 (refactor PowerShell `apex-helpsphere-prod-lab` — 21 findings)
+
+---
+
 ## [v0.1.0-init] — 2026-05-07
 
 ### Bootstrap

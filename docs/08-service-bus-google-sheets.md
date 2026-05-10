@@ -74,23 +74,26 @@
 
 <!-- screenshot: cap08-passo8.1-criar-sb-namespace-standard.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (PowerShell 7 — Windows-first):**
 >
-> ```bash
-> az servicebus namespace create \
->   --name sb-helpsphere-final \
->   --resource-group rg-lab-final \
->   --location eastus2 \
+> ```powershell
+> az servicebus namespace create `
+>   --name sb-helpsphere-final `
+>   --resource-group rg-lab-final `
+>   --location eastus2 `
 >   --sku Standard
 >
 > # Capturar FQDN para .env
-> SB_FQDN=$(az servicebus namespace show \
->   --name sb-helpsphere-final \
->   --resource-group rg-lab-final \
->   --query serviceBusEndpoint -o tsv | sed 's|https://||;s|:443/||')
-> echo "SB_NAMESPACE_FQDN=$SB_FQDN"
+> $Endpoint = az servicebus namespace show `
+>   --name sb-helpsphere-final `
+>   --resource-group rg-lab-final `
+>   --query serviceBusEndpoint -o tsv
+> $SbFqdn = $Endpoint -replace '^https://','' -replace ':443/?$',''
+> Write-Host "SB_NAMESPACE_FQDN=$SbFqdn"
 > # Esperado: sb-helpsphere-final.servicebus.windows.net
 > ```
+>
+> **Linux/Mac/WSL:** troque `` ` `` (backtick) por `\`, `$Var` por `VAR=`, `Write-Host` por `echo`, e use `sed 's|https://||;s|:443/||'` no lugar do `-replace`.
 
 > **Custo:** Service Bus Standard ~R$ 50/mês fixo ligado 24×7 + R$ 0,80/M operações. No lab realista (provisiona + smoke + delete em 1-2 dias), R$ 2-3 por sessão. Operações gratuitas até 1M/mês — lab gera <100 msg/dia → operações ~R$ 0. Detalhes da decisão tier em [`_disclaimers.md`](./_disclaimers.md) **AMB-4**.
 
@@ -127,28 +130,30 @@
 
 <!-- screenshot: cap08-passo8.2-criar-subscription-n8n-escalation-sub.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (PowerShell 7 — Windows-first):**
 >
-> ```bash
+> ```powershell
 > # Topic
-> az servicebus topic create \
->   --name tickets-escalated \
->   --namespace-name sb-helpsphere-final \
->   --resource-group rg-lab-final \
->   --max-size 1024 \
+> az servicebus topic create `
+>   --name tickets-escalated `
+>   --namespace-name sb-helpsphere-final `
+>   --resource-group rg-lab-final `
+>   --max-size 1024 `
 >   --default-message-time-to-live P14D
 >
 > # Subscription
-> az servicebus topic subscription create \
->   --name n8n-escalation-sub \
->   --topic-name tickets-escalated \
->   --namespace-name sb-helpsphere-final \
->   --resource-group rg-lab-final \
->   --max-delivery-count 3 \
->   --lock-duration PT30S \
->   --dead-letter-on-message-expiration true \
+> az servicebus topic subscription create `
+>   --name n8n-escalation-sub `
+>   --topic-name tickets-escalated `
+>   --namespace-name sb-helpsphere-final `
+>   --resource-group rg-lab-final `
+>   --max-delivery-count 3 `
+>   --lock-duration PT30S `
+>   --dead-letter-on-message-expiration true `
 >   --dead-letter-on-filter-evaluation-exceptions true
 > ```
+>
+> **Linux/Mac/WSL:** troque `` ` `` (backtick) por `\` no fim das linhas.
 
 > **Custo:** R$ 0 — Topics e Subscriptions são gratuitos dentro do namespace Standard (até 1.000 topics × 2.000 subscriptions/topic, suficiente para vida toda do lab).
 
@@ -245,33 +250,35 @@
 2. Filtre por scope: `This resource` → procure `mi-helpsphere-ia`
 3. Esperado: 2 linhas, uma com `Azure Service Bus Data Receiver`, outra com `Azure Service Bus Data Sender`
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (PowerShell 7 — Windows-first):**
 >
-> ```bash
-> MI_ID=$(az identity show \
->   --name mi-helpsphere-ia \
->   --resource-group rg-helpsphere-ia \
->   --query principalId -o tsv)
+> ```powershell
+> $MiId = az identity show `
+>   --name mi-helpsphere-ia `
+>   --resource-group rg-helpsphere-ia `
+>   --query principalId -o tsv
 >
-> SB_SCOPE=$(az servicebus namespace show \
->   --name sb-helpsphere-final \
->   --resource-group rg-lab-final \
->   --query id -o tsv)
+> $SbScope = az servicebus namespace show `
+>   --name sb-helpsphere-final `
+>   --resource-group rg-lab-final `
+>   --query id -o tsv
 >
 > # Receiver (n8n future + dual-stack)
-> az role assignment create \
->   --assignee-object-id "$MI_ID" \
->   --assignee-principal-type ServicePrincipal \
->   --role "Azure Service Bus Data Receiver" \
->   --scope "$SB_SCOPE"
+> az role assignment create `
+>   --assignee-object-id $MiId `
+>   --assignee-principal-type ServicePrincipal `
+>   --role "Azure Service Bus Data Receiver" `
+>   --scope $SbScope
 >
 > # Sender (agente Foundry tool escalate_ticket)
-> az role assignment create \
->   --assignee-object-id "$MI_ID" \
->   --assignee-principal-type ServicePrincipal \
->   --role "Azure Service Bus Data Sender" \
->   --scope "$SB_SCOPE"
+> az role assignment create `
+>   --assignee-object-id $MiId `
+>   --assignee-principal-type ServicePrincipal `
+>   --role "Azure Service Bus Data Sender" `
+>   --scope $SbScope
 > ```
+>
+> **Linux/Mac/WSL:** troque `` ` `` (backtick) por `\`, `$Var = az ...` por `VAR=$(az ...)`, e `$Var` por `"$VAR"`.
 
 > **Custo:** R$ 0 — RBAC do Azure é gratuito sem limite de assignments por escopo.
 
@@ -369,7 +376,7 @@ No Cap 04 cravamos a tool `escalate_ticket` com schema mas o handler era **place
    azure-servicebus==7.12.2
    ```
 2. Reinstale no venv:
-   ```bash
+   ```powershell
    pip install -r requirements.txt
    ```
 3. Edite `agent_runner.py` — localize a função `handle_escalate_ticket(args)` (criada no Cap 04 com `print` placeholder) e substitua pelo handler real:
@@ -414,12 +421,13 @@ def handle_escalate_ticket(args: dict) -> dict:
    SB_TOPIC_NAME=tickets-escalated
    ```
 5. **Importante:** `DefaultAzureCredential` cai em `AzureCliCredential` quando você roda local — então precisa **`az login`** com uma conta que tenha **`Azure Service Bus Data Sender`** no namespace. Como o Lab atribuiu Sender a `mi-helpsphere-ia` (não ao seu user), você tem 2 opções:
-   - **Opção A — atribua Sender ao seu user também (lab dev local):**
-     ```bash
-     MY_USER_ID=$(az ad signed-in-user show --query id -o tsv)
-     SB_SCOPE=$(az servicebus namespace show --name sb-helpsphere-final --resource-group rg-lab-final --query id -o tsv)
-     az role assignment create --assignee-object-id "$MY_USER_ID" --assignee-principal-type User --role "Azure Service Bus Data Sender" --scope "$SB_SCOPE"
+   - **Opção A — atribua Sender ao seu user também (lab dev local, PowerShell 7):**
+     ```powershell
+     $MyUserId = az ad signed-in-user show --query id -o tsv
+     $SbScope = az servicebus namespace show --name sb-helpsphere-final --resource-group rg-lab-final --query id -o tsv
+     az role assignment create --assignee-object-id $MyUserId --assignee-principal-type User --role "Azure Service Bus Data Sender" --scope $SbScope
      ```
+     **Linux/Mac/WSL:** troque `$Var = az ...` por `VAR=$(az ...)` e `$Var` por `"$VAR"`.
    - **Opção B — empacote o agente em ACA (futuro Bloco 6 prod-lab) e use a MI nativa.**
 
 > **Custo:** R$ 0 (operações SB são free até 1M/mês — lab usa <100).
@@ -432,14 +440,15 @@ def handle_escalate_ticket(args: dict) -> dict:
 
 **Smoke local — agente Foundry → Topic → n8n → Sheet + Teams:**
 
-1. **Ative o n8n e PG do Cap 07 se estiverem `Stopped`**:
-   ```bash
-   az postgres flexible-server start --name "pg-n8n-${RAND}" --resource-group rg-lab-final
+1. **Ative o n8n e PG do Cap 07 se estiverem `Stopped`** (Windows PowerShell 7):
+   ```powershell
+   az postgres flexible-server start --name "pg-n8n-$Rand" --resource-group rg-lab-final
    az containerapp revision activate --name ca-n8n-helpsphere --resource-group rg-lab-final --revision <rev-name>
    ```
+   **Linux/Mac/WSL:** troque `$Rand` por `${RAND}` (variável de ambiente bash).
 2. Abra n8n UI → **Workflows** → **Ticket Escalation** → toggle **Active** (canto superior direito) → ON
-3. No VS Code, terminal no diretório `agent-code/` com venv ativo:
-   ```bash
+3. No VS Code, terminal no diretório `agent-code/` com venv ativo (Windows PowerShell 7):
+   ```powershell
    python agent_runner.py
    ```
 4. Quando o agente perguntar `Qual ticket você precisa?`, responda algo que force escalação:
@@ -467,14 +476,14 @@ def handle_escalate_ticket(args: dict) -> dict:
 
 Service Bus Standard **não tem feature `Stop`** (diferente do PG). Duas estratégias:
 
-- **Opção A — `delete-pause-recreate` (recomendada se vai voltar amanhã):**
-  ```bash
+- **Opção A — `delete-pause-recreate` (recomendada se vai voltar amanhã, PowerShell 7):**
+  ```powershell
   az servicebus namespace delete --name sb-helpsphere-final --resource-group rg-lab-final
   ```
   Deleta o namespace inteiro (R$ 0). Quando voltar, recrie via Passo 8.1 + 8.2 (~3min). **Você perde dead-letter messages acumuladas** mas não perde nada produtivo no lab (n8n workflow + Google Sheet sobrevivem).
 
-- **Opção B — Resource Group delete (se vai pausar ≥7 dias):**
-  ```bash
+- **Opção B — Resource Group delete (se vai pausar ≥7 dias, PowerShell 7):**
+  ```powershell
   az group delete --name rg-lab-final --yes --no-wait
   ```
   Deleta TUDO (Service Bus + ACA n8n + PG + ACR + Speech). Cleanup completo do Cap 09.
@@ -485,44 +494,46 @@ Service Bus Standard **não tem feature `Stop`** (diferente do PG). Duas estrat�
 
 ## Validação end-to-end
 
-```bash
+```powershell
 # 1. Service Bus namespace existe e está Standard
-az servicebus namespace show \
-  --name sb-helpsphere-final \
-  --resource-group rg-lab-final \
+az servicebus namespace show `
+  --name sb-helpsphere-final `
+  --resource-group rg-lab-final `
   --query "{name:name, sku:sku.name, state:provisioningState, status:status}" -o table
 # Esperado: sku=Standard, state=Succeeded, status=Active
 
 # 2. Topic + subscription existem com nomes exatos
-az servicebus topic show \
-  --name tickets-escalated \
-  --namespace-name sb-helpsphere-final \
-  --resource-group rg-lab-final \
+az servicebus topic show `
+  --name tickets-escalated `
+  --namespace-name sb-helpsphere-final `
+  --resource-group rg-lab-final `
   --query "{name:name, status:status, maxSizeMb:maxSizeInMegabytes}" -o table
 
-az servicebus topic subscription show \
-  --name n8n-escalation-sub \
-  --topic-name tickets-escalated \
-  --namespace-name sb-helpsphere-final \
-  --resource-group rg-lab-final \
+az servicebus topic subscription show `
+  --name n8n-escalation-sub `
+  --topic-name tickets-escalated `
+  --namespace-name sb-helpsphere-final `
+  --resource-group rg-lab-final `
   --query "{name:name, maxDelivery:maxDeliveryCount, lockDuration:lockDuration}" -o table
 # Esperado: maxDelivery=3, lockDuration=PT30S
 
 # 3. 2 role assignments na MI (Receiver + Sender)
-MI_ID=$(az identity show --name mi-helpsphere-ia --resource-group rg-helpsphere-ia --query principalId -o tsv)
-az role assignment list \
-  --assignee "$MI_ID" \
+$MiId = az identity show --name mi-helpsphere-ia --resource-group rg-helpsphere-ia --query principalId -o tsv
+az role assignment list `
+  --assignee $MiId `
   --query "[?contains(scope, 'sb-helpsphere-final')].{role:roleDefinitionName, scope:scope}" -o table
 # Esperado: 2 linhas — 'Azure Service Bus Data Receiver' + 'Azure Service Bus Data Sender'
 
 # 4. Smoke da tool escalate_ticket via SB CLI (sem agente — só valida pipeline SB → n8n → Sheet)
-az servicebus topic send \
-  --namespace-name sb-helpsphere-final \
-  --resource-group rg-lab-final \
-  --topic-name tickets-escalated \
+az servicebus topic send `
+  --namespace-name sb-helpsphere-final `
+  --resource-group rg-lab-final `
+  --topic-name tickets-escalated `
   --body '{"ticket_id":9999,"severity":"HIGH","category":"smoke-test","persona":"validador","summary":"Validação end-to-end Cap 08","escalated_by":"validation-script"}'
 # Esperado: aparece linha na planilha Google em ~10s + execução nova no n8n
 ```
+
+> **Linux/Mac/WSL:** troque `` ` `` (backtick) por `\`, `$Var = az ...` por `VAR=$(az ...)`, e `$Var` por `"$VAR"`.
 
 ---
 
