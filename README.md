@@ -63,7 +63,7 @@ apex-helpsphere-agente-lab/
 ## Pré-requisitos críticos
 
 - Azure subscription **Pay-As-You-Go** (Free Trial **não funciona** — Azure OpenAI exige PAYG)
-- Foundry Hub `aifhub-apex-prod` provisionado em `rg-helpsphere-ia` East US 2 (Pré-aula 1 D06)
+- Foundry Hub `aifhub-apex-prod` provisionado em `rg-lab-intermediario` East US 2 (Pré-aula 1 D06)
 - Conta Microsoft Power Platform com **Copilot Studio Trial** ativado
 - Conta GitHub
 - Docker Desktop (build MCP Server)

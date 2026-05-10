@@ -12,7 +12,7 @@
 
 - ✅ Capítulo 02 concluído — RG `rg-lab-final`, ACR `acrhelpsphere<rand>` (Basic), ACA Environment `cae-helpsphere-final`, role `AcrPull` cravado em `mi-helpsphere-ia` no scope do ACR
 - ✅ Capítulo 04 concluído — agente `helpsphere-tier1-agent` criado com schema das 4 tools, `agent-code/.env` com `MCP_SERVER_URL="https://placeholder.azurecontainerapps.io"` e `MCP_TOKEN=""` aguardando preenchimento
-- ✅ HelpSphere SQL connection string disponível — capturada do Bloco 2 (apex-helpsphere SaaS): Portal → `rg-helpsphere-ia` → `sql-helpsphere-{rand}` → DB `helpsphere` → **Connection strings** → ADO.NET (autenticação SQL ou Entra com MI — ver Passo 5.4)
+- ✅ HelpSphere SQL connection string disponível — capturada do Bloco 2 (apex-helpsphere SaaS): Portal → `rg-lab-intermediario` → `sql-helpsphere-{rand}` → DB `helpsphere` → **Connection strings** → ADO.NET (autenticação SQL ou Entra com MI — ver Passo 5.4)
 - ✅ Permissão para criar **App Registrations** no tenant Entra (role mínima `Application Developer` ou `Cloud Application Administrator`; `Global Administrator` resolve mas é overkill)
 - ✅ Docker Desktop 4.30+ rodando (Capítulo 01) — usado **somente para inspeção local da imagem opcional**; o build oficial é remoto via `az acr build` (mais rápido + sem problema de WSL/proxy corporate)
 - ✅ `jq` instalado para parse dos curl smoke tests (`winget install jqlang.jq` no Windows · `brew install jq` no macOS · `apt install jq` no Linux/WSL) — ou use o fallback PowerShell nativo `ConvertFrom-Json` mostrado nos smoke tests
@@ -296,7 +296,7 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
    - **Transport:** `Auto` (default)
 6. Tab **Identity:**
    - **System assigned:** `Off`
-   - **User assigned:** clique **+ Add user-assigned managed identity** → no painel direito selecione `mi-helpsphere-ia` (RG `rg-helpsphere-ia`) → **Add**
+   - **User assigned:** clique **+ Add user-assigned managed identity** → no painel direito selecione `mi-helpsphere-ia` (RG `rg-lab-intermediario`) → **Add**
    - ⚠️ Em **Registry credentials** (na própria aba **Container** acima), troque para **Use managed identity** → selecione `mi-helpsphere-ia` (essa é a MI que tem `AcrPull` cravado no Cap 02 Passo 2.4)
 7. Tab **Scaling:**
    - **Min replicas:** `0` (scale-to-zero)
@@ -323,7 +323,7 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
 
 > **Como obter a `HELPSPHERE_SQL_CONNECTION`:**
 >
-> Portal → `rg-helpsphere-ia` → SQL Database `helpsphere` → menu **Connection strings** → tab **ADO.NET (SQL authentication)**. Substitua `{your_password}` pela senha do `apex-helpsphere`.
+> Portal → `rg-lab-intermediario` → SQL Database `helpsphere` → menu **Connection strings** → tab **ADO.NET (SQL authentication)**. Substitua `{your_password}` pela senha do `apex-helpsphere`.
 >
 > ⚠️ **Em produção** use Entra Auth com MI: troque connection string para `Server=tcp:sql-helpsphere-{rand}.database.windows.net,1433;Database=helpsphere;Authentication=Active Directory Default;` e cravar role `db_datareader`+`db_datawriter` para `mi-helpsphere-ia` no banco. **No lab,** SQL auth é aceitável pelo prazo curto (24-48h) + cleanup obrigatório no Cap 09.
 
@@ -331,7 +331,7 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
 >
 > ```powershell
 > $HelpSphereSqlConn = "Server=tcp:sql-helpsphere-{rand}.database.windows.net,1433;Database=helpsphere;User Id=apexadmin;Password=<senha>;Encrypt=True;"
-> $MiResourceId = az identity show -n mi-helpsphere-ia -g rg-helpsphere-ia --query id -o tsv
+> $MiResourceId = az identity show -n mi-helpsphere-ia -g rg-lab-intermediario --query id -o tsv
 >
 > az containerapp create `
 >   --name ca-mcp-helpsphere `

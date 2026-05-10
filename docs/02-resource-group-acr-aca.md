@@ -11,11 +11,11 @@
 ## Pré-requisitos
 
 - ✅ Capítulo 01 concluído — sub Azure logada (`az account show` confirma), VS Code + extensões Bicep/Python instaladas, conta Microsoft 365 (não `live.com`) para Copilot Studio nos próximos caps
-- ✅ Bloco 2 da disciplina concluído OU acesso à sub onde já existem: Foundry Hub `aifhub-apex-prod`, Log Analytics workspace `log-helpsphere-ia`, Managed Identity `mi-helpsphere-ia` — todos no RG `rg-helpsphere-ia`
+- ✅ Bloco 2 da disciplina concluído OU acesso à sub onde já existem: Foundry Hub `aifhub-apex-prod`, Log Analytics workspace `log-helpsphere-ia`, Managed Identity `mi-helpsphere-ia` — todos no RG `rg-lab-intermediario`
 - ✅ Permissão `Contributor` + `User Access Administrator` (ou `Owner`) na sub — necessárias para criar role assignments no Passo 2.4
 - ✅ `az` CLI ≥ 2.60 instalada (`az --version`) — usaremos como alternativa ao Portal e obrigatoriamente no Passo 2.4
 
-> **Atenção dependência cruzada:** este capítulo cria recursos no RG **novo** `rg-lab-final` mas **lê e atribui role** sobre a Managed Identity `mi-helpsphere-ia` que vive no RG **`rg-helpsphere-ia`** (criado no Bloco 2). Se o Bloco 2 não foi feito, **pare aqui** e volte — não dá para "improvisar" um MI local; vários capítulos seguintes (05 MCP Server, 06 Speech, 07 n8n) dependem desse mesmo MI já vinculado a Service Bus, AI Search e Speech.
+> **Atenção dependência cruzada:** este capítulo cria recursos no RG **novo** `rg-lab-final` mas **lê e atribui role** sobre a Managed Identity `mi-helpsphere-ia` que vive no RG **`rg-lab-intermediario`** (criado no Bloco 2). Se o Bloco 2 não foi feito, **pare aqui** e volte — não dá para "improvisar" um MI local; vários capítulos seguintes (05 MCP Server, 06 Speech, 07 n8n) dependem desse mesmo MI já vinculado a Service Bus, AI Search e Speech.
 
 ---
 
@@ -84,7 +84,7 @@
 
 > **Custo:** RG é gratuito — é apenas um container lógico para agrupar recursos. Cobrança só vem dos recursos dentro dele.
 
-> **Nota pedagógica — por que RG separado do `rg-helpsphere-ia` (Bloco 2)?** O Bloco 2 cria os recursos **compartilhados** (Foundry Hub, Log Analytics, MI, Key Vault). Este Lab Final cria os recursos **efêmeros** (ACR, ACA env, MCP, n8n). Separando em 2 RGs, no fim do lab você deleta `rg-lab-final` e os recursos compartilhados continuam vivos para o próximo lab/turma. **Anti-pattern:** misturar tudo em 1 RG e ter que escolher recursos individualmente para deletar.
+> **Nota pedagógica — por que RG separado do `rg-lab-intermediario` (Bloco 2)?** O Bloco 2 cria os recursos **compartilhados** (Foundry Hub, Log Analytics, MI, Key Vault). Este Lab Final cria os recursos **efêmeros** (ACR, ACA env, MCP, n8n). Separando em 2 RGs, no fim do lab você deleta `rg-lab-final` e os recursos compartilhados continuam vivos para o próximo lab/turma. **Anti-pattern:** misturar tudo em 1 RG e ter que escolher recursos individualmente para deletar.
 
 ---
 
@@ -155,7 +155,7 @@
    - ⚠️ Se aparecer `Consumption + Dedicated`, troque para `Consumption only` — Dedicated cobra ~R$ 250/mês reservados que não usaremos no lab
 5. Tab **Monitoring:**
    - **Logs destination:** `Azure Log Analytics`
-   - **Log Analytics workspace:** clique no dropdown e selecione `log-helpsphere-ia` do RG `rg-helpsphere-ia` (compartilhado, criado no Bloco 2)
+   - **Log Analytics workspace:** clique no dropdown e selecione `log-helpsphere-ia` do RG `rg-lab-intermediario` (compartilhado, criado no Bloco 2)
      - Se você não vê esse workspace na lista: **pare aqui** — o Bloco 2 não foi feito ou a sub está errada
 6. Tab **Networking:** deixe defaults (managed network, public ingress)
 7. Tab **Tags:** herde do RG
@@ -169,12 +169,12 @@
 > ```powershell
 > # Capturar customerId + sharedKey do Log Analytics existente do Bloco 2
 > $WorkspaceId = az monitor log-analytics workspace show `
->   --resource-group rg-helpsphere-ia `
+>   --resource-group rg-lab-intermediario `
 >   --workspace-name log-helpsphere-ia `
 >   --query customerId -o tsv
 >
 > $WorkspaceKey = az monitor log-analytics workspace get-shared-keys `
->   --resource-group rg-helpsphere-ia `
+>   --resource-group rg-lab-intermediario `
 >   --workspace-name log-helpsphere-ia `
 >   --query primarySharedKey -o tsv
 >
@@ -197,7 +197,7 @@
 
 ## Passo 2.4 — Atribuir role `AcrPull` ao Managed Identity do Bloco 2
 
-A Managed Identity `mi-helpsphere-ia` (criada no Bloco 2 no RG `rg-helpsphere-ia`) precisa de permissão para **pullar imagens** do ACR `acrhelpsphere<rand>` recém-criado. Sem isso, o deploy do MCP Server (Cap 05) falha com `UNAUTHORIZED: authentication required`.
+A Managed Identity `mi-helpsphere-ia` (criada no Bloco 2 no RG `rg-lab-intermediario`) precisa de permissão para **pullar imagens** do ACR `acrhelpsphere<rand>` recém-criado. Sem isso, o deploy do MCP Server (Cap 05) falha com `UNAUTHORIZED: authentication required`.
 
 **No Portal Azure (caminho visual):**
 
@@ -210,7 +210,7 @@ A Managed Identity `mi-helpsphere-ia` (criada no Bloco 2 no RG `rg-helpsphere-ia
    - Clique **+ Select members** → no painel direito:
      - **Subscription:** sua sub
      - **Managed identity:** `User-assigned managed identity`
-     - Selecione `mi-helpsphere-ia` (vai aparecer com badge `rg-helpsphere-ia`)
+     - Selecione `mi-helpsphere-ia` (vai aparecer com badge `rg-lab-intermediario`)
    - **Select** → **Next**
 6. Tab **Conditions:** deixe `Constrain roles` desmarcado
 7. Tab **Review + assign** → **Review + assign** → confirme
@@ -224,7 +224,7 @@ A Managed Identity `mi-helpsphere-ia` (criada no Bloco 2 no RG `rg-helpsphere-ia
 > # Capturar Principal ID do MI do Bloco 2
 > $PrincipalId = az identity show `
 >   --name mi-helpsphere-ia `
->   --resource-group rg-helpsphere-ia `
+>   --resource-group rg-lab-intermediario `
 >   --query principalId -o tsv
 >
 > # Capturar Resource ID do ACR recém-criado (use $AcrName do Passo 2.2)
@@ -267,7 +267,7 @@ A Managed Identity `mi-helpsphere-ia` (criada no Bloco 2 no RG `rg-helpsphere-ia
    - ⚠️ Se aparecer um terceiro recurso `workspace-cae-helpsphere-final<rand>` (Log Analytics), você esqueceu de selecionar o workspace existente no Passo 2.3 — veja Surpresas pedagógicas abaixo
 3. Em `cae-helpsphere-final` → **Overview** → confirme:
    - **Provisioning state:** `Succeeded`
-   - **Log Analytics customer ID:** mesmo `customerId` do `log-helpsphere-ia` (compare com RG `rg-helpsphere-ia`)
+   - **Log Analytics customer ID:** mesmo `customerId` do `log-helpsphere-ia` (compare com RG `rg-lab-intermediario`)
 4. Em `acrhelpsphere<rand>` → **Access control (IAM)** → **Role assignments** tab → confirme:
    - 1 linha com `mi-helpsphere-ia` + role `AcrPull`
 
@@ -294,7 +294,7 @@ az containerapp env show --name cae-helpsphere-final --resource-group rg-lab-fin
 # Esperado: state=Succeeded, customerId = mesmo do log-helpsphere-ia
 
 # 4. AcrPull role assignment cravado
-$PrincipalId = az identity show --name mi-helpsphere-ia --resource-group rg-helpsphere-ia --query principalId -o tsv
+$PrincipalId = az identity show --name mi-helpsphere-ia --resource-group rg-lab-intermediario --query principalId -o tsv
 $AcrId = az acr show --name $AcrName --resource-group rg-lab-final --query id -o tsv
 az role assignment list --assignee $PrincipalId --scope $AcrId `
   --query "[].roleDefinitionName" -o tsv
@@ -315,7 +315,7 @@ az acr login --name $AcrName 2>&1 | Select-Object -First 5
 [ ] ACR acrhelpsphere<rand> criado com SKU Basic + adminUserEnabled=false
 [ ] ACR loginServer anotado para uso nos .env (formato acrhelpsphere<rand>.azurecr.io)
 [ ] ACA Environment cae-helpsphere-final criado em Consumption only
-[ ] ACA Environment linkado ao Log Analytics log-helpsphere-ia (RG rg-helpsphere-ia)
+[ ] ACA Environment linkado ao Log Analytics log-helpsphere-ia (RG rg-lab-intermediario)
 [ ] Provisioning state de cae-helpsphere-final = Succeeded
 [ ] Role AcrPull atribuído à mi-helpsphere-ia no scope do ACR
 [ ] az role assignment list confirma 1 entry de AcrPull
@@ -330,7 +330,7 @@ az acr login --name $AcrName 2>&1 | Select-Object -First 5
 - ⚠️ **ACA Environment provisiona Log Analytics novo se você esquecer de selecionar o existente** — no tab **Monitoring**, se deixar **Logs destination = Azure Log Analytics** mas NÃO selecionar workspace, o Portal **silenciosamente cria** `workspace-cae-helpsphere-final<rand>` no `rg-lab-final`. Isso **fragmenta** os logs (Bloco 2 vai pra um, Lab Final pra outro) e duplica cobrança de ingestão. Workaround: sempre selecionar `log-helpsphere-ia` explicitamente; se errou, delete o ACA Env e refaça (não dá pra trocar workspace depois de criado).
 - ⚠️ **`AcrPull` role assignment leva 30-60s para propagar** — atribui via Portal/CLI, mas se você imediatamente rodar `az containerapp create --image acrhelpsphere<rand>.azurecr.io/...` no Cap 05, pode dar `UNAUTHORIZED`. Workaround: aguarde 60s após criar o role antes de fazer pull/deploy. **Anti-pattern:** debugar erro de imagem por 20min sem perceber que é só propagação RBAC.
 - ⚠️ **`az role assignment create --assignee <upn>` falha com permissões mínimas** — o flag `--assignee` faz lookup no Microsoft Graph e exige `Directory.Read.All`. Em subs corporativas restritas, isso falha mesmo se o usuário tem `User Access Administrator`. Workaround: usar `--assignee-object-id <objectId> --assignee-principal-type ServicePrincipal` (pula o lookup). **Cravar pattern em todos os scripts CI/CD.**
-- ⚠️ **MI do Bloco 2 vive em RG separado (`rg-helpsphere-ia`) — não tente recriar local** — alguns alunos criam `mi-lab-final` novo no `rg-lab-final` para "simplificar". Resultado: o MI novo NÃO tem roles em Service Bus (Cap 08), AI Search (do `apex-rag-lab` Cap 05), ou Speech (Cap 06) — todas pré-cravadas no MI do Bloco 2. Você teria que repetir 5+ role assignments. Workaround: **sempre reusar `mi-helpsphere-ia` cross-RG**. RBAC funciona perfeitamente em escopos cruzados.
+- ⚠️ **MI do Bloco 2 vive em RG separado (`rg-lab-intermediario`) — não tente recriar local** — alguns alunos criam `mi-lab-final` novo no `rg-lab-final` para "simplificar". Resultado: o MI novo NÃO tem roles em Service Bus (Cap 08), AI Search (do `apex-rag-lab` Cap 05), ou Speech (Cap 06) — todas pré-cravadas no MI do Bloco 2. Você teria que repetir 5+ role assignments. Workaround: **sempre reusar `mi-helpsphere-ia` cross-RG**. RBAC funciona perfeitamente em escopos cruzados.
 - ⚠️ **ACR Basic tem limit de 10 GiB de storage** — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-1** para o cap absoluto. Sintoma: `denied: requested access to the resource is denied` no `docker push`. Workaround: `az acr repository delete --name <acr> --image <repo>:<tag>` para liberar espaço, ou subir para Standard. **Em produção, sempre cravar política de retention de tags (`az acr config retention`).**
 - ⚠️ **Workload profile `Consumption + Dedicated` aparece como default em algumas subs** — se você tem subs corporate com policy padrão, o Portal pode pré-selecionar Consumption + Dedicated → cobra ~R$ 250/mês reservados mesmo com 0 apps deployados. Workaround: **explicitamente selecionar `Consumption only`** no Tab **Workload profiles**. Verificar via CLI: `az containerapp env show --query 'properties.workloadProfiles'` (deve listar apenas `Consumption`).
 - ⚠️ **`--admin-enabled true` no ACR vira credencial órfã** — se em algum debug você habilitou admin user (ex.: para um `docker login` rápido), as 2 senhas master nunca expiram automaticamente. Vetor de comprometimento de longo prazo. Workaround: depois de debugar, `az acr update --name <acr> --admin-enabled false` + rotacionar passwords (`az acr credential renew`). **Em produção: nunca habilite — Bicep policy `Microsoft.Authorization/policyDefinitions` deve denyar.**
@@ -345,7 +345,7 @@ az acr login --name $AcrName 2>&1 | Select-Object -First 5
 | `The subscription is not registered to use namespace 'Microsoft.App'` | Resource Provider não habilitado | `az provider register --namespace Microsoft.App && az provider register --namespace Microsoft.OperationalInsights` |
 | ACA Env stuck em `Provisioning` >10min | Quota regional esgotada (raro mas acontece em East US 2) | Trocar para `East US` ou `South Central US` no `--location` |
 | `UNAUTHORIZED: authentication required` ao pull do ACR | Role `AcrPull` não propagado ainda OU MI errado | Aguardar 60s; `az role assignment list --assignee <principalId>` para confirmar |
-| Log Analytics workspace não aparece no dropdown | Workspace está em outra sub OU sem permissão `Microsoft.OperationalInsights/workspaces/sharedKeys/action` | Validar com `az monitor log-analytics workspace show -g rg-helpsphere-ia -n log-helpsphere-ia` |
+| Log Analytics workspace não aparece no dropdown | Workspace está em outra sub OU sem permissão `Microsoft.OperationalInsights/workspaces/sharedKeys/action` | Validar com `az monitor log-analytics workspace show -g rg-lab-intermediario -n log-helpsphere-ia` |
 | `Insufficient privileges to complete the operation` no role assignment | Falta `User Access Administrator` ou `Owner` na sub | Solicitar elevação ou usar conta com Owner |
 
 ---

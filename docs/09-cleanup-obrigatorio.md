@@ -27,12 +27,12 @@
 | Alvo | Onde vive | Custo se esquecer (R$/mês) |
 |---|---|---|
 | **RG `rg-lab-final`** (ACR + ACA Env + MCP + n8n + PG + Speech + Service Bus) — **crítico** | Sub Azure → `rg-lab-final` | ~R$ 145 fixo + variável |
-| **Foundry Project `aifproj-helpsphere-agente`** — não está no `rg-lab-final` | Hub `aifhub-apex-prod` em `rg-helpsphere-ia` | R$ 1-2/mês storage idle de threads |
+| **Foundry Project `aifproj-helpsphere-agente`** — não está no `rg-lab-final` | Hub `aifhub-apex-prod` em `rg-lab-intermediario` | R$ 1-2/mês storage idle de threads |
 | **Copilot Studio agent `HelpSphere Tier 1 Agent`** — trial expira 30d sozinho | Power Platform tenant | R$ 0 trial · R$ 1.000+/mês Per-User Premium |
 | **3 App Registrations Entra** (`app-mcp-helpsphere-server`/`-client` + `app-n8n-graph` se Cap 08) | Tenant Entra | R$ 0 mas client secret 90d = vetor de ataque |
-| **`rg-helpsphere-ia`** (Hub + MI + LA do Bloco 2) — **NÃO delete se vai fazer Lab Avançado** | RG `rg-helpsphere-ia` | ~R$ 30/mês (Passo 9.6) |
+| **`rg-lab-intermediario`** (Hub + MI + LA do Bloco 2) — **NÃO delete se vai fazer Lab Avançado** | RG `rg-lab-intermediario` | ~R$ 30/mês (Passo 9.6) |
 
-> **Nota pedagógica — por que `az group delete` resolve 80% mas não 100% + matriz de soft-delete:** delete do RG é cascade local mas o Lab Final tem 3 dependências **cross-RG/cross-tenant** órfãs: (1) Foundry **Project** vive sob o Hub em `rg-helpsphere-ia`, (2) **App Registrations** vivem em tenant Entra, (3) **Copilot Studio agent** vive em Power Platform. Por isso o cleanup é em **5 passos separados**, não 1. Soft-delete varia por recurso: RG não tem (delete = definitivo), Key Vault tem 90d default, App Reg 30d, Foundry workspace 14d. Key Vault em soft-delete impede recriar com mesmo nome — `az keyvault purge` ou esperar 90d.
+> **Nota pedagógica — por que `az group delete` resolve 80% mas não 100% + matriz de soft-delete:** delete do RG é cascade local mas o Lab Final tem 3 dependências **cross-RG/cross-tenant** órfãs: (1) Foundry **Project** vive sob o Hub em `rg-lab-intermediario`, (2) **App Registrations** vivem em tenant Entra, (3) **Copilot Studio agent** vive em Power Platform. Por isso o cleanup é em **5 passos separados**, não 1. Soft-delete varia por recurso: RG não tem (delete = definitivo), Key Vault tem 90d default, App Reg 30d, Foundry workspace 14d. Key Vault em soft-delete impede recriar com mesmo nome — `az keyvault purge` ou esperar 90d.
 
 ---
 
@@ -45,7 +45,7 @@ Antes de qualquer comando destrutivo, confirme o checklist:
 [ ] Screenshots / vídeo de evidência salvos fora do Azure (laptop local, OneDrive pessoal)
 [ ] Threads do agent Foundry exportadas via SDK (`client.agents.list_threads()` → JSON local) se você quer analisar offline
 [ ] Logs do App Insights exportados via Kusto (export to CSV) se relevantes
-[ ] Confirmou que NÃO vai fazer Lab Avançado em sequência amanhã (se vai, NÃO delete `rg-helpsphere-ia` — ver Passo 9.6)
+[ ] Confirmou que NÃO vai fazer Lab Avançado em sequência amanhã (se vai, NÃO delete `rg-lab-intermediario` — ver Passo 9.6)
 ```
 
 > **Nota pedagógica — gate de confirmação humana é Defense in Depth:** todo comando destrutivo do Azure CLI exige `--yes` explícito proposital. Não automatize este capítulo em CI — é manual obrigatório. Casos clássicos de cleanup automatizado destrutivo (GitLab 2017, AWS S3 órfãos) reforçam: 5 segundos extras digitando `rg-lab-final` no Portal vale a pausa.
@@ -96,7 +96,7 @@ Antes de qualquer comando destrutivo, confirme o checklist:
 
 ## Passo 9.3 — Deletar Foundry Project `aifproj-helpsphere-agente`
 
-⚠️ **Importante:** o Foundry Project NÃO está no `rg-lab-final`. Ele vive no `rg-helpsphere-ia` (Bloco 2) sob o Hub `aifhub-apex-prod`. O delete do `rg-lab-final` no Passo 9.2 **NÃO removeu o Project**.
+⚠️ **Importante:** o Foundry Project NÃO está no `rg-lab-final`. Ele vive no `rg-lab-intermediario` (Bloco 2) sob o Hub `aifhub-apex-prod`. O delete do `rg-lab-final` no Passo 9.2 **NÃO removeu o Project**.
 
 **No Azure AI Foundry portal:**
 
@@ -114,13 +114,13 @@ Antes de qualquer comando destrutivo, confirme o checklist:
 > ```powershell
 > az ml workspace delete `
 >   --name aifproj-helpsphere-agente `
->   --resource-group rg-helpsphere-ia `
+>   --resource-group rg-lab-intermediario `
 >   --yes `
 >   --no-wait
 >
 > # Validar que sumiu
 > az ml workspace list `
->   --resource-group rg-helpsphere-ia `
+>   --resource-group rg-lab-intermediario `
 >   --query "[?kind=='Project'].{name:name, kind:kind}" -o table
 > # Esperado: linha aifproj-helpsphere-agente NÃO aparece
 > ```
@@ -204,14 +204,14 @@ Power Platform vive em tenant separado, fora do Azure RM — único caminho é m
 
 ---
 
-## Passo 9.6 — Decidir destino de `rg-helpsphere-ia` (Bloco 2)
+## Passo 9.6 — Decidir destino de `rg-lab-intermediario` (Bloco 2)
 
-⚠️ **Decisão crítica — não automatize.** O `rg-helpsphere-ia` (Bloco 2) carrega **Foundry Hub `aifhub-apex-prod`** + **MI `mi-helpsphere-ia`** + **Log Analytics `log-helpsphere-ia`** + Key Vault + AI Search + **apex-helpsphere SaaS** (pivot 2026-05-06).
+⚠️ **Decisão crítica — não automatize.** O `rg-lab-intermediario` (Bloco 2) carrega **Foundry Hub `aifhub-apex-prod`** + **MI `mi-helpsphere-ia`** + **Log Analytics `log-helpsphere-ia`** + Key Vault + AI Search + **apex-helpsphere SaaS** (pivot 2026-05-06).
 
 | Cenário | Ação | Custo recorrente |
 |---|---|---|
 | Vou fazer Lab Avançado D06 amanhã/semana | **NÃO delete** | ~R$ 30-40/mês (Hub idle + LA 5 GiB free) |
-| Terminei a disciplina | `az group delete --name rg-helpsphere-ia --yes` | R$ 0 |
+| Terminei a disciplina | `az group delete --name rg-lab-intermediario --yes` | R$ 0 |
 | Vou repetir o Lab Final | Preserve (Hub + MI custosos de recriar) | ~R$ 30-40/mês |
 
 > **Custo:** delete zera compute. Storage idle do Log Analytics (R$ 12/GiB/mês além dos 5 GiB free) e Key Vault em soft-delete 90d (R$ 0 mas ocupa nome) persistem até purga. Deletar o RG também **derruba o apex-helpsphere SaaS** — exporte dados antes se quer continuar testando a aplicação fora do Lab Final.
@@ -241,8 +241,8 @@ Cost Management tem **delay de 24-48h** entre delete e dado refletido. Validaç�
 # 1. RG rg-lab-final sumiu
 az group exists --name rg-lab-final                                          # false
 # 2. Foundry Project sumiu (mas Hub continua)
-az ml workspace list -g rg-helpsphere-ia --query "[?name=='aifproj-helpsphere-agente']" -o tsv  # vazio
-az ml workspace show --name aifhub-apex-prod -g rg-helpsphere-ia --query "kind" -o tsv          # Hub
+az ml workspace list -g rg-lab-intermediario --query "[?name=='aifproj-helpsphere-agente']" -o tsv  # vazio
+az ml workspace show --name aifhub-apex-prod -g rg-lab-intermediario --query "kind" -o tsv          # Hub
 # 3. App Regs sumiram
 az ad app list --filter "startswith(displayName, 'app-mcp-helpsphere')" --query "length(@)"     # 0
 # 4. Cost Management 24-48h depois (telemetria atrasa) — Portal → Cost analysis → filter rg-lab-final → últimos 2 dias = R$ 0
@@ -260,7 +260,7 @@ az ad app list --filter "startswith(displayName, 'app-mcp-helpsphere')" --query 
 [ ] Hub aifhub-apex-prod PRESERVADO (compartilhado para outros labs)
 [ ] App Registrations órfãs deletadas (app-mcp-helpsphere-server + app-mcp-helpsphere-client + app-n8n-graph se Cap 08)
 [ ] Copilot Studio agent HelpSphere Tier 1 Agent deletado ou desabilitado
-[ ] Decisão tomada sobre rg-helpsphere-ia (Bloco 2): preservar para Lab Avançado OU deletar
+[ ] Decisão tomada sobre rg-lab-intermediario (Bloco 2): preservar para Lab Avançado OU deletar
 [ ] (24-48h depois) Cost Management confirma R$ 0 no escopo rg-lab-final
 [ ] Azure Cost Anomaly Alert R$ 50 cravado na sub (proteção permanente)
 [ ] Custo total do lab realizado: ≤ R$ 30 (alvo Apex)
@@ -270,7 +270,7 @@ az ad app list --filter "startswith(displayName, 'app-mcp-helpsphere')" --query 
 
 ## Surpresas pedagógicas (capturadas em smoke runs)
 
-- ⚠️ **Delete do `rg-lab-final` NÃO deleta o Foundry Project** — Project vive no `rg-helpsphere-ia` (Bloco 2) sob o Hub. O aluno pensa "deletei o RG, acabou", mas o Project fica órfão consumindo storage idle (~R$ 1-2/mês) + threads cifradas. Workaround: cleanup em **5 passos separados** (este capítulo) — não confie em delete cascade do RG sozinho.
+- ⚠️ **Delete do `rg-lab-final` NÃO deleta o Foundry Project** — Project vive no `rg-lab-intermediario` (Bloco 2) sob o Hub. O aluno pensa "deletei o RG, acabou", mas o Project fica órfão consumindo storage idle (~R$ 1-2/mês) + threads cifradas. Workaround: cleanup em **5 passos separados** (este capítulo) — não confie em delete cascade do RG sozinho.
 - ⚠️ **`az group delete` falha silently se houver Resource Lock** — admin do tenant pode ter cravado lock `CanNotDelete` em recursos críticos (ACR Premium, Log Analytics em compliance). Comando termina com "Operation completed with errors" sem detalhar qual recurso. Workaround: Portal → RG → **Settings → Locks** → remover antes de tentar delete novamente.
 - ⚠️ **Client secrets em App Reg sobrevivem 90 dias após você esquecer da existência** — `app-mcp-helpsphere-client` (Cap 05) e `app-n8n-graph` (Cap 08) têm secrets válidos. Se vazaram em log/screenshot/`.env` pushado por engano, atacante usa OAuth flow do tenant até expiração. Workaround: deletar App Reg **invalida o secret na hora** (Passo 9.4 obrigatório).
 - ⚠️ **PostgreSQL Burstable `Stopped` ainda cobra storage idle E reinicia sozinho em 7d** — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-3** para causa-raiz e estratégia. Para R$ 0 permanente, delete do RG (este Cap) — Cap 07 Passo 7.7 Stop é só para sessão recorrente curta. Sempre crave Cost Anomaly Alert R$ 50 (Passo 9.7).

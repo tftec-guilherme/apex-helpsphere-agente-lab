@@ -27,7 +27,7 @@
   - **`SB_NAMESPACE_FQDN`** (vamos preencher aqui)
   - **`SB_TOPIC_NAME`** (vamos preencher aqui)
 
-> **Atenção breaking — referência cruzada com Cap 07:** o Cap 07 já criou a Managed Identity `mi-helpsphere-ia` cross-RG (em `rg-helpsphere-ia`) e atribuiu a credential parcial Service Bus em modo "rascunho". Vamos **fechar** essa credential aqui no Passo 8.3, **mais** cravar a role `Azure Service Bus Data Receiver` no MI (TODO pendente do Cap 07 Passo 7.4) **mais** uma role adicional `Azure Service Bus Data Sender` na MI para o agente Foundry publicar (Passo 8.4).
+> **Atenção breaking — referência cruzada com Cap 07:** o Cap 07 já criou a Managed Identity `mi-helpsphere-ia` cross-RG (em `rg-lab-intermediario`) e atribuiu a credential parcial Service Bus em modo "rascunho". Vamos **fechar** essa credential aqui no Passo 8.3, **mais** cravar a role `Azure Service Bus Data Receiver` no MI (TODO pendente do Cap 07 Passo 7.4) **mais** uma role adicional `Azure Service Bus Data Sender` na MI para o agente Foundry publicar (Passo 8.4).
 
 > **Atenção custo recorrente — Service Bus + ACA n8n + PG:** ao fim deste capítulo, o custo total do Lab Final ligado 24×7 fica em **R$ ~145/mês** (Service Bus Standard ~R$ 50 + PG B1ms ~R$ 60 + ACA n8n `min-replicas 1` ~R$ 35). Pause **TODOS** ao fim da sessão (Passo 8.7) — Service Bus aceita `delete-pause-recreate` mais simples que PG (não tem feature `Stop`).
 
@@ -39,7 +39,7 @@
 |---|---|---|---|
 | Service Bus namespace `sb-helpsphere-final` | Portal → Service Bus → Create namespace · **tier Standard** · East US 2 | RG `rg-lab-final`, sem zone redundancy (Standard não suporta) | **R$ 50 fixo ligado 24×7** + R$ 0,80/M operações (lab usa <100 msg/dia → ~R$ 0) |
 | Topic `tickets-escalated` + Subscription `n8n-escalation-sub` | Portal → namespace → Entities → Topics → New · subscription com `lock-duration=30s`, `max-delivery=3`, dead-letter ON | Stored dentro do namespace | R$ 0 (incluso no namespace) |
-| Role `Azure Service Bus Data Receiver` em `mi-helpsphere-ia` | Portal → namespace → IAM → Add role assignment · **escopo namespace inteiro** (não só Topic) | MI cross-RG `rg-helpsphere-ia` · usado pelo n8n para LER do `n8n-escalation-sub` | R$ 0 (RBAC gratuito) |
+| Role `Azure Service Bus Data Receiver` em `mi-helpsphere-ia` | Portal → namespace → IAM → Add role assignment · **escopo namespace inteiro** (não só Topic) | MI cross-RG `rg-lab-intermediario` · usado pelo n8n para LER do `n8n-escalation-sub` | R$ 0 (RBAC gratuito) |
 | Role `Azure Service Bus Data Sender` em `mi-helpsphere-ia` | Mesmo blade IAM, segunda role assignment · escopo namespace | MI usada pelo agente Foundry para PUBLICAR no Topic `tickets-escalated` | R$ 0 |
 | Google Service Account + planilha auditoria | Google Cloud Console → IAM → Service Accounts + Drive API + Sheets API | Conta Google (Gmail ou Workspace) — NÃO Azure | **R$ 0 — Google Sheets API gratuita até 60 reqs/min/projeto** |
 | Credential SB + Sheets ativadas no n8n | n8n UI → Credentials → ativar `HelpSphere Service Bus` (do Cap 07 rascunho) + criar `Google Sheets Service Account` | Stored cifrado no PG do n8n via `N8N_ENCRYPTION_KEY` | R$ 0 |
@@ -228,7 +228,7 @@
    - Selecionar → **Next**
 3. Tab **Members:**
    - **Assign access to:** `Managed identity`
-   - **+ Select members** → **Subscription:** sua → **Managed identity:** `User-assigned managed identity` → selecione **`mi-helpsphere-ia`** (lembre: vive em `rg-helpsphere-ia` cross-RG, não no `rg-lab-final`)
+   - **+ Select members** → **Subscription:** sua → **Managed identity:** `User-assigned managed identity` → selecione **`mi-helpsphere-ia`** (lembre: vive em `rg-lab-intermediario` cross-RG, não no `rg-lab-final`)
    - **Select** → **Next**
 4. Tab **Review + assign** → **Review + assign**
 5. Aguarde ~10-30s até banner verde **Role assignment added**
@@ -255,7 +255,7 @@
 > ```powershell
 > $MiId = az identity show `
 >   --name mi-helpsphere-ia `
->   --resource-group rg-helpsphere-ia `
+>   --resource-group rg-lab-intermediario `
 >   --query principalId -o tsv
 >
 > $SbScope = az servicebus namespace show `
@@ -518,7 +518,7 @@ az servicebus topic subscription show `
 # Esperado: maxDelivery=3, lockDuration=PT30S
 
 # 3. 2 role assignments na MI (Receiver + Sender)
-$MiId = az identity show --name mi-helpsphere-ia --resource-group rg-helpsphere-ia --query principalId -o tsv
+$MiId = az identity show --name mi-helpsphere-ia --resource-group rg-lab-intermediario --query principalId -o tsv
 az role assignment list `
   --assignee $MiId `
   --query "[?contains(scope, 'sb-helpsphere-final')].{role:roleDefinitionName, scope:scope}" -o table

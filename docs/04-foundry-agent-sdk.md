@@ -55,13 +55,13 @@
 >
 > ```powershell
 > $SubId = az account show --query id -o tsv
-> $HubId = "/subscriptions/$SubId/resourceGroups/rg-helpsphere-ia/providers/Microsoft.MachineLearningServices/workspaces/aifhub-apex-prod"
+> $HubId = "/subscriptions/$SubId/resourceGroups/rg-lab-intermediario/providers/Microsoft.MachineLearningServices/workspaces/aifhub-apex-prod"
 >
 > az ml workspace create `
 >   --kind project `
 >   --hub-id $HubId `
 >   --name aifproj-helpsphere-agente `
->   --resource-group rg-helpsphere-ia `
+>   --resource-group rg-lab-intermediario `
 >   --location eastus2
 > ```
 >
@@ -101,13 +101,13 @@
 > # Verificar deployments existentes
 > az cognitiveservices account deployment list `
 >   --name aifhub-apex-prod `
->   --resource-group rg-helpsphere-ia `
+>   --resource-group rg-lab-intermediario `
 >   -o table
 >
 > # Criar se não existe
 > az cognitiveservices account deployment create `
 >   --name aifhub-apex-prod `
->   --resource-group rg-helpsphere-ia `
+>   --resource-group rg-lab-intermediario `
 >   --deployment-name gpt-4.1-mini `
 >   --model-name gpt-4.1-mini `
 >   --model-version "2025-04-14" `
@@ -132,7 +132,7 @@
 2. Localize seção **Project connection string** (perto do topo da página)
 3. Clique no ícone **Copy** ao lado do valor — formato esperado:
    ```
-   eastus2.api.azureml.ms;<subscription-id>;rg-helpsphere-ia;aifproj-helpsphere-agente
+   eastus2.api.azureml.ms;<subscription-id>;rg-lab-intermediario;aifproj-helpsphere-agente
    ```
 4. Cole temporariamente em editor seguro — você vai usar no `.env` no Passo 4.5
 
@@ -188,7 +188,7 @@ python-dotenv>=1.0.0
 
 ```dotenv
 # Foundry Project (Passo 4.3)
-AI_PROJECT_CONNECTION_STRING="eastus2.api.azureml.ms;<sub-id>;rg-helpsphere-ia;aifproj-helpsphere-agente"
+AI_PROJECT_CONNECTION_STRING="eastus2.api.azureml.ms;<sub-id>;rg-lab-intermediario;aifproj-helpsphere-agente"
 MODEL_DEPLOYMENT_NAME="gpt-4.1-mini"
 
 # RAG Function App (Lab Intermediário)
@@ -557,14 +557,14 @@ Para iniciar o reembolso de pedido não entregue após 7 dias:
 # 1. Confirmar Project no Azure
 az ml workspace show `
   --name aifproj-helpsphere-agente `
-  --resource-group rg-helpsphere-ia `
+  --resource-group rg-lab-intermediario `
   --query "{name:name, kind:kind, location:location}" -o table
 # Esperado: kind=project, location=eastus2
 
 # 2. Confirmar deployment do modelo
 az cognitiveservices account deployment show `
   --name aifhub-apex-prod `
-  --resource-group rg-helpsphere-ia `
+  --resource-group rg-lab-intermediario `
   --deployment-name gpt-4.1-mini `
   --query "{name:name, status:properties.provisioningState, model:properties.model.name}" -o table
 # Esperado: status=Succeeded, model=gpt-4.1-mini

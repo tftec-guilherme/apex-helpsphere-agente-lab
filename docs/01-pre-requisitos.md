@@ -18,7 +18,7 @@
 
 ## Pré-requisitos (este capítulo é o root — pré-condições externas ao repo)
 
-- ✅ Você completou o **Bloco 2 da Disciplina 06** (apex-helpsphere SaaS provisionado em `rg-helpsphere-ia`) — fornece Foundry Hub `aifhub-apex-prod` + Managed Identity `mi-helpsphere-ia` + Log Analytics `log-helpsphere-ia` que serão **reusados** neste lab.
+- ✅ Você completou o **Bloco 2 da Disciplina 06** (apex-helpsphere SaaS provisionado em `rg-lab-intermediario`) — fornece Foundry Hub `aifhub-apex-prod` + Managed Identity `mi-helpsphere-ia` + Log Analytics `log-helpsphere-ia` que serão **reusados** neste lab.
 - ✅ Você completou o **Lab Intermediário** (RAG HelpSphere) — fornece Function App `func-helpsphere-rag-{rand}` que será chamada pela tool `search_kb` no Capítulo 04.
 - ✅ Você tem acesso de Owner ou Contributor + UAA na sub Azure que vai usar.
 - ✅ Você tem ~R$ 22-30 disponíveis (custo realista do lab provisionado e deletado no mesmo dia — ver tabela abaixo).
@@ -32,7 +32,7 @@
 | # | Pré-requisito | Como validar | Bloqueia? |
 |---|---|---|---|
 | 1 | Sub Azure Pay-As-You-Go + roles | `az account show` + `az role assignment list` | Cap 02 |
-| 2 | Foundry Hub `aifhub-apex-prod` em `rg-helpsphere-ia` | Portal AI Foundry → Hubs | Cap 04 |
+| 2 | Foundry Hub `aifhub-apex-prod` em `rg-lab-intermediario` | Portal AI Foundry → Hubs | Cap 04 |
 | 3 | Conta Microsoft + Copilot Studio Trial 30d | https://copilotstudio.microsoft.com/ | Cap 03 |
 | 4 | Fork `apex-helpsphere-agente-lab` + clone local | `git remote -v` | Todos |
 | 5 | Docker Desktop 4.30+ com WSL 2 | `docker version` | Cap 05 (build imagem MCP) |
@@ -80,7 +80,7 @@ Se você só tem `Reader` ou `Contributor` sem UAA, **peça ao admin do tenant**
 
 **No Azure Portal (https://portal.azure.com):**
 
-1. Resource Groups → abra `rg-helpsphere-ia` (criado no Bloco 2).
+1. Resource Groups → abra `rg-lab-intermediario` (criado no Bloco 2).
 2. Verifique que existem nesse RG:
    - **Hub** Azure AI Foundry: `aifhub-apex-prod`
    - **Managed Identity** (User-assigned): `mi-helpsphere-ia`
@@ -93,13 +93,13 @@ Se você só tem `Reader` ou `Contributor` sem UAA, **peça ao admin do tenant**
 > **Alternativa via Azure CLI:**
 > ```powershell
 > # Confirma os 4 recursos do Bloco 2 existindo
-> az resource list --resource-group rg-helpsphere-ia `
+> az resource list --resource-group rg-lab-intermediario `
 >   --query "[].{name:name, type:type}" -o table
 >
 > # Confirma deployment gpt-4.1-mini
 > az cognitiveservices account deployment list `
 >   --name aifhub-apex-prod `
->   --resource-group rg-helpsphere-ia `
+>   --resource-group rg-lab-intermediario `
 >   -o table
 > ```
 
@@ -227,7 +227,7 @@ az account show --query "{state:state, name:name}" -o table
 
 # 2. RG do Bloco 2 existindo com Foundry Hub
 az resource show `
-  --resource-group rg-helpsphere-ia `
+  --resource-group rg-lab-intermediario `
   --name aifhub-apex-prod `
   --resource-type "Microsoft.MachineLearningServices/workspaces" `
   --query "{name:name, location:location}" -o table
@@ -236,7 +236,7 @@ az resource show `
 # 3. Deployment gpt-4.1-mini ativo
 az cognitiveservices account deployment show `
   --name aifhub-apex-prod `
-  --resource-group rg-helpsphere-ia `
+  --resource-group rg-lab-intermediario `
   --deployment-name gpt-4.1-mini `
   --query "properties.provisioningState" -o tsv
 # Esperado: Succeeded
@@ -256,9 +256,9 @@ az extension list --query "[?contains(['containerapp','ml'], name)].name" -o tsv
 
 ```text
 [ ] Sub Azure Pay-As-You-Go ativa, role Owner ou Contributor+UAA confirmada
-[ ] Foundry Hub aifhub-apex-prod existindo em rg-helpsphere-ia (Bloco 2)
+[ ] Foundry Hub aifhub-apex-prod existindo em rg-lab-intermediario (Bloco 2)
 [ ] Deployment gpt-4.1-mini ativo no Hub
-[ ] mi-helpsphere-ia + log-helpsphere-ia + ai-helpsphere-rag presentes em rg-helpsphere-ia
+[ ] mi-helpsphere-ia + log-helpsphere-ia + ai-helpsphere-rag presentes em rg-lab-intermediario
 [ ] Conta Microsoft com Copilot Studio Trial 30d ativo (NÃO live.com)
 [ ] Fork apex-helpsphere-agente-lab + clone local + remote upstream configurado
 [ ] Docker Desktop 4.30+ rodando, WSL 2 backend habilitado

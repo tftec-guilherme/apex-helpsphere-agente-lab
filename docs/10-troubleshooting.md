@@ -24,7 +24,7 @@
 
 - ✅ `az` CLI logado na sub correta (`az account show` confirma)
 - ✅ `jq` instalado (parse de outputs JSON é onipresente neste cap)
-- ✅ Acesso de leitura aos RGs `rg-lab-final` + `rg-helpsphere-ia` (cross-RG)
+- ✅ Acesso de leitura aos RGs `rg-lab-final` + `rg-lab-intermediario` (cross-RG)
 - ✅ Permissão `Reader` no tenant Entra (para listar App Registrations) — Owner se for fixar
 
 > **Atenção:** se você bateu erro `Insufficient privileges` em algum cap, reler **§3.1 Auth/RBAC** abaixo antes de pedir elevação para o admin do tenant — boa parte das falhas "permissão" é placeholder de propagação RBAC (60s) ou flag `--assignee` errado.
@@ -183,14 +183,14 @@ Erro/sintoma reportado
 
 | # | Sintoma | Causa | Fix | Cap fonte |
 |---|---|---|---|---|
-| K1 | `az group delete` em `rg-lab-final` deixa Foundry Project vivo | Project vive em `rg-helpsphere-ia` (Bloco 2) sob o Hub — não cascata via RG novo | Cleanup em **5 passos separados** (Cap 09): RG + Foundry Project + Copilot agent + 3 App Regs + decisão `rg-helpsphere-ia` | Cap 09 |
+| K1 | `az group delete` em `rg-lab-final` deixa Foundry Project vivo | Project vive em `rg-lab-intermediario` (Bloco 2) sob o Hub — não cascata via RG novo | Cleanup em **5 passos separados** (Cap 09): RG + Foundry Project + Copilot agent + 3 App Regs + decisão `rg-lab-intermediario` | Cap 09 |
 | K2 | `az group delete` falha silently com Resource Lock | Lock `CanNotDelete` cravado por admin tenant | Portal → RG → Settings → Locks → remover antes de re-tentar | Cap 09 |
 | K3 | App Reg client secrets sobrevivem 90d após esquecer da existência | Vetor de comprometimento longo se vazaram | **Deletar App Reg** invalida o secret na hora — Passo 9.4 obrigatório | Cap 09 |
 | K4 | PostgreSQL `Stopped` cobra storage idle E reinicia em 7d | Stop zera compute mas storage 32 GiB cobra ~R$ 5/mês; auto-restart Microsoft | Para R$ 0 permanente: **delete** (não Stop) — Cap 09; Stop é só para sessão recorrente curta | Caps 07, 09 |
 | K5 | Cost Management `R$ 0` na hora — alunos entram pânico | Telemetria atrasa **24-48h** entre delete e billing refletir | Confirmar **48h depois** (Passo 9.7) — não 5 min depois | Cap 09 |
 | K6 | Key Vault soft-deleted impede recriar nome por 90 dias | Soft-delete obrigatório para KV (compliance) | `az keyvault purge --name <kv> --location eastus2` OR esperar 90d OR usar `<rand>` novo | Cap 09 |
 | K7 | Conta sub gera billing "fantasma" em RG já deletado | Storage idle KV soft-deleted, Reserved capacity, Marketplace items | **Cost Anomaly Alert** R$ 50 (gratuito, permanente) — Cost Management → Cost alerts → Add → Anomaly | Cap 09 |
-| K8 | RG `rg-helpsphere-ia` (Bloco 2) carrega Hub + MI + LA — decisão crítica | Apex compartilha entre múltiplos labs | Cenário: vai fazer Lab Avançado D06? **NÃO delete** (~R$ 30-40/mês idle); terminou disciplina? `az group delete --name rg-helpsphere-ia --yes` | Cap 09 |
+| K8 | RG `rg-lab-intermediario` (Bloco 2) carrega Hub + MI + LA — decisão crítica | Apex compartilha entre múltiplos labs | Cenário: vai fazer Lab Avançado D06? **NÃO delete** (~R$ 30-40/mês idle); terminou disciplina? `az group delete --name rg-lab-intermediario --yes` | Cap 09 |
 
 ---
 
@@ -221,7 +221,7 @@ az resource list --resource-group rg-lab-final `
   --query "[].{name:name, type:type, state:provisioningState}" -o table
 
 # Listar recursos do RG compartilhado (Bloco 2) — onde Foundry Hub + MI + LA vivem
-az resource list --resource-group rg-helpsphere-ia `
+az resource list --resource-group rg-lab-intermediario `
   --query "[].{name:name, type:type}" -o table
 
 # Confirmar sub correta + tipo
@@ -235,7 +235,7 @@ az account show --query "{name:name, state:state, type:subscriptionPolicies.quot
 
 ```powershell
 # Capturar Principal ID da MI cross-RG (Bloco 2)
-$MiPrincipal = az identity show -n mi-helpsphere-ia -g rg-helpsphere-ia --query principalId -o tsv
+$MiPrincipal = az identity show -n mi-helpsphere-ia -g rg-lab-intermediario --query principalId -o tsv
 
 # Listar TODAS roles atribuídas à MI (espera-se: AcrPull + Cognitive Services User + Service Bus Receiver + Service Bus Sender)
 az role assignment list --assignee "$MiPrincipal" `
@@ -270,15 +270,15 @@ az containerapp show --name ca-mcp-helpsphere --resource-group rg-lab-final `
 
 ```powershell
 # Hub aifhub-apex-prod existe?
-az ml workspace show --name aifhub-apex-prod -g rg-helpsphere-ia --query "{name:name, kind:kind, state:provisioningState}" -o table
+az ml workspace show --name aifhub-apex-prod -g rg-lab-intermediario --query "{name:name, kind:kind, state:provisioningState}" -o table
 
 # Project criado no Cap 04 existe?
-az ml workspace show --name aifproj-helpsphere-agente -g rg-helpsphere-ia --query "{name:name, kind:kind}" -o table
+az ml workspace show --name aifproj-helpsphere-agente -g rg-lab-intermediario --query "{name:name, kind:kind}" -o table
 # Esperado: kind=project
 
 # Deployment gpt-4.1-mini ativo
 az cognitiveservices account deployment show `
-  --name aifhub-apex-prod -g rg-helpsphere-ia --deployment-name gpt-4.1-mini `
+  --name aifhub-apex-prod -g rg-lab-intermediario --deployment-name gpt-4.1-mini `
   --query "properties.provisioningState" -o tsv
 # Esperado: Succeeded
 ```
@@ -342,7 +342,7 @@ az servicebus topic send `
 ```powershell
 # Path completo (ordem importa para não deixar órfão)
 az group delete --name rg-lab-final --yes --no-wait                              # Passo 1: RG do lab
-az ml workspace delete --name aifproj-helpsphere-agente -g rg-helpsphere-ia      # Passo 2: Foundry Project (Hub fica)
+az ml workspace delete --name aifproj-helpsphere-agente -g rg-lab-intermediario      # Passo 2: Foundry Project (Hub fica)
 # Passo 3: Copilot Studio agent — manual em https://copilotstudio.microsoft.com (delete copilot)
 az ad app delete --id <app-mcp-helpsphere-server-id>                             # Passo 4a: App Reg server
 az ad app delete --id <app-mcp-helpsphere-client-id>                             # Passo 4b: App Reg client
@@ -354,7 +354,7 @@ Confirme via:
 
 ```powershell
 az group exists --name rg-lab-final                                              # false
-az ml workspace list -g rg-helpsphere-ia --query "[?name=='aifproj-helpsphere-agente']" -o tsv  # vazio
+az ml workspace list -g rg-lab-intermediario --query "[?name=='aifproj-helpsphere-agente']" -o tsv  # vazio
 az ad app list --filter "startswith(displayName, 'app-mcp-helpsphere')" --query "length(@)"    # 0
 ```
 

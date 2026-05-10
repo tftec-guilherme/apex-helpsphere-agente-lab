@@ -30,7 +30,7 @@ Quando v1.0.0 sair, este arquivo terá:
 
 ### 2. Foundry Hub `aifhub-apex-prod` provisionado
 
-- Provisionado na **Pré-aula 1 D06** em `rg-helpsphere-ia` East US 2
+- Provisionado na **Pré-aula 1 D06** em `rg-lab-intermediario` East US 2
 - Sem ele, capítulo 04 (`docs/04-foundry-agent-sdk.md`) não roda
 
 ### 3. Conta Microsoft Power Platform com Copilot Studio Trial

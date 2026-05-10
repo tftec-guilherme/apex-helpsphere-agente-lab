@@ -10,7 +10,7 @@
 
 ## Pré-requisitos
 
-- ✅ Capítulo 02 concluído — RG `rg-lab-final` existe, ACA Environment `cae-helpsphere-final` provisionado, Managed Identity `mi-helpsphere-ia` (cross-RG em `rg-helpsphere-ia`) já com role `AcrPull`
+- ✅ Capítulo 02 concluído — RG `rg-lab-final` existe, ACA Environment `cae-helpsphere-final` provisionado, Managed Identity `mi-helpsphere-ia` (cross-RG em `rg-lab-intermediario`) já com role `AcrPull`
 - ✅ Capítulo 04 concluído — agente `helpsphere-tier1-agent` existe e tem schema da tool `escalate_ticket` registrada (mas ainda em placeholder até Cap 08)
 - ✅ Capítulo 05 concluído — MCP Server `ca-mcp-helpsphere` rodando; o workflow do n8n vai chamá-lo em alguns nodes para enriquecer dados de ticket
 - ✅ HelpSphere SQL connection string disponível (do Bloco 2) — o workflow precisa consultar tickets resolvidos similares
@@ -30,7 +30,7 @@
 |---|---|---|---|
 | PostgreSQL Flexible Server `pg-n8n-<rand>` | Portal Azure → DB for PostgreSQL flexible servers · **Burstable B1ms** · 32 GiB · PG auth only | Database `n8n` consumido pelo container n8n via env vars | **R$ 60 fixo ligado 24×7** · R$ 0 se `Stop` |
 | Container App `ca-n8n-helpsphere` | Portal ACA → image=`n8nio/n8n:1.6` (pinned), env vars apontando ao PG, ingress=External, port=5678, scale 1→1 | ACA Env `cae-helpsphere-final` (Consumption) | R$ 0 parado · ~R$ 0,02/min ativo (0,5 vCPU + 1 GiB) — **mas `min-replicas 1` mantém ativo** |
-| Role `Azure Service Bus Data Receiver` em `mi-helpsphere-ia` | Portal Service Bus (Cap 08) → IAM → Add role assignment · escopo: namespace `sb-helpsphere-final` | Managed Identity já existente em `rg-helpsphere-ia` | R$ 0 (RBAC gratuito) |
+| Role `Azure Service Bus Data Receiver` em `mi-helpsphere-ia` | Portal Service Bus (Cap 08) → IAM → Add role assignment · escopo: namespace `sb-helpsphere-final` | Managed Identity já existente em `rg-lab-intermediario` | R$ 0 (RBAC gratuito) |
 | Workflow `Ticket Escalation` importado no n8n | n8n UI → Workflows → Import from file → `n8n-workflows/escalation-servicebus-sheets.json` deste repo | Stored em PostgreSQL `n8n` database | R$ 0 (incluso PG) |
 | `N8N_URL` capturada e webhook configurado | Portal ACA Overview + Application → Containers → Environment variables (`WEBHOOK_URL`) | FQDN ACA público `*.azurecontainerapps.io` | R$ 0 |
 
@@ -266,7 +266,7 @@
    - Selecionar → **Next**
 4. Tab **Members**:
    - **Assign access to:** `Managed identity`
-   - **+ Select members** → **Subscription:** sua → **Managed identity:** `User-assigned managed identity` → escolher **`mi-helpsphere-ia`** (lembre: vive em `rg-helpsphere-ia`, não em `rg-lab-final`)
+   - **+ Select members** → **Subscription:** sua → **Managed identity:** `User-assigned managed identity` → escolher **`mi-helpsphere-ia`** (lembre: vive em `rg-lab-intermediario`, não em `rg-lab-final`)
    - **Select** → **Next**
 5. Tab **Review + assign** → **Review + assign**
 6. Aguarde ~10-30s até banner verde **Role assignment added**
@@ -278,7 +278,7 @@
 > ```powershell
 > $MiId = az identity show `
 >   --name mi-helpsphere-ia `
->   --resource-group rg-helpsphere-ia `
+>   --resource-group rg-lab-intermediario `
 >   --query principalId -o tsv
 >
 > $SbScope = az servicebus namespace show `

@@ -96,7 +96,7 @@ SPEECH_REGION="eastus2"
 1. Recurso `spch-helpsphere` → **Access control (IAM)** → **+ Add** → **Add role assignment**
 2. Tab **Role:** buscar **`Cognitive Services User`** → **Next**
    - ⚠️ **Não use** `Cognitive Services Speech User` — esse é só para Custom Speech training, **não cobre runtime STT/TTS** via Bearer.
-3. Tab **Members:** `Managed identity` → **+ Select members** → User-assigned → `mi-helpsphere-ia` (RG `rg-helpsphere-ia`) → **Next**
+3. Tab **Members:** `Managed identity` → **+ Select members** → User-assigned → `mi-helpsphere-ia` (RG `rg-lab-intermediario`) → **Next**
 4. **Review + assign** → confirmar role + scope + member → aguarde **~30-60s** até propagação Entra global
 
 <!-- screenshot: cap06-passo6.3-rbac-cognitive-services-user.png -->
@@ -104,7 +104,7 @@ SPEECH_REGION="eastus2"
 > **Alternativa via Azure CLI (Windows PowerShell 7):**
 > ```powershell
 > $SpchId = az cognitiveservices account show -n spch-helpsphere -g rg-lab-final --query id -o tsv
-> $MiPrincipal = az identity show -n mi-helpsphere-ia -g rg-helpsphere-ia --query principalId -o tsv
+> $MiPrincipal = az identity show -n mi-helpsphere-ia -g rg-lab-intermediario --query principalId -o tsv
 > az role assignment create --assignee "$MiPrincipal" --role "Cognitive Services User" --scope "$SpchId"
 > ```
 > **Linux/Mac/WSL:** substitua `$Var = az ...` por `VAR=$(az ...)`.
@@ -330,7 +330,7 @@ az cognitiveservices account show -n spch-helpsphere -g rg-lab-final `
 
 # 2. Role cravado para MI cross-RG
 $SpchId = az cognitiveservices account show -n spch-helpsphere -g rg-lab-final --query id -o tsv
-$MiPrincipal = az identity show -n mi-helpsphere-ia -g rg-helpsphere-ia --query principalId -o tsv
+$MiPrincipal = az identity show -n mi-helpsphere-ia -g rg-lab-intermediario --query principalId -o tsv
 az role assignment list --assignee $MiPrincipal --scope $SpchId `
   --query "[].roleDefinitionName" -o tsv
 # Esperado: Cognitive Services User
