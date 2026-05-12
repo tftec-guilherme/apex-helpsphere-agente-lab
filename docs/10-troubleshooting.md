@@ -4,7 +4,7 @@
 >
 > **Tempo:** consulta sob demanda — ~5min para localizar fix · ~20min se quiser ler o capítulo inteiro como cheat sheet pré-recording
 >
-> **Status:** `v0.2.0-portal` ⚠️ EXPANDIDO (era `v0.1.0-init` outline) — agregado dos 9 capítulos anteriores (~66 Surpresas pedagógicas) + Troubleshooting do `Lab_Final_Agente_Workflow_Guia_Portal.md` (linhas 1784-1843).
+> **Status:** capítulo agrega ~75+ Surpresas pedagógicas dos 9 capítulos anteriores + Troubleshooting do guia canônico Portal. **Não duplica conteúdo** — cada linha referencia o cap-fonte para detalhe completo.
 
 ---
 
@@ -36,9 +36,9 @@
 ```text
 Erro/sintoma reportado
 │
-├─ "Não consigo logar" / "tenant errado" / "Copilot Studio rejeita"
+├─ "Não consigo logar" / "tenant errado" / "Copilot Studio rejeita" / "AADSTS50020"
 │   └─► §3.1 Auth/RBAC + Cap 01 (Pré-req) + Cap 03 (Copilot Studio)
-│       Top causa: conta live.com em Copilot Studio (Cap 03 Surpresa #1)
+│       Top causa: conta `live.com` rejeitada em copilotstudio.microsoft.com (AADSTS50020) — fallback Entra trial 30d via Cap 03 Passo 3.7
 │
 ├─ "Recurso não cria" / "name not available" / "quota"
 │   └─► §3.2 Provisioning + Caps 02/06/07/08
@@ -52,9 +52,9 @@ Erro/sintoma reportado
 │   └─► §3.4 Auth aplicacional + Caps 05/06/08
 │       Top causa: EXPECTED_AUDIENCE != aud do token (Cap 05 Surpresa #3)
 │
-├─ "Agente não responde" / "tool não dispara" / "loop infinito"
+├─ "Agente não responde" / "tool não dispara" / "loop infinito" / "BadRequest 400 RAG search"
 │   └─► §3.5 Foundry Agent + Cap 04
-│       Top causa: tool retornou JSON inválido (Cap 04 Surpresa #6)
+│       Top causa: tool retornou JSON inválido OU tiktoken truncation faltando (Capítulo 04 Surpresas F3/F7)
 │
 ├─ "n8n não vê mensagem" / "PG connection refused" / "owner perdido"
 │   └─► §3.6 n8n + PostgreSQL + Cap 07
@@ -68,9 +68,9 @@ Erro/sintoma reportado
 │   └─► §3.8 Speech + Cap 06
 │       Top causa: WAV não é PCM 16kHz mono (Cap 06 Surpresa #2)
 │
-└─ "Custo apareceu pós-cleanup" / "RG não deleta" / "secret órfão"
+└─ "Custo apareceu pós-cleanup" / "RG não deleta" / "secret órfão" / "Foundry soft-deleted 30d"
     └─► §3.9 Cleanup + custo + Cap 09
-        Top causa: Foundry Project não está no rg-lab-final (Cap 09 Surpresa #1)
+        Top causa: Foundry Project não está no `rg-lab-final` (Cap 09 Surpresa #1) + soft-delete 30d Foundry/KV bloqueia recriar nome
 ```
 
 ---
@@ -84,7 +84,7 @@ Erro/sintoma reportado
 | # | Sintoma | Causa | Fix | Cap fonte |
 |---|---|---|---|---|
 | A1 | `SubscriptionNotRegistered` em Foundry agent create | Free Trial USD 200 não suporta Foundry Agent Service | Converter sub para Pay-As-You-Go no Portal (botão Upgrade) | Cap 01 |
-| A2 | `Your account doesn't have access to Copilot Studio` | Conta MSA pessoal (`live.com`/`outlook.com`/`hotmail.com`) sem licença Power Platform | Criar tenant dev M365 grátis — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-2** | Caps 01, 03 |
+| A2 | `AADSTS50020: User account from identity provider 'live.com' does not exist in tenant` em `copilotstudio.microsoft.com` | Conta MSA pessoal (`live.com`/`outlook.com`/`hotmail.com`) sem licença Power Platform — Copilot Studio exige conta corporativa (work/school) | Fallback: criar tenant dev M365 trial 30d via Cap 03 **Passo 3.7** + reusar `MSAL` patterns; ver [`_disclaimers.md`](./_disclaimers.md) **AMB-2** | Caps 01, 03 |
 | A3 | `AuthorizationFailed` em `az role assignment create` | Contributor pelado sem User Access Administrator | Pedir admin tenant para `User Access Administrator` no scope da sub OU `Owner` direto | Caps 01, 02 |
 | A4 | `Insufficient privileges` em `az role assignment create --assignee <upn>` | Flag `--assignee` faz lookup Microsoft Graph (exige `Directory.Read.All`) | Trocar por `--assignee-object-id <objectId> --assignee-principal-type ServicePrincipal` (pula lookup) | Cap 02 |
 | A5 | Trial Copilot Studio expira **imediatamente** após signup remoto | Trial conta dias desde **primeiro acesso**, não signup | Confirmar dias restantes em Power Platform Admin Center → Licenses | Cap 03 |
@@ -101,7 +101,7 @@ Erro/sintoma reportado
 | P3 | ACA Environment provisiona Log Analytics novo silenciosamente | Tab Monitoring com workspace não selecionado explicitamente | Selecionar `log-helpsphere-ia` no dropdown; se já errou, deletar ACA Env e recriar (não dá trocar workspace) | Cap 02 |
 | P4 | ACA Env stuck em `Provisioning` >10min | Quota regional esgotada (raro em East US 2) | Trocar para `eastus` ou `southcentralus` | Cap 02 |
 | P5 | Workload profile `Consumption + Dedicated` cobra R$ 250/mês reservados | Default em algumas subs corporate | Selecionar **explicitamente** `Consumption only` no Tab Workload profiles | Cap 02 |
-| P6 | `gpt-4.1-mini` quota request leva 24-72h | Aprovação manual Microsoft em sub nova | Fazer **Bloco 2 da disciplina antes** (passa pela aprovação); este lab só reusa | Cap 01 |
+| P6 | `gpt-4.1-mini` quota request leva 24-72h | Aprovação manual Microsoft em sub nova | Provisionar Hub + deployment `gpt-4.1-mini` em RG separado (`rg-lab-intermediario`) **antes** deste lab (este lab apenas reusa o deployment existente) | Cap 01 |
 | P7 | `pg-n8n-<rand>` PostgreSQL Burstable B1ms cobra parado mesmo idle | PG não tem free tier permanente; `Stop` reinicia automaticamente após 7 dias | Para zerar custo: `delete` (não `Stop`) — ver Cap 07 Passo 7.7 / Cap 09 | Caps 07, 09 |
 | P8 | Speech voice nova (`pt-BR-ThalitaNeural`) `400 Voice not supported` em eastus2 | Voices novas chegam primeiro em `eastus`/`westus3`/`francecentral` | Validar `learn.microsoft.com/azure/ai-services/speech-service/regions` antes de cravar voice | Cap 06 |
 | P9 | Service Bus Topic não cria — botão cinza no Portal | Tier Basic não suporta Topics (só Queues) — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-4** | Sempre Standard (~R$ 50/mês baseline) — não confunda nome "Basic" com "menor" | Cap 08 |
@@ -136,12 +136,14 @@ Erro/sintoma reportado
 
 | # | Sintoma | Causa | Fix | Cap fonte |
 |---|---|---|---|---|
-| F1 | `azure.ai.projects` import error / `cannot import name 'AIProjectClient'` | Versão errada do SDK preview | Pinar `azure-ai-projects==1.0.0b9` no `requirements.txt`; GA Q3-2026 terá breaking changes | Cap 04 |
+| F1 | `azure.ai.projects` import error / `cannot import name 'AIProjectClient'` | Versão errada do SDK preview | Pinar `azure-ai-projects==1.0.0b9` no `requirements.txt`; GA Q3-2026 trará breaking changes (ex.: `create_message` → `threads.messages.create`) | Cap 04 |
 | F2 | Tool call falha em **Playground** Foundry | Playground só executa modelo + schema (não suas tools reais) | Esperado — para teste end-to-end use `python agent_runner.py` localmente | Cap 04 |
-| F3 | `requires_action` infinito (loop) | Tool retorna JSON inválido OU payload quebrado | Adicionar `print(json.dumps(result))` antes de `tool_outputs.append` para debug | Cap 04 |
+| F3 | `requires_action` polling infinito (loop sem fim) | Tool retorna JSON inválido OU payload quebrado OU exceção silenciosa no handler | Adicionar `print(json.dumps(result))` antes de `tool_outputs.append`; cravar timeout `max_poll_seconds=60` no loop | Cap 04 |
 | F4 | Connection string formato inválido | Cópia incompleta do Foundry portal | Recopiar limpo: Settings → Project properties → Project connection string | Cap 04 |
 | F5 | Sugestão "use Assistants API" em StackOverflow não funciona | Assistants API (OpenAI direto) deprecada | Usar **sempre Foundry Agent Service** (Azure-native, integra Hub/Project/Threads) | Cap 04 |
-| F6 | Confidence score sempre 1.0 (over-confident) | `temperature=0` produz scoring colado | Ajustar inference parameters: `temperature=0.3`, `top_p=0.9` no deployment + redeploy | Lab guide canônico |
+| F6 | Confidence score sempre 1.0 (over-confident) | `temperature=0` produz scoring colado | Ajustar inference parameters: `temperature=0.3`, `top_p=0.9` no deployment + redeploy | Cap 04 |
+| F7 | **`BadRequest: This model's maximum context length is 8192 tokens`** no `search_kb` tool ao indexar PDFs grandes | Embedding `text-embedding-ada-002` tem hard limit 8192 tokens; chunks de PDFs corporativos (>30 KB) estourar limite silently antes do tiktoken count | **Truncar chunks a 8000 tokens** (margem segurança vs 8192) usando `tiktoken.encoding_for_model("text-embedding-ada-002")`; fallback se `tiktoken` não disponível: corte hard em 10.000 chars. `pip install tiktoken` obrigatório. Bug original descoberto em aula ao vivo Wave 4 | Cap 04 + cap RAG (Lab Intermediário) |
+| F8 | **`search_kb` retorna 400 ou resultados vazios** mesmo com índice populado — payload aceita `query` mas search engine ignora | Índice Azure AI Search criado **sem vectorizer integrado** (config sem `vectorizer` no `index.json`) — `VectorizableTextQuery` (que delega embedding ao Search) falha; precisa `VectorizedQuery` com vetor **pré-computado** localmente | Trocar `VectorizableTextQuery(text=query, ...)` por: `embedding = aoai_client.embeddings.create(input=query, model="text-embedding-ada-002").data[0].embedding` + `VectorizedQuery(vector=embedding, k_nearest_neighbors=5, fields="contentVector")`. Bug descoberto em aula Wave 4 (Function App RAG) | Cap 04 + cap RAG (Lab Intermediário) |
 
 ### §3.6 n8n + PostgreSQL (Cap 07)
 
@@ -154,13 +156,15 @@ Erro/sintoma reportado
 | N5 | n8n node Service Bus Trigger polling falha silently com Topic | Campo `Subscription Name` vazio (Topic exige; Queue não) | Preencher com `n8n-escalation-sub` (ver [`_disclaimers.md`](./_disclaimers.md) **AMB-4**) | Cap 07 |
 | N6 | PostgreSQL `Stop` reinicia automaticamente após 7 dias cobrando | Feature Microsoft anti server-órfão | Configurar **Azure Cost Anomaly Alert** (R$ 0) threshold R$ 50 OR delete (não Stop) ao fim da disciplina | Caps 07, 09 |
 | N7 | n8n Service Bus Trigger ainda não suporta MI (issue #7821 desde 2024-06) | Limitação upstream | Dual-stack: Connection String ativa + RBAC paralelo cravado (quando PR merge, troca sem mexer mais) | Cap 07 |
+| N8 | n8n credentials confusas: alguns nodes aceitam MI Azure, outros só Service Principal, outros só Connection String | n8n é **ferramenta transversal multi-lab** (não-Azure-native) — cada node mantém seu próprio padrão auth conforme upstream community | Documentar matriz auth-por-node no início do lab; padronizar **Service Principal scope-bounded** quando MI não rolar (evita Connection String full-access) | Cap 07 |
 
 ### §3.7 Service Bus + Google Sheets (Cap 08)
 
 | # | Sintoma | Causa | Fix | Cap fonte |
 |---|---|---|---|---|
-| S1 | `BadRequest: Topic creation is not allowed on basic SKU` | Service Bus Basic não suporta Topics — bug no skeleton v0.1.0 | Sempre Standard (~R$ 50/mês) — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-4** | Cap 08 |
-| S2 | Workflow JSON `escalation-servicebus-sheets.json` usa `topic: escalations` mas caps 07/08 usam `tickets-escalated` | Skeleton v0.1.0-init defasado | Editar node Service Bus Trigger no n8n UI direto (sobrescreve JSON); **gap follow-up prof:** atualizar JSON canônico | Cap 08 + §7 |
+| S1 | **`BadRequest: Topic creation is not allowed on basic SKU`** | Service Bus **Basic não suporta Topics** (apenas Queues FIFO 1-para-1) — Topic exige fanout 1-para-N (Standard) | Sempre Standard (~R$ 50/mês fee fixo + msgs); pattern obrigatório se duas subscriptions independentes (`sub-n8n` Teams + `sub-sheets` Google Sheets). Ver [`_disclaimers.md`](./_disclaimers.md) **AMB-4** | Cap 08 |
+| S2 | Workflow JSON `escalation-servicebus-sheets.json` usa `topic: escalations` mas Caps 07/08 cravam `tickets-escalated` | Scaffold inicial desalinhado dos passos finais | Editar node Service Bus Trigger no n8n UI direto (sobrescreve JSON); **gap follow-up prof:** atualizar JSON canônico do scaffold | Cap 08 + §7 |
+| S7 | Google Sheets API setup external bloqueia smoke (~30min extra) — service account, share, OAuth scope | Setup acontece **fora do Azure** (Google Cloud Console) e não é coberto por preview templates Azure | Provisionar Google Cloud Project + Service Account + JSON key **antes** do recording; share planilha com SA email com **Notify=off**; cravar credential em n8n. Tempo: 20-30min na primeira vez | Cap 08 |
 | S3 | Lock duration 15s causa duplicação silent (linha duplicada Sheet, Adaptive Card duplicado) | n8n leva 25s processando (HelpSphere + MCP + Teams), SB reenvia antes do `complete` | `lock-duration ≥ 30s` no lab; em prod medir P99 e setar 5x | Cap 08 |
 | S4 | Google share manda email para `n8n-helpsphere-sheets@...iam.gserviceaccount.com` que dá bounce | Checkbox **Notify people** padrão marcado ao share | **Uncheck Notify** ao compartilhar planilha com Service Account | Cap 08 |
 | S5 | n8n Google Sheets credential `Error: PEM_read_bio_PrivateKey` | Editor (VSCode com extensão JSON formatter) quebrou `\n` literal em quebra real ao colar | Copiar `private_key` direto do JSON cru no Notepad OU usar campo upload JSON do n8n | Cap 08 |
@@ -177,37 +181,47 @@ Erro/sintoma reportado
 | V5 | MP3 gerado mas player não reproduz | Output format `riff-*` (PCM cru) em vez de `audio-*-mp3` | `X-Microsoft-OutputFormat: audio-24khz-48kbitrate-mono-mp3` para MP3 real | Cap 06 |
 | V6 | `<mstts:express-as>` ignorado silenciosamente (volta tom neutro) | Esquecer `xmlns:mstts="https://www.w3.org/2001/mstts"` no `<speak>` | Cravar template SSML com namespace no scaffold | Cap 06 |
 | V7 | Latência TTS > 1s perceived first-byte | cURL `--output file.mp3` faz batch (espera response completo) | Usar SDK streaming (chunks 50-100ms) — obrigatório SLA <300ms | Cap 06 |
-| V8 | Copilot Studio knowledge não atualiza após upload PDF/URL | Reindex assíncrono | Aguardar **5-15min** + verificar Knowledge → status `Ready` (não `Processing`); se >20min, remover + re-upload | Lab guide canônico |
+| V8 | Copilot Studio knowledge não atualiza após upload PDF/URL | Reindex assíncrono | Aguardar **5-15min** + verificar Knowledge → status `Ready` (não `Processing`); se >20min, remover + re-upload | Cap 03 |
+| V9 | Speech F0 (free tier) bloqueia após 5h STT/mês — `403 Quota exceeded` no meio do recording | F0 tem cap 5 horas áudio/mês STT + 0.5M chars TTS; reset dia 1 | Para lab single-recording F0 OK; se previsão >5h, criar **Speech S0** (~R$ 5/1M chars TTS + R$ 5/h STT) — esquecer cleanup de S0 = cobrança contínua | Cap 06 |
+| V10 | Voice neural pt-BR (`ThalitaNeural`/`FranciscaNeural`) latência ~3x maior que voice standard (`pt-BR-Antonio`) | Neural voices fazem inference real-time (custo ~R$ 5/1M chars vs R$ 0.50 standard) | Para latência crítica + custo, escolha standard. Neural só quando qualidade tonal expressiva é must-have | Cap 06 |
+| V11 | `403 Forbidden` no Speech via Bearer Entra MI mesmo com role atribuído | Role errado: `Speech User` cobre apenas Custom Speech training, **não** runtime STT/TTS | Atribuir `Cognitive Services User` (não `Speech User`) no scope do Speech resource; aguardar 60s propagação | Cap 06 |
 
 ### §3.9 Cleanup + custo residual (Cap 09)
 
 | # | Sintoma | Causa | Fix | Cap fonte |
 |---|---|---|---|---|
-| K1 | `az group delete` em `rg-lab-final` deixa Foundry Project vivo | Project vive em `rg-lab-intermediario` (Bloco 2) sob o Hub — não cascata via RG novo | Cleanup em **5 passos separados** (Cap 09): RG + Foundry Project + Copilot agent + 3 App Regs + decisão `rg-lab-intermediario` | Cap 09 |
+| K1 | `az group delete` em `rg-lab-final` deixa Foundry Project vivo | Project vive em `rg-lab-intermediario` (RG cross-lab compartilhado) sob o Hub — não cascata via RG novo | Cleanup em **5 passos separados** (Cap 09): RG + Foundry Project + Copilot agent + 3 App Regs + decisão `rg-lab-intermediario` | Cap 09 |
 | K2 | `az group delete` falha silently com Resource Lock | Lock `CanNotDelete` cravado por admin tenant | Portal → RG → Settings → Locks → remover antes de re-tentar | Cap 09 |
 | K3 | App Reg client secrets sobrevivem 90d após esquecer da existência | Vetor de comprometimento longo se vazaram | **Deletar App Reg** invalida o secret na hora — Passo 9.4 obrigatório | Cap 09 |
 | K4 | PostgreSQL `Stopped` cobra storage idle E reinicia em 7d | Stop zera compute mas storage 32 GiB cobra ~R$ 5/mês; auto-restart Microsoft | Para R$ 0 permanente: **delete** (não Stop) — Cap 09; Stop é só para sessão recorrente curta | Caps 07, 09 |
 | K5 | Cost Management `R$ 0` na hora — alunos entram pânico | Telemetria atrasa **24-48h** entre delete e billing refletir | Confirmar **48h depois** (Passo 9.7) — não 5 min depois | Cap 09 |
 | K6 | Key Vault soft-deleted impede recriar nome por 90 dias | Soft-delete obrigatório para KV (compliance) | `az keyvault purge --name <kv> --location eastus2` OR esperar 90d OR usar `<rand>` novo | Cap 09 |
 | K7 | Conta sub gera billing "fantasma" em RG já deletado | Storage idle KV soft-deleted, Reserved capacity, Marketplace items | **Cost Anomaly Alert** R$ 50 (gratuito, permanente) — Cost Management → Cost alerts → Add → Anomaly | Cap 09 |
-| K8 | RG `rg-lab-intermediario` (Bloco 2) carrega Hub + MI + LA — decisão crítica | Apex compartilha entre múltiplos labs | Cenário: vai fazer Lab Avançado D06? **NÃO delete** (~R$ 30-40/mês idle); terminou disciplina? `az group delete --name rg-lab-intermediario --yes` | Cap 09 |
+| K8 | RG `rg-lab-intermediario` carrega Hub + MI + LA — decisão crítica | RG cross-lab compartilha entre múltiplos labs do curso | Cenário: vai fazer o lab de produção depois? **NÃO delete** (~R$ 30-40/mês idle); terminou todos labs? `az group delete --name rg-lab-intermediario --yes` | Cap 09 |
+| K9 | **Foundry Project deletado fica em soft-delete por 30 dias** — Hub não permite recriar Project com mesmo nome | Foundry tem soft-delete forçado (não desligável) similar ao KV | Usar `<rand>` novo no nome OR esperar 30d OR `az ml workspace delete --permanently-delete true` (purge imediato) | Cap 09 |
+| K10 | **RG `rg-lab-final` deletado mas billing reflete só 24h depois** — alunos entram em pânico vendo cobrança "drenando" pós-cleanup | Azure Cost Management telemetria assíncrona (~24h batch, até 48h em casos extremos) | Comunicar timeline ao aluno: cleanup hoje → confirmar R$ 0 só **48h depois** (Cap 09 Passo 9.7). Não retentar delete | Cap 09 |
+| K11 | Copilot Studio agent deletado deixa **Topics órfãs** no environment Power Platform | Delete agent UI não cascata Topics (legado Power Virtual Agents) | Antes de deletar agent: limpar Topics manualmente OU deletar **environment** inteiro (Power Platform Admin Center) | Cap 09 |
+| K12 | ACA Environment deletado mas **Log Analytics workspace linked sobrevive** cobrando ~R$ 5/mês idle | Log Analytics tem ciclo de vida independente (foi provisionado junto mas não é child resource) | Cleanup explícito: `az monitor log-analytics workspace delete --workspace-name log-helpsphere-ia -g rg-lab-final --yes --force true` | Cap 09 |
+| K13 | Service Bus namespace deletado deixa **connection strings órfãs** em apps consumidores (`ca-mcp-helpsphere` env vars, n8n credentials) | Apps consumidores não sabem que namespace sumiu — continuam tentando autenticar com 401/404 | Cleanup ordem: **primeiro** revogar/atualizar todas connection strings em apps clientes → **depois** delete SB namespace. Para lab descartável, OK delete direto | Caps 08, 09 |
 
 ---
 
-## §4 Top 10 issues recorrentes (pré-recording checklist)
+## §4 Top 12 issues recorrentes (pré-recording checklist)
 
-> Lista priorizada por **frequência de incidência** + **tempo perdido em debug** observado nos smoke runs Wave 4. Crave essas dez antes do recording.
+> Lista priorizada por **frequência de incidência** + **tempo perdido em debug** observado nos smoke runs. Crave essas doze antes do recording.
 
-1. **Conta `live.com` em Copilot Studio** (A2) — bloqueia 80% do Cap 03. Fix: tenant dev M365 grátis (ver [`_disclaimers.md`](./_disclaimers.md) **AMB-2**). **Tempo evitado: 1-2h**.
-2. **Service Bus Basic tentando criar Topic** (S1) — bug do skeleton v0.1.0 (ver [`_disclaimers.md`](./_disclaimers.md) **AMB-4**). Fix: sempre Standard. **Tempo evitado: 30-60min** (debugging silent failure).
-3. **AcrPull RBAC ainda propagando** (C1, C5) — 60s de espera economiza 20min de "por que não pulla?". Fix: aguardar antes de criar Container App.
-4. **Workload profile `Consumption + Dedicated` cobra parado** (P5) — R$ 250/mês silently. Fix: explicitamente `Consumption only`.
-5. **`EXPECTED_AUDIENCE` byte-a-byte com `aud` do token** (O2, O3) — trailing slash mata smokes inteiros. Fix: `jq '.aud'` vs Container App env var.
-6. **PostgreSQL Burstable cobra parado + auto-restart 7d** (P7, N6, K4) — R$ 60/mês esquecido. Fix: delete (não Stop) ao fim disciplina + Cost Anomaly Alert R$ 50.
-7. **`n8nio/n8n:latest` quebra breaking change** (C7) — tag `latest` migrou schema sem aviso. Fix: pinar `n8nio/n8n:1.6`.
-8. **`min-replicas 0` no n8n perde Service Bus messages** (N2) — long-polling para quando dorme. Fix: `min-replicas 1` no lab.
-9. **WAV não é PCM 16kHz mono no STT** (V1) — Voice Recorder Windows grava `.m4a` 48kHz estéreo. Fix: ffmpeg conversão. **Confidence "vai funcionar primeira vez" = 0**.
-10. **Cleanup parcial deixa Foundry Project + 3 App Regs órfãos** (K1, K3) — `az group delete` não cascata. Fix: 5 passos separados Cap 09.
+1. **Conta `live.com` rejeitada (AADSTS50020) em Copilot Studio** (A2) — bloqueia 80% do Cap 03. Fix: tenant dev M365 trial 30d via Cap 03 Passo 3.7 (ver [`_disclaimers.md`](./_disclaimers.md) **AMB-2**). **Tempo evitado: 1-2h**.
+2. **Service Bus Basic tentando criar Topic** (S1) — Basic não suporta Topics, apenas Queues 1-para-1. Fix: sempre Standard (~R$ 50/mês). Topic é obrigatório para fanout 2 subscriptions (`sub-n8n` Teams + `sub-sheets` Sheets). Ver [`_disclaimers.md`](./_disclaimers.md) **AMB-4**. **Tempo evitado: 30-60min** (debugging silent failure).
+3. **tiktoken truncation 8000 tokens no `search_kb`** (F7) — embeddings `text-embedding-ada-002` têm hard limit 8192 tokens; chunks PDFs estouram silently. Fix: `pip install tiktoken` + truncar a 8000 tokens (margem). **Tempo evitado: 1-2h** (BadRequest 400 sem stack trace claro).
+4. **`VectorizedQuery` vs `VectorizableTextQuery` no Function App RAG** (F8) — índices sem vectorizer integrado precisam de vetor pré-computado. Fix: gerar embedding localmente + `VectorizedQuery(vector=..., fields="contentVector")`. **Tempo evitado: 2-3h** (search retorna vazio sem erro).
+5. **AcrPull RBAC ainda propagando** (C1, C5) — 60s de espera economiza 20min de "por que não pulla?". Fix: aguardar antes de criar Container App.
+6. **Workload profile `Consumption + Dedicated` cobra parado** (P5) — R$ 250/mês silently. Fix: explicitamente `Consumption only`.
+7. **`EXPECTED_AUDIENCE` byte-a-byte com `aud` do token** (O2, O3) — trailing slash mata smokes inteiros. Fix: `jq '.aud'` (ou `ConvertFrom-Json` pwsh) vs Container App env var.
+8. **PostgreSQL Burstable cobra parado + auto-restart 7d** (P7, N6, K4) — R$ 60/mês esquecido. Fix: delete (não Stop) ao fim + Cost Anomaly Alert R$ 50.
+9. **`n8nio/n8n:latest` quebra breaking change** (C7) — tag `latest` migrou schema sem aviso. Fix: pinar `n8nio/n8n:1.6`. n8n é **ferramenta transversal multi-lab** — versionar manualmente.
+10. **`min-replicas 0` no n8n perde Service Bus messages** (N2) — long-polling para quando dorme. Fix: `min-replicas 1` no lab.
+11. **WAV não é PCM 16kHz mono no STT** (V1) — Voice Recorder Windows grava `.m4a` 48kHz estéreo. Fix: ffmpeg conversão. **Confidence "vai funcionar primeira vez" = 0**.
+12. **Cleanup parcial deixa Foundry Project (soft-delete 30d) + 3 App Regs + Log Analytics órfãos** (K1, K3, K9, K12) — `az group delete` não cascata + Foundry/KV têm soft-delete forçado. Fix: 6 passos separados Cap 09.
 
 ---
 
@@ -220,7 +234,7 @@ Erro/sintoma reportado
 az resource list --resource-group rg-lab-final `
   --query "[].{name:name, type:type, state:provisioningState}" -o table
 
-# Listar recursos do RG compartilhado (Bloco 2) — onde Foundry Hub + MI + LA vivem
+# Listar recursos do RG cross-lab compartilhado — onde Foundry Hub + MI + LA vivem
 az resource list --resource-group rg-lab-intermediario `
   --query "[].{name:name, type:type}" -o table
 
@@ -234,7 +248,7 @@ az account show --query "{name:name, state:state, type:subscriptionPolicies.quot
 ### §5.2 RBAC — quem tem o quê em quem
 
 ```powershell
-# Capturar Principal ID da MI cross-RG (Bloco 2)
+# Capturar Principal ID da MI cross-RG (vive no `rg-lab-intermediario`)
 $MiPrincipal = az identity show -n mi-helpsphere-ia -g rg-lab-intermediario --query principalId -o tsv
 
 # Listar TODAS roles atribuídas à MI (espera-se: AcrPull + Cognitive Services User + Service Bus Receiver + Service Bus Sender)
@@ -368,12 +382,12 @@ az ad app list --filter "startswith(displayName, 'app-mcp-helpsphere')" --query 
 
 > Itens identificados nos smoke runs Wave 4 que precisam pass dedicado — não bloqueiam recording mas devem entrar em backlog.
 
-- 🔄 **`n8n-workflows/escalation-servicebus-sheets.json` desalinhado com Caps 07/08** — JSON canônico no repo usa `topic: "escalations"` + `subscription: "n8n-consumer"`, mas Caps 07/08 cravam `tickets-escalated` + `n8n-escalation-sub`. Workaround atual: editar no n8n UI (Cap 08 Passo 8.3). **Fix dedicado:** atualizar JSON do scaffold em pass próprio. (Origem: Cap 08 Surpresa #2 / S2 / Story 06.11 Bloco C)
-- 🔄 **Adaptive Card payload do node Microsoft Graph (Teams) é placeholder** — workflow JSON ainda não tem botões `Aceitar`/`Rejeitar`/`Reatribuir` que façam PATCH de volta no HelpSphere. (Origem: Cap 08 §Gaps · Story 06.11 Bloco C parcial)
-- 🔄 **Dead-letter alerting não cravado neste lab** — Service Bus Subscription com `dead-letter ON` mas sem alerta de DLQ depth no Application Insights. **Production-grade:** mover para Lab Avançado D06 cap `apex-helpsphere-prod-lab/07` (Content Safety + App Insights). (Origem: Cap 08 §Gaps)
+- 🔄 **`n8n-workflows/escalation-servicebus-sheets.json` desalinhado com Caps 07/08** — JSON canônico no repo usa `topic: "escalations"` + `subscription: "n8n-consumer"`, mas Caps 07/08 cravam `tickets-escalated` + `n8n-escalation-sub`. Workaround atual: editar no n8n UI (Cap 08 Passo 8.3). **Fix dedicado:** atualizar JSON do scaffold em pass próprio. (Origem: Cap 08 Surpresa S2)
+- 🔄 **Adaptive Card payload do node Microsoft Graph (Teams) é placeholder** — workflow JSON ainda não tem botões `Aceitar`/`Rejeitar`/`Reatribuir` que façam PATCH de volta no HelpSphere. (Origem: Cap 08 §Gaps)
+- 🔄 **Dead-letter alerting não cravado neste lab** — Service Bus Subscription com `dead-letter ON` mas sem alerta de DLQ depth no Application Insights. **Production-grade:** mover para o lab de produção (`apex-helpsphere-prod-lab/07` — Content Safety + App Insights). (Origem: Cap 08 §Gaps)
 - 🔄 **Smoke run real do `/api/agent/voice` (Cap 06) está gated** — endpoint que encadeia STT → agent → TTS depende de Function App `func-agent-runner` com Foundry Agent + MCP wired (Cap 08). Smoke voice playground via Copilot Studio funciona, mas pipeline programática completa precisa Cap 08 fechado. (Origem: Cap 06 checklist linha "(Opcional) Endpoint /api/agent/voice deployado")
-- 🔄 **Lab guide canônico Troubleshooting #7 (Confidence sempre 1.0)** ainda não foi cravado em nenhum cap específico do companion — fica só no `Lab_Final_Agente_Workflow_Guia_Portal.md`. Considerar adicionar como nota no Cap 04 (Foundry Agent SDK) Surpresas. (Origem: Lab guide linha 1835-1839)
-- ✅ **AMB-1, AMB-2, AMB-3, AMB-4 consolidados em `_disclaimers.md`** (sessão noturna 2026-05-09) — capítulos agora referenciam IDs apontando para [`_disclaimers.md`](./_disclaimers.md), eliminando drift. Quando prof revisar tier/licenciamento, atualizar somente esse arquivo + bumpar `version-anchor`.
+- 🔄 **2 surpresas RAG não estavam neste cap até polish Wave 4** (F7 tiktoken truncation + F8 VectorizedQuery) — descobertas em aula ao vivo Wave 4. Considerar cross-ref formal com cap RAG do Lab Intermediário (capítulo `09 — Function App RAG` no fork `apex-rag-lab`). (Origem: smoke run pós-recording)
+- ✅ **AMB-1, AMB-2, AMB-3, AMB-4 consolidados em `_disclaimers.md`** — capítulos referenciam IDs apontando para [`_disclaimers.md`](./_disclaimers.md), eliminando drift. Quando prof revisar tier/licenciamento, atualizar somente esse arquivo + bumpar `version-anchor`.
 
 ---
 
@@ -411,25 +425,25 @@ $response | ConvertFrom-Json | Select-Object -ExpandProperty tools | ForEach-Obj
 ## §8 Suporte adicional
 
 - **Issues:** https://github.com/tftec-guilherme/apex-helpsphere-agente-lab/issues — abra issue marcando o número do Cap onde travou + colando output do `az resource list -g rg-lab-final` para diagnóstico rápido
-- **Lab guide canônico (mais detalhado em casos extremos):** `azure-retail/Disciplina_06_*/01_Aulas/Lab_Final_Agente_Workflow_Guia_Portal.md` linhas 1784-1843 (Troubleshooting do guia mestre)
-- **Material autoral D06 — cheat sheets relacionadas:** `Disciplina_06_*/07_Material_Autoral/` (Onda 2) — buscar cheat-licenciamento-power-platform.md, cheat-rbac-managed-identity.md, cheat-service-bus-tier-decision.md
+- **Guia canônico Portal (mais detalhado em casos extremos):** `Lab_Final_Agente_Workflow_Guia_Portal.md` — seção Troubleshooting do guia mestre
+- **Cheat sheets relacionadas (Material Autoral):** buscar `cheat-licenciamento-power-platform.md`, `cheat-rbac-managed-identity.md`, `cheat-service-bus-tier-decision.md` no repositório de material complementar do curso
 - **Prof Guilherme Campos** — disponível via TFTEC para gaps que estão em §7 ou erros novos não catalogados
 
 ---
 
 ## §9 Cross-ref rápida — capítulo onde a gotcha original aparece
 
-| Cap | Tema | Surpresas (n) | Issues catalogadas no Top 10 |
+| Cap | Tema | Surpresas catalogadas (n) | Issues no Top 12 |
 |---|---|---:|---|
 | 01 | Pré-requisitos | 6 | A2, A3, P6 |
 | 02 | RG + ACR + ACA | 8 | C1, C5, P1, P5 |
-| 03 | Copilot Studio | 8 | A2, A5, A6, A7, A8 |
-| 04 | Foundry Agent SDK | 6 | F1-F6 |
+| 03 | Copilot Studio | 8 | A2 (AADSTS50020), A5, A6, A7, A8 |
+| 04 | Foundry Agent SDK | 8 | F1-F8 (inclui tiktoken F7 + VectorizedQuery F8) |
 | 05 | MCP Server Deploy | 8 | C1, C5, O1-O6 |
-| 06 | Speech (STT/TTS) | 8 | V1-V8 |
-| 07 | n8n Escalation | 8 | C7, C8, N1-N7 |
-| 08 | Service Bus + Sheets | 8 | S1-S6 |
-| 09 | Cleanup | 6 | K1-K8 |
-| **Total** | — | **~66** | **10 críticos + 50+ catalogados** |
+| 06 | Speech (STT/TTS) | 11 | V1-V11 (inclui F0 cap + Neural latência + Cog Services role) |
+| 07 | n8n Escalation | 9 | C7, C8, N1-N8 (inclui n8n transversal multi-lab) |
+| 08 | Service Bus + Sheets | 7 | S1-S2, S7 (Topic vs Queue + Google Sheets external) |
+| 09 | Cleanup | 13 | K1-K13 (inclui Foundry soft-delete 30d, billing async 24h, Copilot topics órfãs, Log Analytics linked, SB connection strings órfãs) |
+| **Total** | — | **~78+** | **12 críticos + 60+ catalogados** |
 
-> Este capítulo cap 10 **agrega ~66 Surpresas** dos 9 caps anteriores em **1 ponto único de busca**, **sem duplicar conteúdo** — cada linha cita o cap-fonte para detalhe completo. Ordem de leitura recomendada: §2 decision tree → §3 categoria do erro → cap-fonte para context.
+> Este capítulo **agrega ~78+ Surpresas** dos 9 capítulos anteriores em **1 ponto único de busca**, **sem duplicar conteúdo** — cada linha cita o cap-fonte para detalhe completo. Ordem de leitura recomendada: §2 decision tree → §3 categoria do erro → cap-fonte para context. Dois gotchas centrais (`tiktoken truncation` e `VectorizedQuery` vs `VectorizableTextQuery`) **só foram descobertos em smoke pós-recording Wave 4** — referência cruzada com cap RAG (`apex-rag-lab/docs/09-funcao-rag`) é recomendada para alunos cursando ambos os labs.

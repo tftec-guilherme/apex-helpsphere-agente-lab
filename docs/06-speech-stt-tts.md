@@ -1,20 +1,19 @@
 # Capítulo 06 — Speech (STT/TTS)
 
-> **Objetivo:** provisionar **Azure AI Speech `spch-helpsphere`** (Standard S0) no `rg-lab-final`, atribuir role `Cognitive Services User` à Managed Identity cross-RG `mi-helpsphere-ia`, capturar `SPEECH_KEY` + `SPEECH_REGION`, gravar áudio próprio em pt-BR, validar **STT** (cURL `recognition/conversation`) + **TTS** (cURL SSML com voice `pt-BR-FranciscaNeural`), expor o endpoint `/api/agent/voice` que encadeia STT → `agent_runner.py` → TTS, e plugar tudo no canal de voz do Copilot Studio do Cap 03.
+> **Objetivo:** provisionar **Azure AI Speech `spch-helpsphere`** (Standard S0) no `rg-lab-final`, atribuir role `Cognitive Services User` à Managed Identity cross-RG `mi-helpsphere-ia` (em `rg-lab-intermediario`), capturar `SPEECH_KEY` + `SPEECH_REGION`, gravar áudio próprio em pt-BR, validar **STT** (cURL `recognition/conversation`) + **TTS** (cURL SSML com voice `pt-BR-FranciscaNeural`), expor o endpoint `/api/agent/voice` que encadeia STT → `agent_runner.py` → TTS, e plugar tudo no canal de voz do agente Copilot Studio `HelpSphere Tier 1 Agent`. Validação visual final via **Speech Studio TTS playback** no Portal.
 >
-> **Tempo:** 30-45 min (15-20 min se você só vai exercitar STT/TTS via cURL e pular o endpoint Function `/api/agent/voice` para a próxima sessão)
->
-> **Status:** `v0.2.0-portal` ⚠️ EXPANDIDO (era `v0.1.0-init` outline) — derivado de `Lab_Final_Agente_Workflow_Guia_Portal.md` Parte 5 (Passos 5.1-5.5)
+> **Tempo:** 30-45 min (15-20 min se você só vai exercitar STT/TTS via cURL e pular o endpoint Function `/api/agent/voice` para uma sessão posterior)
 
 ---
 
 ## Pré-requisitos
 
-- ✅ Capítulos 02 + 04 + 05 concluídos — RG `rg-lab-final`, MI cross-RG `mi-helpsphere-ia`, `agent-code/agent_runner.py` chamando MCP real do Cap 05
-- ✅ Capítulo 03 concluído — agente Copilot Studio `HelpSphere Tier 1 Agent` em tenant M365 dev (não `live.com` — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-2**)
+- ✅ RG `rg-lab-final` existe (capítulo anterior do Lab Final) e RG `rg-lab-intermediario` hospeda a MI cross-RG `mi-helpsphere-ia` (provisionada no Lab Intermediário)
+- ✅ Agente Foundry `helpsphere-tier1-agent` criado em `agent-code/agent_runner.py` com tools de MCP funcionais (capítulos anteriores)
+- ✅ Agente Copilot Studio `HelpSphere Tier 1 Agent` em tenant M365 dev (não `live.com` — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-2**)
 - ✅ `az` CLI logado, `curl` + `jq` instalados, microfone funcional no laptop, player de áudio local (`.mp3` reproduzível)
 
-> **Atenção preview pt-BR voices:** catálogo neural Microsoft muda trimestralmente. Q2-2026: voices canônicas `pt-BR-FranciscaNeural` (feminina, default Apex) e `pt-BR-AntonioNeural` (masculina, fallback). Voices novas como `pt-BR-ThalitaNeural` aparecem antes em `eastus`/`westus3`. Confira `https://speech.microsoft.com/portal/voicegallery`. **Não use `pt-PT-*` (Portugal)** — sotaque/prosódia divergem.
+> **Atenção preview pt-BR voices:** catálogo neural Microsoft muda trimestralmente. Voices canônicas no momento da gravação: `pt-BR-FranciscaNeural` (feminina, default Apex) e `pt-BR-AntonioNeural` (masculina, fallback). Voices novas como `pt-BR-ThalitaNeural` aparecem antes em `eastus`/`westus3`. Confira `https://speech.microsoft.com/portal/voicegallery` antes de cravar voice nova em produção. **Não use `pt-PT-*` (Portugal)** — sotaque/prosódia divergem.
 
 ---
 
@@ -22,14 +21,16 @@
 
 | Artefato | Implementação | Backend / Identidade | Custo (R$) |
 |---|---|---|---|
-| Recurso `spch-helpsphere` | Portal → AI Services → Speech (Standard S0) em `rg-lab-final` | Speech Service standalone (sem Foundry attach) | R$ 0 parado · ~R$ 5 por hora STT · ~R$ 16 por 1M chars TTS |
-| Role `Cognitive Services User` | Speech IAM → atribuir à MI `mi-helpsphere-ia` (cross-RG) | Entra RBAC | R$ 0 |
+| Recurso `spch-helpsphere` | Portal → AI Services → Speech (Standard S0) em `rg-lab-final` | Speech Service standalone (sem Foundry attach) | R$ 0 parado · ~R$ 5/hora STT · ~R$ 5/1M chars TTS standard · ~R$ 60/1M chars TTS neural |
+| Role `Cognitive Services User` | Speech IAM → atribuir à MI `mi-helpsphere-ia` em `rg-lab-intermediario` (cross-RG) | Entra RBAC | R$ 0 |
 | Áudio próprio `sample-question-pt.wav` | Windows Voice Recorder / QuickTime / Audacity (5-10s pt-BR) | Arquivo local na pasta do lab | R$ 0 |
-| Endpoint `/api/agent/voice` (opcional) | Function App `func-agent-runner` (criada no Cap 04) → STT → agent → TTS → MP3 | Encadeia Speech + Foundry agent + Speech | ~R$ 0,01 por chamada smoke (10s áudio + ~150 tokens + ~80 chars TTS) |
+| Endpoint `/api/agent/voice` (opcional) | Function App `func-agent-runner` → STT → agent → TTS → MP3 | Encadeia Speech + Foundry agent + Speech | ~R$ 0,01 por chamada smoke (10s áudio + ~150 tokens + ~80 chars TTS) |
 
-> **Nota pedagógica — Speech standalone vs atachado a Foundry Hub:** desde Q1-2026, o Foundry Hub permite atachar Speech para playground de voice agents. **Mantemos standalone** porque cleanup é mais limpo (delete `rg-lab-final` apaga junto), `agent_runner.py` chama Speech via REST direto, e preserva reuso pós-lab sem derrubar Hub. Em produção corporate, atachar ao Hub centraliza billing + monitoring.
+> **Nota pedagógica — Speech standalone vs atachado a Foundry Hub:** o Foundry Hub permite atachar Speech para playground de voice agents. **Mantemos standalone** porque cleanup é mais limpo (delete `rg-lab-final` apaga junto), `agent_runner.py` chama Speech via REST direto, e preserva reuso pós-lab sem derrubar Hub. Em produção corporate, atachar ao Hub centraliza billing + monitoring.
 
-> **Nota pedagógica — Free F0 vs Standard S0:** F0 dá 5h STT/mês + 0,5M chars TTS/mês gratuitos (1 unidade por sub, sem SLA). Lab caberia em F0, mas usamos **S0** porque o objetivo é pattern de produção (sem surpresas se sub for reusada), S0 tem SLA 99,9%, e segundo F0 na sub falha com `OutOfFreeQuota`. **Custo absoluto lab: R$ 4-6** total (vs R$ 0 no F0 se cap mensal disponível).
+> **Nota pedagógica — Free F0 vs Standard S0:** F0 dá **5h STT/mês + 0,5M chars TTS/mês gratuitos** (1 unidade por sub, sem SLA). Lab caberia em F0, mas usamos **S0** por 3 motivos: (a) pattern de produção (sem surpresas se sub for reusada), (b) S0 tem SLA 99,9%, (c) segundo F0 na sub falha com `OutOfFreeQuota` se outro projeto já consumiu. **Atenção:** 5h STT em F0 esgota rápido em smoke testing repetido (gravação + transcrição × várias iterações dev). **Custo absoluto lab S0: R$ 4-6** total (vs R$ 0 no F0 se quota mensal disponível).
+
+> **Nota pedagógica — TTS standard vs neural pricing:** TTS standard custa ~R$ 5/1M chars (voices antigas, descontinuadas para novos deployments em 2024); TTS neural custa ~R$ 60/1M chars (`pt-BR-FranciscaNeural`, `pt-BR-AntonioNeural`, etc — 12x mais caro mas qualidade conversacional natural). Lab usa exclusivamente neural — custo de smoke (~80 chars) fica abaixo de R$ 0,01.
 
 ---
 
@@ -44,7 +45,7 @@
    - **Pricing tier:** `Standard S0` ⚠️ **não troque para F0** (ver Nota Free F0 acima)
 3. Tab **Network:** `All networks` (lab simplificado — produção use Private Endpoint)
 4. Tab **Identity:** `System assigned: Off` (consumidor é a MI `mi-helpsphere-ia`, sentido inverso)
-5. Tab **Tags:** herde do RG (`cost-center`, `environment=lab`, `application=helpsphere-ia`, `course=D06`)
+5. Tab **Tags:** herde do RG (`cost-center`, `environment=lab`, `application=helpsphere-ia`)
 6. **Review + create** → **Create** → aguarde ~30s-1min até **Succeeded**
 
 <!-- screenshot: cap06-passo6.1-criar-speech-portal.png -->
@@ -56,9 +57,11 @@
 > ```
 > **Linux/Mac/WSL:** substitua backticks (`` ` ``) por backslashes (`\`).
 
-> **Custo:** S0 cobra só por uso · R$ 0 parado · ~R$ 5/hora STT · ~R$ 16/1M chars TTS Neural · ~R$ 80/1M chars Custom Voice. **Lab realista: R$ 4-6** total.
+> **Custo:** S0 cobra só por uso · R$ 0 parado · ~R$ 5/hora STT · ~R$ 60/1M chars TTS Neural · ~R$ 300/1M chars Custom Voice. **Lab realista: R$ 4-6** total.
 
-> **Nota pedagógica — `eastus2` vs `brazilsouth`:** br-south tem latência ~30ms vs ~120ms para SP, MAS catálogo pt-BR reduzido (Q2-2026 só Francisca + Antonio em br-south; eastus2 tem catálogo completo + Custom Voice training). Lab prioriza catálogo > latência. Produção SLA <200ms p99: br-south ou multi-region via Front Door.
+> **Nota pedagógica — `eastus2` vs `brazilsouth`:** br-south tem latência ~30ms vs ~120ms para SP, MAS catálogo pt-BR reduzido (atualmente só Francisca + Antonio em br-south; eastus2 tem catálogo completo + Custom Voice training). Lab prioriza catálogo > latência. Produção SLA <200ms p99: br-south ou multi-region via Front Door.
+
+> **Atenção region-locked:** `SPEECH_KEY` é vinculada à região do recurso. Cravando recurso em `eastus2` significa que TODAS as chamadas REST devem ir para `https://eastus2.stt.speech.microsoft.com` e `https://eastus2.tts.speech.microsoft.com`. Chamar `https://brazilsouth.*` com a mesma key retorna 401 silencioso. Anti-pattern: aluno provisiona Foundry/AOAI em `eastus2` e Speech em `brazilsouth` por reflexo de "latência BR" — STT/TTS quebram.
 
 ---
 
@@ -78,12 +81,15 @@
 **Adicionar ao `.env` do `agent-code/`:**
 
 ```dotenv
-# Speech Service (Cap 06)
+# Speech Service
 SPEECH_KEY="<KEY-1-do-Portal>"
 SPEECH_REGION="eastus2"
 ```
 
-> **Atenção secret rotation:** KEY 1 + KEY 2 permitem rotação sem downtime (alternar mensalmente em produção via automation). Lab: KEY 1 estática OK pelo prazo curto + cleanup obrigatório Cap 09.
+> [!IMPORTANT] **Placeholders no `.env`**
+> `<KEY-1-do-Portal>` e `eastus2` são placeholders. Substitua `<KEY-1-do-Portal>` pelo valor real copiado em 6.2.1; `SPEECH_REGION` deve ser exatamente `eastus2` (lowercase, sem espaço/hífen) para que o REST endpoint resolva. Se a Function App `func-agent-runner` já foi provisionada, replicar essas variáveis em **Configuration → Application settings** dela também (referenciar Key Vault em produção).
+
+> **Atenção secret rotation:** KEY 1 + KEY 2 permitem rotação sem downtime (alternar mensalmente em produção via automation). Lab: KEY 1 estática OK pelo prazo curto + cleanup obrigatório no capítulo final.
 
 > **Nota pedagógica — `SPEECH_REGION` formato:** REST endpoint exige `eastus2` lowercase sem espaço/hífen. `eastus-2`, `east us 2`, `EASTUS2` resultam em 404 silencioso. Anti-pattern recorrente: aluno copia "East US 2" do Portal e cola direto.
 
@@ -111,7 +117,9 @@ SPEECH_REGION="eastus2"
 
 > **Custo:** R$ 0 (RBAC é gratuito).
 
-> **Nota pedagógica — Bearer Entra vs `Ocp-Apim-Subscription-Key`:** Speech aceita 2 formas: (a) header `Ocp-Apim-Subscription-Key` (key estática, legacy), (b) header `Authorization: Bearer <token-AAD>` da MI (curta duração, audit trail por identidade). **(b) é o padrão produção.** Cravamos `Cognitive Services User` agora mesmo que smokes 6.4-6.5 usem (a) por simplicidade — assim Cap 08+ wiring `func-agent-runner` troca para Bearer sem revisitar IAM. Anti-pattern: lab que só ensina key → aluno joga key em `appsettings.json`.
+> **Nota pedagógica — Bearer Entra vs `Ocp-Apim-Subscription-Key`:** Speech aceita 2 formas: (a) header `Ocp-Apim-Subscription-Key` (key estática, legacy), (b) header `Authorization: Bearer <token-AAD>` da MI (curta duração, audit trail por identidade). **(b) é o padrão produção.** Cravamos `Cognitive Services User` agora mesmo que smokes 6.4-6.5 usem (a) por simplicidade — assim, quando o wiring do `func-agent-runner` migrar para Bearer, não é preciso revisitar IAM. Anti-pattern: lab que só ensina key → aluno joga key em `appsettings.json`.
+
+> **Nota pedagógica — `Cognitive Services User` vs `Contributor`:** `User` (runtime) basta para STT/TTS via Bearer; `Contributor` é management plane (criar/deletar resource, rotacionar keys). Custom Voice training exige `Cognitive Services Contributor` adicional sobre datasets. Lab cobra apenas `User` — Contributor amplo demais para identidade de runtime (princípio do menor privilégio).
 
 ---
 
@@ -213,24 +221,24 @@ Você deve ouvir a frase com voz feminina pt-BR neural.
 
 > **Custo:** ~R$ 0,001 por chamada smoke (~80 chars × R$ 16/1M chars). Passo 6.5 inteiro < R$ 0,10.
 
-> **Nota pedagógica — voices Neural vs Custom Neural:** Q2-2026 só Neural é comercial (Standard descontinuado em 2024). Custom Neural Voice (30+ min áudio do locutor) custa ~5x mais e exige aprovação **Limited Access** Microsoft (anti-deepfake gate). `pt-BR-FranciscaNeural` é o sweet spot lab: prosódia natural + 7 estilos via `<mstts:express-as>` (`customerservice`, `chat`, `cheerful`, `empathetic`, `newscast`, `narration-relaxed`, `whispering`).
+> **Nota pedagógica — voices Neural vs Custom Neural:** só Neural é comercial (Standard descontinuado em 2024). Custom Neural Voice (30+ min áudio do locutor) custa ~5x mais e exige aprovação **Limited Access** Microsoft (anti-deepfake gate). `pt-BR-FranciscaNeural` é o sweet spot lab: prosódia natural + 7 estilos via `<mstts:express-as>` (`customerservice`, `chat`, `cheerful`, `empathetic`, `newscast`, `narration-relaxed`, `whispering`).
 
 > **Nota pedagógica — output `audio-24khz-mp3` vs `riff-48khz-pcm`:** MP3 24kHz = 6 KB/s, ideal canal voz Copilot/Teams (banda limitada). PCM 48kHz = 96 KB/s, ideal studio quality. Anti-pattern: escolher PCM "porque qualidade" e estourar banda em chamada Teams real. **Default lab: MP3 24kHz mono.**
 
 ---
 
-## Passo 6.6 — Endpoint `/api/agent/voice` (opcional · gated Cap 08)
+## Passo 6.6 — Endpoint `/api/agent/voice` (opcional · gated)
 
 Em produção integraríamos com **Azure Communication Services** (PSTN streaming bidirecional). No lab demonstramos via HTTP direto — cliente sobe WAV, recebe MP3.
 
-> **Gate:** depende da Function App `func-agent-runner` provisionada no Cap 08. Salve o snippet e volte aqui após o Cap 08.
+> **Gate:** depende da Function App `func-agent-runner` (provisionada em capítulo posterior do Lab Final). Salve o snippet e volte aqui após a Function App estar deployada.
 
-Adicione o endpoint em `agent-code/function_app.py` (resumido — versão completa no scaffold v0.2.0-portal):
+Adicione o endpoint em `agent-code/function_app.py` (resumido — versão completa no scaffold do repo):
 
 ```python
 # agent-code/function_app.py — endpoint /api/agent/voice (encadeia STT → agent → TTS)
 import os, azure.functions as func, requests
-from agent_runner import run_agent, client  # do Cap 04
+from agent_runner import run_agent, client  # do agente Foundry
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 SPEECH_KEY, SPEECH_REGION = os.environ["SPEECH_KEY"], os.environ["SPEECH_REGION"]
@@ -292,7 +300,7 @@ Select-String -Path headers.txt -Pattern 'x-transcription' -CaseSensitive:$false
 
 **No Copilot Studio (https://copilotstudio.microsoft.com):**
 
-1. Abra o agente `HelpSphere Tier 1 Agent` (criado no Cap 03)
+1. Abra o agente `HelpSphere Tier 1 Agent`
 2. Menu lateral → **Settings** → **Voice** (sub-aba)
 3. Em **Speech-to-text and text-to-speech provider:** selecione **Azure AI Speech**
 4. Preencher:
@@ -307,7 +315,7 @@ Select-String -Path headers.txt -Pattern 'x-transcription' -CaseSensitive:$false
 
 7. **Test no Voice playground** (canto superior direito do agent → ícone microfone):
    - Botão **Hold to talk** → fale "bom dia" → solte
-   - Saudação determinística do Cap 03 deve responder em voz Francisca pt-BR
+   - Saudação determinística do agente Copilot Studio deve responder em voz Francisca pt-BR
 
 <!-- screenshot: cap06-passo6.7-copilot-voice-channel.png -->
 
@@ -317,6 +325,39 @@ Select-String -Path headers.txt -Pattern 'x-transcription' -CaseSensitive:$false
 > **Custo:** Direct Line Speech é gratuito no Trial; Speech já contado em 6.4-6.5. Telephony via ACS = ~R$ 0,03/min.
 
 > **Nota pedagógica — Direct Line Speech vs Web Chat browser-TTS:** Direct Line encadeia STT + agent + TTS no servidor (1 round-trip, qualidade neural Francisca). Web Chat com `SpeechSynthesisUtterance` browser-side é qualidade ruim — anti-pattern customer-facing. Apex tier 1 sempre Direct Line.
+
+---
+
+## Passo 6.8 — Validação visual final no Speech Studio (TTS playback)
+
+**No Portal Speech Studio (`https://speech.microsoft.com/portal`):**
+
+1. Faça login com a mesma conta Azure → no canto superior direito, garanta que o resource selecionado é `spch-helpsphere` (region `East US 2`, RG `rg-lab-final`)
+2. Menu lateral → **Voice Gallery** (ou **Text to speech → Voice gallery**)
+3. Buscar **`Francisca`** → clique no card **`pt-BR-FranciscaNeural`** → abre painel **Try it out** (sintetizador interativo)
+4. Cole o texto:
+   ```
+   Olá, sou a assistente do HelpSphere. Como posso ajudar você hoje?
+   ```
+5. Botão **Play** (ícone ▶ azul) → ouça a frase com voz feminina pt-BR neural — **mesma voz do MP3 gerado no Passo 6.5**
+6. (Opcional) Clique no dropdown **Speaking style** → selecione `customerservice` → **Play** novamente — note a entonação mais empática
+7. (Opcional) Aba **Audio Content Creation** (menu lateral) → **+ New File** → cole SSML do Passo 6.5 → **Play** → painel direito mostra waveform + duração + size estimado
+
+<!-- screenshot: cap06-passo6.8-speech-studio-playback.png -->
+
+**Por que validar no Speech Studio depois de já ter ouvido o MP3?**
+
+| Validação | O que confirma |
+|---|---|
+| Smoke cURL TTS (Passo 6.5) | REST endpoint + KEY funcionando + arquivo MP3 baixado OK |
+| Playback no MP3 local (Passo 6.5) | Player reproduz arquivo (não é regional/codec issue) |
+| **Speech Studio Voice Gallery (este passo)** | **Voice existe no catálogo da SUA region** + qualidade neural percebida + estilos `<mstts:express-as>` disponíveis |
+
+Se Francisca não aparecer no Voice Gallery do recurso (apesar de estar no catálogo global Microsoft), o recurso está em região errada — provisione novo Speech em `eastus2`/`eastus`/`westus3`.
+
+> **Custo:** Speech Studio playback é gratuito até cap diário (~100 sínteses Voice Gallery). Smokes do lab cabem fácil.
+
+> **Nota pedagógica — por que Speech Studio é a validação de fechamento:** smokes cURL provam o **plano técnico** (auth + REST + formato). Speech Studio prova o **plano de produto** (a voz que você ouve é a voz que o cliente final ouvirá no canal Copilot/Teams, com mesma prosódia + mesmos estilos disponíveis). Validação visual fecha a lacuna entre "arquivo gerado" e "experiência percebida".
 
 ---
 
@@ -364,9 +405,10 @@ Get-Item _check.mp3 | Select-Object Name, Length
 [ ] sample-question-pt.wav gravado em pt-BR (5-10s, formato PCM 16kHz mono)
 [ ] STT cURL retornou DisplayText em pt-BR (RecognitionStatus=Success)
 [ ] TTS cURL gerou greeting-francisca.mp3 reproduzível com voz feminina pt-BR
-[ ] (Opcional) Endpoint /api/agent/voice deployado e smoke end-to-end OK (gated Cap 08)
+[ ] (Opcional) Endpoint /api/agent/voice deployado e smoke end-to-end OK (gated Function App)
 [ ] Copilot Studio agent ligado ao Speech resource via Settings → Voice
 [ ] Test in Voice playground responde com voice Francisca pt-BR
+[ ] Speech Studio Voice Gallery confirma Francisca disponível no resource spch-helpsphere (validação visual final)
 ```
 
 ---
@@ -381,6 +423,9 @@ Get-Item _check.mp3 | Select-Object Name, Length
 - ⚠️ **Output format `riff-*` quebra playback** — `riff-24khz-16bit-mono-pcm` é PCM cru, não MP3. Sintoma: `.mp3` não toca em WMP/VLC. Fix: usar `audio-24khz-48kbitrate-mono-mp3` para MP3 real ou trocar extensão para `.wav` se PCM.
 - ⚠️ **Latência TTS streaming vs batch — 1.5s vs 0.4s** — cURL `--output file.mp3` faz batch (espera response completo); SDK streaming retorna chunks 50-100ms desde primeiro byte. Para SLA <300ms first-audio-byte, **obrigatório SDK streaming**. Lab aceita batch porque smokes não medem first-audio.
 - ⚠️ **`<mstts:express-as>` sem namespace é ignorado silenciosamente** — esquecer `xmlns:mstts="https://www.w3.org/2001/mstts"` no `<speak>` faz Speech voltar para tom neutro sem warning. Sintoma: voice sai sem `customerservice`/`cheerful`. Fix: cravar template SSML com namespace no scaffold.
+- ⚠️ **F0 tier cap de 5h STT/mês esgota em smoke testing repetido** — F0 dá 5h STT/mês + 0,5M chars TTS/mês gratuitos por sub (1 unidade só). Dev rodando 30 smokes de 10s/dia consome 5h em ~10 dias e o 6º smoke retorna 429 `QuotaExceeded` no meio da aula. Workaround lab: S0 desde o início (R$ 4-6 total) ou cravar `az cognitiveservices account list-usage` em monitoring para alertar 80% antes de estourar.
+- ⚠️ **Latência neural vs standard ~3x mais lenta** — `pt-BR-FranciscaNeural` (neural) gera 80 chars em ~400ms; voices standard legacy faziam o mesmo em ~120ms. Para SLA <300ms first-audio-byte em agent conversacional, **obrigatório SDK streaming** (chunks 50-100ms) em vez de batch cURL `--output file.mp3`. Anti-pattern: prometer "tempo real" usando batch REST — UX percebe lag.
+- ⚠️ **Speech key é region-locked silenciosamente** — KEY 1 emitida para resource em `eastus2` NÃO funciona se você chamar `https://brazilsouth.tts.speech.microsoft.com` por engano. Sintoma: 401 Unauthorized (não "wrong region"). Fix: confirmar `SPEECH_REGION` no `.env` bate exatamente com a region do resource criado. Provisionar Speech na mesma region do Foundry/AOAI evita cross-region troubleshooting.
 
 ---
 

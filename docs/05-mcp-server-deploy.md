@@ -1,23 +1,23 @@
 # Capítulo 05 — MCP Server Deploy
 
-> **Objetivo:** buildar a imagem `mcp-helpsphere:v1` via **ACR Tasks remoto**, criar **2 App Registrations** (server `app-mcp-helpsphere-server` com 3 scopes + client `app-mcp-helpsphere-client` com client secret), deployar Container App `ca-mcp-helpsphere` no `cae-helpsphere-final` com a Managed Identity `mi-helpsphere-ia` puxando do ACR, capturar o **`MCP_SERVER_URL` canônico** referenciado pelo Capítulo 04, validar via `tools/list` + `tools/call get_ticket` autenticado com Bearer token Entra OAuth, e atualizar o `.env` do `agent-code/` para destrancar as 3 tools que estavam em placeholder.
+> **Objetivo:** buildar a imagem `mcp-helpsphere:v1` via **ACR Tasks remoto**, criar **2 App Registrations** (server `app-mcp-helpsphere-server` com 3 scopes + client `app-mcp-helpsphere-client` com client secret), deployar Container App `ca-mcp-helpsphere` no `cae-helpsphere-final` com a Managed Identity `mi-helpsphere-ia` puxando do ACR, capturar o **`MCP_SERVER_URL` canônico** consumido pelo agente Foundry, validar via `tools/list` + `tools/call get_ticket` autenticado com Bearer token Entra OAuth, e atualizar o `.env` do `agent-code/` para destrancar as 3 tools que estavam em placeholder.
 >
-> **Tempo:** 90-120 min (60-75 min se `acrhelpsphere<rand>` + `cae-helpsphere-final` + `mi-helpsphere-ia` já estão prontos do Capítulo 02 — caminho normal)
->
-> **Status:** `v0.2.0-portal` ⚠️ EXPANDIDO (era `v0.1.0-init` outline) — derivado de `Lab_Final_Agente_Workflow_Guia_Portal.md` Parte 4 (Passos 4.1-4.8)
+> **Tempo:** 90-120 min (60-75 min se `acrhelpsphere<rand>` + `cae-helpsphere-final` + `mi-helpsphere-ia` já estão prontos do capítulo anterior — caminho normal)
 
 ---
 
 ## Pré-requisitos
 
-- ✅ Capítulo 02 concluído — RG `rg-lab-final`, ACR `acrhelpsphere<rand>` (Basic), ACA Environment `cae-helpsphere-final`, role `AcrPull` cravado em `mi-helpsphere-ia` no scope do ACR
-- ✅ Capítulo 04 concluído — agente `helpsphere-tier1-agent` criado com schema das 4 tools, `agent-code/.env` com `MCP_SERVER_URL="https://placeholder.azurecontainerapps.io"` e `MCP_TOKEN=""` aguardando preenchimento
-- ✅ HelpSphere SQL connection string disponível — capturada do Bloco 2 (apex-helpsphere SaaS): Portal → `rg-lab-intermediario` → `sql-helpsphere-{rand}` → DB `helpsphere` → **Connection strings** → ADO.NET (autenticação SQL ou Entra com MI — ver Passo 5.4)
+- ✅ RG `rg-lab-final` provisionado com ACR `acrhelpsphere<rand>` (Basic), ACA Environment `cae-helpsphere-final` e role `AcrPull` cravado em `mi-helpsphere-ia` no scope do ACR
+- ✅ Agente `helpsphere-tier1-agent` criado no Foundry com schema das 4 tools, `agent-code/.env` com `MCP_SERVER_URL="https://placeholder.azurecontainerapps.io"` e `MCP_TOKEN=""` aguardando preenchimento
+- ✅ HelpSphere SQL connection string disponível — capturada do stack SaaS: Portal → `rg-helpsphere-saas` → `sql-helpsphere-{rand}` → DB `helpsphere` → **Connection strings** → ADO.NET (autenticação SQL ou Entra com MI — ver Passo 5.4)
 - ✅ Permissão para criar **App Registrations** no tenant Entra (role mínima `Application Developer` ou `Cloud Application Administrator`; `Global Administrator` resolve mas é overkill)
-- ✅ Docker Desktop 4.30+ rodando (Capítulo 01) — usado **somente para inspeção local da imagem opcional**; o build oficial é remoto via `az acr build` (mais rápido + sem problema de WSL/proxy corporate)
+- ✅ Docker Desktop 4.30+ rodando — usado **somente para inspeção local da imagem opcional**; o build oficial é remoto via `az acr build` (mais rápido + sem problema de WSL/proxy corporate)
 - ✅ `jq` instalado para parse dos curl smoke tests (`winget install jqlang.jq` no Windows · `brew install jq` no macOS · `apt install jq` no Linux/WSL) — ou use o fallback PowerShell nativo `ConvertFrom-Json` mostrado nos smoke tests
 
-> **Atenção breaking — `MCP_SERVER_URL` é o contrato do Capítulo 04:** o `agent_runner.py` do Cap 04 já consome `os.environ["MCP_SERVER_URL"]` com fallback para `placeholder`. O **valor canônico final** que vamos cravar aqui é `https://ca-mcp-helpsphere.<rand>.<region>.azurecontainerapps.io` (formato FQDN do ACA Consumption — Azure gera o `<rand>` automaticamente). **Não invente nome próprio** — o aluno copia da Overview do Container App no Portal (Passo 5.4).
+> **Fallback se o stack SaaS HelpSphere não está provisionado:** se você ainda não tem `sql-helpsphere-{rand}` em `rg-helpsphere-saas`, pode rodar o MCP Server contra um SQL Database vazio só para exercitar a infra (`tools/list` + auth Entra funcionam). As tools `get_ticket`/`list_tickets` vão retornar `[]` ou erro de tabela inexistente — esperado. Para validação completa do Passo 5.7 Smoke 2, provisione o stack SaaS antes OU aponte `HELPSPHERE_SQL_CONNECTION` para qualquer SQL Database com schema mínimo (`tickets(id, title, status, category, priority, created_at)`).
+
+> **Atenção breaking — `MCP_SERVER_URL` é contrato do `agent_runner.py`:** o runner do agente Foundry já consome `os.environ["MCP_SERVER_URL"]` com fallback para `placeholder`. O **valor canônico final** que vamos cravar aqui é `https://ca-mcp-helpsphere.<rand>.<region>.azurecontainerapps.io` (formato FQDN do ACA Consumption — Azure gera o `<rand>` automaticamente). **Não invente nome próprio** — o aluno copia da Overview do Container App no Portal (Passo 5.4).
 
 ---
 
@@ -29,17 +29,17 @@
 | App Reg `app-mcp-helpsphere-server` | Portal Entra → 3 OAuth scopes (`tickets.read`, `tickets.write`, `kb.read`) + Application ID URI `api://mcp-helpsphere` | Tenant Entra (sem cobrança) | R$ 0 |
 | App Reg `app-mcp-helpsphere-client` | Portal Entra → client secret 90d + admin consent das 3 permissions | Tenant Entra | R$ 0 |
 | Container App `ca-mcp-helpsphere` | Portal ACA → image=`mcp-helpsphere:v1`, MI=`mi-helpsphere-ia`, ingress=External, port=8000, scale 0→1 | ACA Env `cae-helpsphere-final` (Consumption) | R$ 0 parado · ~R$ 0,02/min ativo (0,5 vCPU + 1 GiB) |
-| `MCP_SERVER_URL` no `.env` do `agent-code/` | Edição manual `agent-code/.env` | Consumido pelas tools `get_ticket` + `list_similar_tickets` do Cap 04 | R$ 0 |
+| `MCP_SERVER_URL` no `.env` do `agent-code/` | Edição manual `agent-code/.env` | Consumido pelas tools `get_ticket` + `list_similar_tickets` do agente Foundry | R$ 0 |
 
-> **Nota pedagógica — por que 2 App Registrations e não 1?** O **server app reg** define **quem é a API protegida** (Application ID URI + scopes que ela exporta). O **client app reg** define **quem está chamando** (identidade do agente Foundry, com client secret/credentials). Em OAuth 2.0 client-credentials flow, **misturar os dois numa app só** funciona em cenários triviais mas falha quando você adiciona um 2º cliente (ex.: workflow n8n do Cap 07 também consumir o MCP) — a app teria que ser cliente de si mesma e a Microsoft bloqueia esse padrão como anti-pattern. **Em produção:** 1 App Reg server por API, N App Regs client por consumidor. **No lab Apex:** consumidor único (Foundry agent), mas mantemos a separação porque o Cap 07 vai adicionar o n8n como 2º cliente.
+> **Nota pedagógica — por que 2 App Registrations e não 1?** O **server app reg** define **quem é a API protegida** (Application ID URI + scopes que ela exporta). O **client app reg** define **quem está chamando** (identidade do agente Foundry, com client secret/credentials). Em OAuth 2.0 client-credentials flow, **misturar os dois numa app só** funciona em cenários triviais mas falha quando você adiciona um 2º cliente (ex.: um workflow n8n também consumindo o MCP) — a app teria que ser cliente de si mesma e a Microsoft bloqueia esse padrão como anti-pattern. **Em produção:** 1 App Reg server por API, N App Regs client por consumidor. **No lab:** consumidor único (Foundry agent), mas mantemos a separação para suportar 2º cliente sem refactor (workflow n8n é o caso clássico).
 
-> **Nota pedagógica — `External` ingress vs `Internal`:** o MCP é chamado pelo `agent_runner.py` que **roda local no laptop do aluno** durante o lab, e em produção rodaria de um Function App ou outro ACA (ainda externos ao `cae-helpsphere-final`). External (ingress público com FQDN `*.azurecontainerapps.io`) resolve direto. Internal exigiria VNet integration + Private Endpoint + DNS resolver — complexidade fora do escopo do lab. **Auth segura via OAuth Bearer token mantém o External robusto** (sem token, request 401).
+> **Nota pedagógica — `External` ingress vs `Internal`:** o MCP é chamado pelo `agent_runner.py` que **roda local no laptop do aluno** durante o lab, e em produção rodaria de um Function App ou outro ACA (ainda externos ao `cae-helpsphere-final`). External (ingress público com FQDN `*.azurecontainerapps.io`) resolve direto. Internal exigiria VNet integration + Private Endpoint + DNS resolver — complexidade fora do escopo do lab. **Auth segura via OAuth Bearer token mantém o External robusto** (sem token, request 401). ⚠️ **Surpresa comum:** `Internal` ingress combinado com `Authorization: Bearer` em request externo retorna `404 Not Found` (não 401) — o ACA nem chega no `auth.py`. Se você ver `404` no smoke do Passo 5.7 mesmo com token válido, confirme em **Ingress** do Container App que está `Accepting traffic from anywhere`.
 
 ---
 
 ## Passo 5.1 — Estrutura do `mcp-server/` no fork local
 
-Confira no clone local do `apex-helpsphere-agente-lab` que a pasta `mcp-server/` existe com este conteúdo (já no scaffold v0.1.0-init):
+Confira no clone local do `apex-helpsphere-agente-lab` que a pasta `mcp-server/` existe com este conteúdo (já no scaffold do repo):
 
 ```text
 mcp-server/
@@ -137,11 +137,12 @@ requests>=2.31.0
 **No terminal local com `az` logado (Windows PowerShell 7):**
 
 ```powershell
-# Garante variáveis (substitua pelo seu sufixo do Cap 02)
+# Garante variáveis (substitua pelo seu sufixo do ACR provisionado)
 $AcrName = "acrhelpsphere<rand>"   # ex.: acrhelpsphere8a3f2d
 $RgLab = "rg-lab-final"
 
 # Build remoto — sobe o contexto via .tar.gz e builda no Azure
+# IMPORTANTE: rode a partir de mcp-server/ (contexto = pasta atual = ".")
 Set-Location mcp-server
 az acr build `
   --registry "$AcrName" `
@@ -149,6 +150,8 @@ az acr build `
   --file Dockerfile `
   .
 ```
+
+> ⚠️ **Surpresa comum — contexto do build:** o `.` no final do `az acr build` é o **contexto de upload** (pasta cujo conteúdo é tar-zipado e enviado ao ACR). Se você rodar da raiz do repo (`apex-helpsphere-agente-lab/`) com `--file mcp-server/Dockerfile .`, o `COPY . .` do Dockerfile copia o repo inteiro (~600 MiB) — upload trava em "Sending build context" por 5-10min e a imagem fica gigante. **Sempre `Set-Location mcp-server` antes** OU use path absoluto explícito: `az acr build ... mcp-server/`.
 
 > **Linux/Mac/WSL:** substitua `$Var = "value"` por `VAR=value`, backticks (`` ` ``) por backslashes (`\`), e `Set-Location` por `cd`.
 
@@ -189,9 +192,11 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
 >
 > Por que **não recomendado**: build local exige Docker Desktop rodando + WSL 2 + proxy corporate liberado para `*.docker.io` — falha em ~30% dos laptops corporate em sala de aula. ACR Tasks builda na nuvem e funciona mesmo com Docker Desktop down.
 
-> **Custo:** ACR Tasks no tier Basic = **6.000 build-min/mês incluído** (R$ 0 para o lab). Imagem final ~50 MiB ocupa R$ 0,03/mês de storage. **Anti-pattern:** alunos pushando imagens de 2-3 GiB (Python full + base CUDA + dev tools) → estouram o cap de 10 GiB do Basic em poucos pushes.
+> **Custo:** ACR Tasks no tier Basic = **6.000 build-min/mês incluído** (R$ 0 para o lab). ACR Basic em si custa **~R$ 6,40/mês fixo** (10 GiB included + 1 webhook). Imagem final ~50 MiB ocupa R$ 0,03/mês de storage incremental. **Anti-pattern:** alunos pushando imagens de 2-3 GiB (Python full + base CUDA + dev tools) → estouram o cap de 10 GiB do Basic em poucos pushes.
 
 > **Nota pedagógica — `python:3.11-slim` em vez de `python:3.11`:** slim é Debian sem ferramentas de dev (~150 MiB final image vs ~900 MiB). Para um servidor MCP que só roda HTTP + pyodbc, slim cobre. **Em produção:** considere `python:3.11-alpine` (~80 MiB) — mas atenção: alpine usa musl libc e o driver `msodbcsql18` da Microsoft só dá suporte glibc → fica em slim para SQL Server.
+
+> ⚠️ **Surpresa comum — repush com mesma tag `:v1` NÃO atualiza pod automaticamente:** se você builda `mcp-helpsphere:v1` uma 2ª vez (ex.: para corrigir bug no `server.py`), o ACA **continua servindo a imagem antiga em cache** até você forçar uma nova revisão. Fix imediato: `az containerapp revision restart --name ca-mcp-helpsphere --resource-group rg-lab-final --revision <latest>` OU bumpe a tag para `:v2` e atualize a image no Container App. **Padrão correto em prod:** tag por commit SHA (`mcp-helpsphere:abc1234`) ou semver (`mcp-helpsphere:1.0.1`), nunca `:latest` ou `:v1` mutável.
 
 ---
 
@@ -263,6 +268,8 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
 
 > **Nota pedagógica — `Who can consent: Admins and users` vs `Admins only`:** "Admins and users" permite que o flow `authorization_code` (delegate) consinta sem admin. "Admins only" força admin consent obrigatório. **No lab, escolhemos "Admins and users"** porque o flow client-credentials que usaremos no Passo 5.6 **bypassa consent de usuário** mas o Portal oferece o switch independente — manter aberto não tem downside já que **a posse do client secret** é o gate real de segurança.
 
+> **Linux/Mac/WSL — alternativa CLI:** no bloco PowerShell acima, substitua `$Var = az ...` por `VAR=$(az ...)` e backticks (`` ` ``) por backslashes (`\`).
+
 ---
 
 ## Passo 5.4 — Deploy do Container App `ca-mcp-helpsphere`
@@ -276,7 +283,7 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
    - **Resource group:** `rg-lab-final`
    - **Container app name:** `ca-mcp-helpsphere`
    - **Region:** `East US 2`
-   - **Container Apps Environment:** `cae-helpsphere-final` (do Cap 02)
+   - **Container Apps Environment:** `cae-helpsphere-final` (já provisionado nos pré-requisitos)
 4. Tab **Container:**
    - **Use quickstart image:** `Off`
    - **Image source:** `Azure Container Registry`
@@ -297,7 +304,7 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
 6. Tab **Identity:**
    - **System assigned:** `Off`
    - **User assigned:** clique **+ Add user-assigned managed identity** → no painel direito selecione `mi-helpsphere-ia` (RG `rg-lab-intermediario`) → **Add**
-   - ⚠️ Em **Registry credentials** (na própria aba **Container** acima), troque para **Use managed identity** → selecione `mi-helpsphere-ia` (essa é a MI que tem `AcrPull` cravado no Cap 02 Passo 2.4)
+   - ⚠️ Em **Registry credentials** (na própria aba **Container** acima), troque para **Use managed identity** → selecione `mi-helpsphere-ia` (essa é a MI que tem `AcrPull` cravado no scope do ACR — pré-requisito desse capítulo)
 7. Tab **Scaling:**
    - **Min replicas:** `0` (scale-to-zero)
    - **Max replicas:** `1` (lab — em prod 3-5)
@@ -317,15 +324,16 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
    ```
    (o `<rand>` é gerado pelo ACA, ex.: `politehill-1a2b3c4d`)
 3. **Copie esse valor inteiro** — é o `MCP_SERVER_URL` que vai no `.env` do `agent-code/` no Passo 5.8
+4. **Validação visual:** ainda na blade do `ca-mcp-helpsphere`, abra **Revisions and replicas** no menu lateral → você deve ver pelo menos 1 revisão com **Running state: Running** e **Replicas: 0** (scale-to-zero ocioso, sobe pra 1 quando bater request) OU **Replicas: 1** se acabou de provisionar. Abra **Log stream** (também no menu lateral) → você verá `INFO:     Uvicorn running on http://0.0.0.0:8000` confirmando o `server.py` subindo
 4. **Endpoint MCP completo:** `${MCP_SERVER_URL}/mcp` (path `/mcp` é onde o FastMCP HTTP transport escuta)
 
 <!-- screenshot: cap05-passo5.4-application-url-anotar.png -->
 
 > **Como obter a `HELPSPHERE_SQL_CONNECTION`:**
 >
-> Portal → `rg-lab-intermediario` → SQL Database `helpsphere` → menu **Connection strings** → tab **ADO.NET (SQL authentication)**. Substitua `{your_password}` pela senha do `apex-helpsphere`.
+> Portal → `rg-helpsphere-saas` → SQL Database `helpsphere` → menu **Connection strings** → tab **ADO.NET (SQL authentication)**. Substitua `{your_password}` pela senha do `apex-helpsphere` configurada quando o stack SaaS foi provisionado.
 >
-> ⚠️ **Em produção** use Entra Auth com MI: troque connection string para `Server=tcp:sql-helpsphere-{rand}.database.windows.net,1433;Database=helpsphere;Authentication=Active Directory Default;` e cravar role `db_datareader`+`db_datawriter` para `mi-helpsphere-ia` no banco. **No lab,** SQL auth é aceitável pelo prazo curto (24-48h) + cleanup obrigatório no Cap 09.
+> ⚠️ **Em produção** use Entra Auth com MI: troque connection string para `Server=tcp:sql-helpsphere-{rand}.database.windows.net,1433;Database=helpsphere;Authentication=Active Directory Default;` e cravar role `db_datareader`+`db_datawriter` para `mi-helpsphere-ia` no banco. **No lab,** SQL auth é aceitável pelo prazo curto (24-48h) + cleanup obrigatório no capítulo de finalização.
 
 > **Alternativa via Azure CLI (Windows PowerShell 7):**
 >
@@ -365,9 +373,9 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
 >
 > **Linux/Mac/WSL:** substitua `$Var = "value"` por `VAR=value`, `$Var = az ...` por `VAR=$(az ...)`, backticks por backslashes, e `Write-Host` por `echo`.
 
-> **Custo:** ACA Consumption com 0,5 vCPU + 1 GiB cobra **~R$ 0,02/min ativo** (escalado para 1 replica) e **R$ 0 parado** (scale-to-zero após ~5min sem requests). No lab realista (smoke runs ~10min/dia × 3 dias) o custo total fica **~R$ 0,60**. ACR Basic já está no fixo de R$ 35/mês do Cap 02 — pull de imagem está incluso. **Anti-pattern:** trocar `min-replicas 0` para `1` "só por segurança" → cobrança vira ~R$ 30/mês.
+> **Custo:** ACA Consumption com 0,5 vCPU + 1 GiB cobra **~R$ 0,15/hora ligado** (~R$ 0,02/min escalado para 1 replica) e **R$ 0 parado** (scale-to-zero após ~5min sem requests). No lab realista (smoke runs ~10min/dia × 3 dias) o custo total fica **~R$ 0,60**. ACR Basic já está no fixo de **~R$ 6,40/mês** — pull de imagem está incluso. **Anti-pattern:** trocar `min-replicas 0` para `1` "só por segurança" → cobrança vira ~R$ 108/mês fixos (24h × 30d × R$ 0,15).
 
-> **Nota pedagógica — `--registry-identity` vs `--registry-username/password`:** com `--registry-identity` apontando para o MI que tem `AcrPull`, o ACA pula 100% credenciais armazenadas (não há senha em lugar algum — auth é via token Entra de curta duração emitido pelo MSI sidecar). Com `--registry-username/--registry-password`, o ACA armazena uma senha **ACR admin** (anti-pattern do Cap 02 — admin user disabled). **Cravar pattern MI em todos os deploys ACA cross-RG.**
+> **Nota pedagógica — `--registry-identity` vs `--registry-username/password`:** com `--registry-identity` apontando para o MI que tem `AcrPull`, o ACA pula 100% credenciais armazenadas (não há senha em lugar algum — auth é via token Entra de curta duração emitido pelo MSI sidecar). Com `--registry-username/--registry-password`, o ACA armazena uma senha **ACR admin** (anti-pattern — admin user deve ficar disabled no ACR Basic). **Cravar pattern MI em todos os deploys ACA cross-RG.**
 
 > **Nota pedagógica — `Min replicas: 0` vs `1` em workload profile Consumption:** com `0`, o cold-start adiciona ~3-5s na primeira request após ociosidade (download da imagem + container start + Python boot). No lab, isso é aceitável — a tool `get_ticket` chamada pelo agente espera o cold-start sem timeout. Em **produção tier 1** com SLA <500ms p99, suba para `min=1` (aceitar custo fixo). Em **produção tier 2** com SLA <100ms, considere Dedicated workload profile + warm pool.
 
@@ -420,7 +428,7 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
 
 > **Custo:** R$ 0 (App Reg + secret são gratuitos no Entra).
 
-> **Nota pedagógica — Client secret 90d vs Federated Credentials:** secrets têm 3 problemas: (1) precisam rotação periódica, (2) podem vazar em logs/`.env`, (3) admin precisa lembrar de renovar antes do expiry. **Federated Credentials** (FIC) emitem token sem secret usando trust direto entre o IdP origem (GitHub/Azure DevOps/MI) e o Entra. **Lab Avançado D06 Cap 03** ensina FIC para CI/CD; aqui no Lab Final mantemos secret porque o consumer é um script local em laptop (sem IdP origem federável). **Em produção corporate: SEMPRE FIC, NUNCA secret de longa duração.**
+> **Nota pedagógica — Client secret 90d vs Federated Credentials:** secrets têm 3 problemas: (1) precisam rotação periódica, (2) podem vazar em logs/`.env`, (3) admin precisa lembrar de renovar antes do expiry. **Federated Credentials** (FIC) emitem token sem secret usando trust direto entre o IdP origem (GitHub/Azure DevOps/MI) e o Entra. Aqui mantemos secret porque o consumer é um script local em laptop (sem IdP origem federável); o pattern FIC fica reservado para CI/CD em pipelines GitHub Actions/Azure DevOps. **Em produção corporate: SEMPRE FIC, NUNCA secret de longa duração.**
 
 ---
 
@@ -551,6 +559,10 @@ Write-Host $HttpCode
 # Esperado: 401
 ```
 
+> **Linux/Mac/WSL:** os 3 smokes funcionam com `curl` nativo (não precisa `curl.exe`). Substitua `$Var = ...` por `VAR=...`, `@{ ... } | ConvertTo-Json` por `'{"jsonrpc":"2.0",...}'` literal, backticks por backslashes, `Write-Host` por `echo`, e `ConvertFrom-Json` por `jq` (se instalado) ou Python inline `python -c "import json,sys; print(json.load(sys.stdin)['result'])"`.
+
+> **Validação visual no Portal (último checkpoint):** Portal → `ca-mcp-helpsphere` → **Log stream** → você vê 3 linhas após os smokes: `200 POST /mcp` (Smoke 1 tools/list), `200 POST /mcp` (Smoke 2 get_ticket), `401 POST /mcp` (Smoke 3 sem token). Confirma o flow end-to-end ao vivo, sem precisar voltar ao terminal local.
+
 <!-- screenshot: cap05-passo5.7-curl-tools-list-success.png -->
 
 > **Custo:** smoke = R$ 0 (3 requests HTTP em ACA Consumption já provisionado, ~5s totais ativos · ~R$ 0,002).
@@ -566,7 +578,7 @@ Write-Host $HttpCode
 Abra `agent-code/.env` e edite as 2 linhas que estavam em placeholder:
 
 ```dotenv
-# ANTES (Passo 4.4):
+# ANTES (estado inicial do scaffold):
 MCP_SERVER_URL="https://placeholder.azurecontainerapps.io"
 MCP_TOKEN=""
 
@@ -575,7 +587,7 @@ MCP_SERVER_URL="https://ca-mcp-helpsphere.<rand>.eastus2.azurecontainerapps.io"
 MCP_TOKEN="<TOKEN-capturado-no-Passo-5.6>"
 ```
 
-**Re-rodar o smoke do agente do Cap 04 (`agent_runner.py`) — Windows PowerShell 7:**
+**Re-rodar o smoke do agente (`agent_runner.py`) — Windows PowerShell 7:**
 
 ```powershell
 Set-Location agent-code
@@ -599,9 +611,9 @@ Para reembolso após 7 dias sem entrega, siga estes passos:
 [Manual de Reembolsos, seção 3.2] [Ticket #84512 - dados via MCP]
 ```
 
-> **Atenção breaking — `MCP_TOKEN` expira em 1h:** o token client-credentials do Passo 5.6 vence em **3600s**. Para o smoke do lab é OK (tudo roda em <30min). Para uso prolongado, **adicione lógica de refresh** no `agent_runner.py`: capturar `expires_in` do response do token endpoint e re-chamar antes do TTL acabar. Lab Avançado D06 Cap 06 ensina pattern com `azure-identity ClientSecretCredential` que faz refresh automático.
+> **Atenção breaking — `MCP_TOKEN` expira em 1h:** o token client-credentials do Passo 5.6 vence em **3600s**. Para o smoke do lab é OK (tudo roda em <30min). Para uso prolongado, **adicione lógica de refresh** no `agent_runner.py`: capturar `expires_in` do response do token endpoint e re-chamar antes do TTL acabar. O pattern recomendado é `azure-identity ClientSecretCredential` que faz refresh automático (`credential.get_token("api://mcp-helpsphere/.default")` retorna token vivo sempre).
 
-> **Nota pedagógica — por que cravar `MCP_TOKEN` no `.env` em vez do agente buscar token sozinho?** Por simplicidade pedagógica: separar **smoke do MCP (Cap 05)** de **integração SDK (Cap 06+)**. **Em produção:** o `agent_runner.py` deve receber `(TENANT_ID, CLIENT_APP_ID, CLIENT_SECRET)` e usar `ClientSecretCredential` do SDK que faz fetch + cache + refresh automático — nunca um token estático no `.env`.
+> **Nota pedagógica — por que cravar `MCP_TOKEN` no `.env` em vez do agente buscar token sozinho?** Por simplicidade pedagógica: separar **smoke do MCP** (validar deploy + auth Entra) de **integração SDK** (refresh automático em runtime). **Em produção:** o `agent_runner.py` deve receber `(TENANT_ID, CLIENT_APP_ID, CLIENT_SECRET)` e usar `ClientSecretCredential` do SDK que faz fetch + cache + refresh automático — nunca um token estático no `.env`.
 
 ---
 
@@ -630,7 +642,7 @@ $ValidationResp = curl.exe -sS -X POST "https://$MCP_FQDN/mcp" `
 ($ValidationResp | ConvertFrom-Json).result.tools.Count
 # Esperado: 4
 
-# 5. Re-smoke do agente Cap 04 com MCP real
+# 5. Re-smoke do agente Foundry com MCP real
 cd agent-code; python agent_runner.py | Select-String '\[tool\] get_ticket'
 # Esperado: 1+ linhas com [tool] get_ticket(...)
 
@@ -656,7 +668,7 @@ az ad app list --filter "startswith(displayName,'app-mcp-helpsphere')" --query "
 [ ] Smoke curl get_ticket {ticket_id:1} retorna dados do seed HelpSphere
 [ ] Curl sem token retorna 401 (auth Entra confirmada ativa)
 [ ] agent-code/.env atualizado com MCP_SERVER_URL real + MCP_TOKEN válido
-[ ] python agent_runner.py do Cap 04 mostra [tool] get_ticket sendo chamado com sucesso
+[ ] python agent_runner.py do agente Foundry mostra [tool] get_ticket sendo chamado com sucesso
 ```
 
 ---
@@ -666,7 +678,7 @@ az ad app list --filter "startswith(displayName,'app-mcp-helpsphere')" --query "
 - ⚠️ **`az acr build` falha com `unauthorized: authentication required` em sub corporate** — causa: tenant-policy bloqueando a Service Connection que o ACR Tasks cria temporariamente. Workaround: pedir ao tenant-admin para liberar `Microsoft.ContainerRegistry/registries/tasks/scheduledRuns/action` na sub OU fallback para build local + `docker push` (Passo 5.2 alternativa).
 - ⚠️ **`api://mcp-helpsphere` rejeitado pelo Portal com `Identifier URI is not a valid URI`** — causa: tenant tem policy de **Application Identifier URI** exigindo `api://{guid}` (não custom name). Workaround: aceitar o `api://{guid}` sugerido e cravar **esse GUID** como `EXPECTED_AUDIENCE` no env var do Container App. Atualizar também `scope=api://{guid}/.default` no Passo 5.6.
 - ⚠️ **`tools/list` retorna 200 mas `tools` vazio** — causa: `EXPECTED_AUDIENCE` no env do Container App não bate com o `aud` claim do token (typo de `api://mcp-helpsphere` vs `api://mcp-helpsphere/`). O `auth.py` rejeita silenciosamente e retorna lista vazia. Workaround: comparar `jq '.aud'` do payload do token (Passo 5.6) com `az containerapp show --query "properties.template.containers[0].env"` — devem ser **idênticos byte-a-byte** (sem trailing slash).
-- ⚠️ **Container App em `Provisioning` infinito (>10min)** — causa típica: imagem do ACR não pulla porque o `--registry-identity` foi setado mas o role `AcrPull` não propagou ainda (Cap 02 Passo 2.4). Sintoma: `az containerapp logs show` mostra `failed to authenticate to registry`. Workaround: aguardar 60s após criar o `AcrPull` no Cap 02; se passou de 5min ainda falhando, deletar o Container App, esperar mais 60s e re-criar.
+- ⚠️ **Container App em `Provisioning` infinito (>10min)** — causa típica: imagem do ACR não pulla porque o `--registry-identity` foi setado mas o role `AcrPull` não propagou ainda. Sintoma: `az containerapp logs show` mostra `failed to authenticate to registry`. Workaround: aguardar 60s após criar o `AcrPull` no scope do ACR; se passou de 5min ainda falhando, deletar o Container App, esperar mais 60s e re-criar.
 - ⚠️ **`AADSTS500011: The resource principal named api://mcp-helpsphere was not found`** ao pegar token — causa: server App Reg foi criada mas **Application ID URI não foi salvo** (botão Save em Expose an API esquecido). Workaround: voltar ao Passo 5.3 → **Expose an API** → confirmar que `api://mcp-helpsphere` aparece no topo (não vazio).
 - ⚠️ **Application permissions exigem admin consent — User pode marcar mas não conceder** — em tenants com restrições, "Grant admin consent" fica cinza para usuários sem `Cloud Application Administrator`. Workaround: peça ao tenant-admin para abrir a página `app-mcp-helpsphere-client` → API permissions → clicar Grant admin consent. Sem esse step, token sai mas `roles` vem vazio → 403 no MCP.
 - ⚠️ **Cold-start do ACA scale-to-zero adiciona 3-5s na primeira request após ~5min ociosidade** — não é bug, é expected behavior do Consumption profile. Sintoma: smoke depois de pausa demorada parece "travado" 3s antes de responder. Workaround se latência é crítica: subir `min-replicas=1` (custo ~R$ 30/mês fixo) OU manter heartbeat (cron chamando `tools/list` a cada 4min — anti-pattern).
@@ -678,12 +690,12 @@ az ad app list --filter "startswith(displayName,'app-mcp-helpsphere')" --query "
 
 | Sintoma | Causa provável | Fix |
 |---|---|---|
-| `az acr build` trava em "Queued" >5min | Quota regional ACR Tasks esgotada (raro) | Trocar região do ACR no Cap 02 OU aguardar 10min |
+| `az acr build` trava em "Queued" >5min | Quota regional ACR Tasks esgotada (raro) | Trocar região do ACR para outra próxima OU aguardar 10min |
 | `401 Unauthorized` no curl com Bearer válido | `EXPECTED_AUDIENCE` env != `aud` do token | Comparar exato (com/sem trailing slash) |
 | `403 Forbidden` no curl com 200 OK em `tools/list` | Falta `roles` no token (admin consent) | Passo 5.5 último item — Grant admin consent |
 | `pyodbc.OperationalError: Login failed` nos logs | `HELPSPHERE_SQL_CONNECTION` malformada ou IP do ACA bloqueado no SQL firewall | Add regra `0.0.0.0/0` temporária no SQL OU configurar VNet |
 | `MCP_TOKEN` vence durante demo da aula | TTL 1h client-credentials | Re-rodar Passo 5.6, atualizar `.env`, re-rodar smoke |
-| `Cannot find image acrhelpsphere<rand>.azurecr.io/mcp-helpsphere:v1` | MI sem `AcrPull` propagado ainda | Aguardar 60s após Cap 02 Passo 2.4; `az role assignment list --assignee <principalId>` confirma |
+| `Cannot find image acrhelpsphere<rand>.azurecr.io/mcp-helpsphere:v1` | MI sem `AcrPull` propagado ainda | Aguardar 60s após criar o role assignment; `az role assignment list --assignee <principalId>` confirma |
 | Container App `Failed` com `Internal Server Error` na primeira request | `requirements.txt` faltou `cryptography` (PyJWT signature) | Re-build (`az acr build`) com `cryptography>=42.0.0` adicionado |
 
 ---

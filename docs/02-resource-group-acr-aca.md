@@ -1,8 +1,8 @@
 # Capítulo 02 — Resource Group + ACR + ACA Environment
 
-> **Objetivo:** provisionar a fundação de infraestrutura do Lab Final no Portal Azure — Resource Group `rg-lab-final`, Azure Container Registry `acrhelpsphere{rand}` (Basic), Azure Container Apps Environment `cae-helpsphere-final` com Log Analytics compartilhado, e atribuir role `AcrPull` à Managed Identity já criada no Bloco 2.
+> **Objetivo:** provisionar a fundação de infraestrutura do Lab Final no Portal Azure — Resource Group `rg-lab-final`, Azure Container Registry `acrhelpsphere{rand}` (Basic), Azure Container Apps Environment `cae-helpsphere-final` com Log Analytics compartilhado, e atribuir role `AcrPull` à Managed Identity `mi-helpsphere-ia` já existente no RG `rg-lab-intermediario`.
 >
-> **Tempo:** 30-40 min (10-15 min se você já fez Bloco 2 e tem o MI `mi-helpsphere-ia` + Log Analytics `log-helpsphere-ia` prontos)
+> **Tempo:** 30-40 min (10-15 min se você já tem o MI `mi-helpsphere-ia` + Log Analytics `log-helpsphere-ia` prontos no `rg-lab-intermediario`)
 >
 > **Status:** `v0.2.0-portal` ⚠️ EXPANDIDO (era `v0.1.0-init` outline) — derivado de `Lab_Final_Agente_Workflow_Guia_Portal.md` Parte 1 (Passos 1.1-1.4)
 
@@ -10,12 +10,12 @@
 
 ## Pré-requisitos
 
-- ✅ Capítulo 01 concluído — sub Azure logada (`az account show` confirma), VS Code + extensões Bicep/Python instaladas, conta Microsoft 365 (não `live.com`) para Copilot Studio nos próximos caps
-- ✅ Bloco 2 da disciplina concluído OU acesso à sub onde já existem: Foundry Hub `aifhub-apex-prod`, Log Analytics workspace `log-helpsphere-ia`, Managed Identity `mi-helpsphere-ia` — todos no RG `rg-lab-intermediario`
+- ✅ Capítulo 01 concluído — sub Azure logada (`az account show` confirma), VS Code + extensões Bicep/Python instaladas, conta Microsoft 365 (não `live.com`) para Copilot Studio nos próximos capítulos
+- ✅ Acesso à sub onde já existem: Foundry Hub `aifhub-apex-prod`, Log Analytics workspace `log-helpsphere-ia`, Managed Identity `mi-helpsphere-ia` — todos no RG `rg-lab-intermediario`
 - ✅ Permissão `Contributor` + `User Access Administrator` (ou `Owner`) na sub — necessárias para criar role assignments no Passo 2.4
 - ✅ `az` CLI ≥ 2.60 instalada (`az --version`) — usaremos como alternativa ao Portal e obrigatoriamente no Passo 2.4
 
-> **Atenção dependência cruzada:** este capítulo cria recursos no RG **novo** `rg-lab-final` mas **lê e atribui role** sobre a Managed Identity `mi-helpsphere-ia` que vive no RG **`rg-lab-intermediario`** (criado no Bloco 2). Se o Bloco 2 não foi feito, **pare aqui** e volte — não dá para "improvisar" um MI local; vários capítulos seguintes (05 MCP Server, 06 Speech, 07 n8n) dependem desse mesmo MI já vinculado a Service Bus, AI Search e Speech.
+> **Atenção dependência cruzada:** este capítulo cria recursos no RG **novo** `rg-lab-final` mas **lê e atribui role** sobre a Managed Identity `mi-helpsphere-ia` que vive no RG **`rg-lab-intermediario`**. Se esse MI não existir, **pare aqui** e provisione-o primeiro — não dá para "improvisar" um MI local; capítulos seguintes (MCP Server, Speech, n8n) dependem desse mesmo MI já vinculado a Service Bus, AI Search e Speech.
 
 ---
 
@@ -33,7 +33,7 @@
 
 > **Nota pedagógica — por que workload profile Consumption e não Dedicated?** Consumption cobra por execução (scale-to-zero possível). Dedicated reserva vCPU/RAM 24×7 (R$ 250+/mês baseline). No lab, MCP Server e n8n ficam parados >90% do tempo → Consumption economiza ~80%. Em produção com SLA <100ms cold-start ou GPU/large-RAM, Dedicated faz sentido.
 
-### Tabela de referência — custo total estimado do Lab Final (Caps 02-09)
+### Tabela de referência — custo total estimado do Lab Final (todos os capítulos)
 
 | Recurso | SKU | Cobrança | Custo total lab (8h ligado/dia × 5 dias) |
 |---|---|---|---|
@@ -41,11 +41,13 @@
 | ACA Environment | Consumption only | Por execução | R$ 0 baseline |
 | ACA replicas (MCP + n8n) | 0,5 vCPU + 1 GiB | ~R$ 0,12/h ativo | ~R$ 5 (40h) |
 | Foundry Project + agent | — | Por token | ~R$ 5-8 (smoke runs) |
-| Service Bus Standard (Cap 08) | Standard | R$ 50/mês | ~R$ 8 prorrated |
-| Speech Service (Cap 06) | Standard S0 | R$ 5/hora STT | ~R$ 5 (1h smoke) |
+| Service Bus | **Standard** | R$ 50/mês fixo (cobra parado) | ~R$ 8 prorrated |
+| Speech Service | Standard S0 | R$ 5/hora STT | ~R$ 5 (1h smoke) |
 | **Total estimado** | — | — | **~R$ 30-35 (5 dias)** |
 
-> **Atenção custo:** os valores acima assumem **delete do RG após cada sessão de estudo**. Se deixar `rg-lab-final` ligado 30 dias, custo pula para ~R$ 100-150 (ACR + Service Bus baseline + ACA replicas se houver tráfego). **Cap 09 cobre cleanup obrigatório** — não pule.
+> ⚠️ **Service Bus tier — Standard obrigatório (NÃO Basic):** Basic só permite Queues. Para o pattern pub/sub do capítulo de workflow n8n (1 Topic + 2 Subscriptions: `ticket-escalations` + `ticket-notifications`), Standard é mandatório. Custo: ~R$ 50/mês fixo enquanto ligado — Service Bus **não tem scale-to-zero**, cobra parado. Sempre delete o RG quando terminar a sessão.
+
+> **Atenção custo:** os valores acima assumem **delete do RG após cada sessão de estudo**. Se deixar `rg-lab-final` ligado 30 dias, custo pula para ~R$ 100-150 (ACR + Service Bus baseline + ACA replicas se houver tráfego). O capítulo de cleanup final cobre o procedimento obrigatório — não pule.
 
 ---
 
@@ -53,24 +55,23 @@
 
 **No Portal Azure:**
 
-1. Abra `https://portal.azure.com` → faça login com a conta da sub onde você criou o Foundry Hub (Bloco 2)
+1. Abra `https://portal.azure.com` → faça login com a conta da sub onde está o Foundry Hub `aifhub-apex-prod`
 2. Barra superior → buscar **"Resource groups"** → clicar no resultado
 3. Clique **+ Create** (canto superior esquerdo)
 4. Preencher tab **Basics:**
-   - **Subscription:** sua sub (a mesma do Bloco 2)
-   - **Resource group:** `rg-lab-final` (sem sufixo de aluno — convenção da disciplina)
-   - **Region:** `East US 2` (alinhado com o Foundry Hub do Bloco 2 — não troque)
+   - **Subscription:** sua sub (a mesma do Hub)
+   - **Resource group:** `rg-lab-final` (convenção canônica do lab)
+   - **Region:** `East US 2` (alinhado com o Foundry Hub — não troque)
 5. Tab **Tags** (opcional mas **fortemente recomendado** para cost tracking):
    - `cost-center` = `apex-helpsphere-ia`
    - `environment` = `lab`
    - `application` = `helpsphere-ia`
-   - `course` = `D06`
 6. Clique **Review + create** → **Create**
 7. Aguarde ~15s até banner verde **"Resource group rg-lab-final has been created"**
 
 <!-- screenshot: cap02-passo2.1-criar-resource-group.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (PowerShell 7 — Windows-first):**
 >
 > ```powershell
 > az login
@@ -79,12 +80,14 @@
 > az group create `
 >   --name rg-lab-final `
 >   --location eastus2 `
->   --tags cost-center=apex-helpsphere-ia environment=lab application=helpsphere-ia course=D06
+>   --tags cost-center=apex-helpsphere-ia environment=lab application=helpsphere-ia
 > ```
+>
+> **Linux/Mac/WSL:** troque `` ` `` (backtick) por `\` no fim das linhas.
 
 > **Custo:** RG é gratuito — é apenas um container lógico para agrupar recursos. Cobrança só vem dos recursos dentro dele.
 
-> **Nota pedagógica — por que RG separado do `rg-lab-intermediario` (Bloco 2)?** O Bloco 2 cria os recursos **compartilhados** (Foundry Hub, Log Analytics, MI, Key Vault). Este Lab Final cria os recursos **efêmeros** (ACR, ACA env, MCP, n8n). Separando em 2 RGs, no fim do lab você deleta `rg-lab-final` e os recursos compartilhados continuam vivos para o próximo lab/turma. **Anti-pattern:** misturar tudo em 1 RG e ter que escolher recursos individualmente para deletar.
+> **Nota pedagógica — por que RG separado do `rg-lab-intermediario`?** O `rg-lab-intermediario` hospeda os recursos **compartilhados** (Foundry Hub, Log Analytics, MI, Key Vault) que vivem além do Lab Final. Este Lab cria recursos **efêmeros** (ACR, ACA env, MCP, n8n). Separando em 2 RGs, no fim do lab você deleta `rg-lab-final` e os recursos compartilhados continuam vivos para reuso. **Anti-pattern:** misturar tudo em 1 RG e ter que escolher recursos individualmente para deletar.
 
 ---
 
@@ -105,7 +108,7 @@
 4. Tab **Networking:**
    - **Connectivity method:** `Public access` (lab simplificado — em prod corporate use Private Link)
 5. Tab **Encryption:** deixe defaults (Microsoft-managed keys)
-6. Tab **Identity:** deixe defaults (sem System-Assigned MI no ACR — vamos usar o MI do Bloco 2 com role `AcrPull`)
+6. Tab **Identity:** deixe defaults (sem System-Assigned MI no ACR — vamos reusar o MI `mi-helpsphere-ia` existente com role `AcrPull`)
 7. Tab **Tags:** herde do RG (já preenchidos no Passo 2.1)
 8. Clique **Review + create** → **Create**
 9. Aguarde provisioning ~1-2min até **Status: Succeeded**. Quando concluir, clique **Go to resource** e anote no overview:
@@ -114,7 +117,7 @@
 
 <!-- screenshot: cap02-passo2.2-criar-acr-basic.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (PowerShell 7 — Windows-first):**
 >
 > ```powershell
 > # Gera sufixo aleatório de 6 hex chars (PowerShell-only, sem dependência de openssl)
@@ -131,10 +134,12 @@
 > Write-Host "ACR criado: $AcrName.azurecr.io"
 > Write-Host "Anote este valor — vai entrar nos .env dos próximos capítulos"
 > ```
+>
+> **Linux/Mac/WSL:** gere o sufixo com `RAND=$(openssl rand -hex 3) && ACR_NAME="acrhelpsphere$RAND"`, troque `` ` `` (backtick) por `\` no `az acr create`, e use `echo` no lugar de `Write-Host`.
 
-> **Custo:** ACR Basic = R$ 35/mês fixo (cobra parado, não tem scale-to-zero). No lab, fique no Basic — delete o RG no Cap 09 para não acumular cobrança. Detalhes do trade-off Standard/Premium em [`_disclaimers.md`](./_disclaimers.md) **AMB-1**.
+> **Custo:** ACR Basic = R$ 35/mês fixo (cobra parado, não tem scale-to-zero). No lab, fique no Basic — delete o RG no capítulo de cleanup final para não acumular cobrança. Detalhes do trade-off Standard/Premium em [`_disclaimers.md`](./_disclaimers.md) **AMB-1**.
 
-> **Nota pedagógica — `Admin user: disabled` é proposital:** no Portal default vem `disabled` (e estamos mantendo). Se você habilitar, o ACR cria 2 senhas master que vivem para sempre — vetor de credenciais long-lived é anti-pattern. Em vez disso, vamos usar a Managed Identity `mi-helpsphere-ia` (Bloco 2) com role `AcrPull` no Passo 2.4. Isso elimina 100% de senhas no fluxo de pull → ACA. **Em produção: SEMPRE admin disabled + RBAC + MI.**
+> **Nota pedagógica — `Admin user: disabled` é proposital:** no Portal default vem `disabled` (e estamos mantendo). Se você habilitar, o ACR cria 2 senhas master que vivem para sempre — vetor de credenciais long-lived é anti-pattern. Em vez disso, vamos usar a Managed Identity `mi-helpsphere-ia` com role `AcrPull` no Passo 2.4. Isso elimina 100% de senhas no fluxo de pull → ACA. **Em produção: SEMPRE admin disabled + RBAC + MI.**
 
 ---
 
@@ -155,8 +160,8 @@
    - ⚠️ Se aparecer `Consumption + Dedicated`, troque para `Consumption only` — Dedicated cobra ~R$ 250/mês reservados que não usaremos no lab
 5. Tab **Monitoring:**
    - **Logs destination:** `Azure Log Analytics`
-   - **Log Analytics workspace:** clique no dropdown e selecione `log-helpsphere-ia` do RG `rg-lab-intermediario` (compartilhado, criado no Bloco 2)
-     - Se você não vê esse workspace na lista: **pare aqui** — o Bloco 2 não foi feito ou a sub está errada
+   - **Log Analytics workspace:** clique no dropdown e selecione `log-helpsphere-ia` do RG `rg-lab-intermediario` (compartilhado, provisionado previamente)
+     - Se você não vê esse workspace na lista: **pare aqui** — o workspace não existe ou a sub está errada
 6. Tab **Networking:** deixe defaults (managed network, public ingress)
 7. Tab **Tags:** herde do RG
 8. Clique **Review + create** → **Create**
@@ -164,10 +169,10 @@
 
 <!-- screenshot: cap02-passo2.3-criar-aca-environment.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (PowerShell 7 — Windows-first):**
 >
 > ```powershell
-> # Capturar customerId + sharedKey do Log Analytics existente do Bloco 2
+> # Capturar customerId + sharedKey do Log Analytics existente
 > $WorkspaceId = az monitor log-analytics workspace show `
 >   --resource-group rg-lab-intermediario `
 >   --workspace-name log-helpsphere-ia `
@@ -186,18 +191,20 @@
 >   --logs-workspace-id $WorkspaceId `
 >   --logs-workspace-key $WorkspaceKey
 > ```
+>
+> **Linux/Mac/WSL:** troque `$WorkspaceId = az ...` por `WORKSPACE_ID=$(az ...)` e `` ` `` (backtick) por `\`.
 
-> **Custo:** ACA Environment em si = **R$ 0 parado** (sem replicas rodando = sem cobrança). Quando você deployar o MCP Server (Cap 05) e n8n (Cap 07), o billing vira: **R$ 0,000024/vCPU-segundo + R$ 0,0000028/GiB-segundo** apenas durante execução (scale-to-zero quando ocioso). Estimativa para o lab: ~R$ 5-10/dia ligado, ~R$ 0,50/dia ocioso.
+> **Custo:** ACA Environment em si = **R$ 0 parado** (sem replicas rodando = sem cobrança). Quando você deployar o MCP Server e o workflow n8n nos próximos capítulos, o billing vira: **R$ 0,000024/vCPU-segundo + R$ 0,0000028/GiB-segundo** apenas durante execução (scale-to-zero quando ocioso). Estimativa para o lab: ~R$ 5-10/dia ligado, ~R$ 0,50/dia ocioso.
 
-> **Nota pedagógica — por que reusar Log Analytics do Bloco 2 e não criar `law-lab-final` novo?** 1 Log Analytics workspace = 1 cobrança fixa de ingestão (R$ 13/GiB) + retention. Centralizando no `log-helpsphere-ia`, todos os logs (Hub, Function App, ACA, MCP) caem no mesmo lugar → você consulta 1 query KQL e vê o trace inteiro cross-recurso. **Anti-pattern:** criar 1 workspace por RG → trace fragmentado, 5x cobrança duplicada de retention.
+> **Nota pedagógica — por que reusar Log Analytics `log-helpsphere-ia` e não criar `law-lab-final` novo?** 1 Log Analytics workspace = 1 cobrança fixa de ingestão (R$ 13/GiB) + retention. Centralizando no `log-helpsphere-ia`, todos os logs (Hub, Function App, ACA, MCP) caem no mesmo lugar → você consulta 1 query KQL e vê o trace inteiro cross-recurso. **Anti-pattern:** criar 1 workspace por RG → trace fragmentado, 5x cobrança duplicada de retention.
 
 > **Nota pedagógica — `Consumption only` workload profile:** ACA tem 2 modos. **Consumption:** cada replica vive ~5min após última request, depois desliga (scale-to-zero) — perfeito para lab/dev/cargas burst. **Dedicated:** vCPU/RAM reservada 24×7, latência <100ms cold-start, GPU disponível — só faz sentido em produção com SLA agressivo. **No lab, sempre Consumption.**
 
 ---
 
-## Passo 2.4 — Atribuir role `AcrPull` ao Managed Identity do Bloco 2
+## Passo 2.4 — Atribuir role `AcrPull` à Managed Identity `mi-helpsphere-ia`
 
-A Managed Identity `mi-helpsphere-ia` (criada no Bloco 2 no RG `rg-lab-intermediario`) precisa de permissão para **pullar imagens** do ACR `acrhelpsphere<rand>` recém-criado. Sem isso, o deploy do MCP Server (Cap 05) falha com `UNAUTHORIZED: authentication required`.
+A Managed Identity `mi-helpsphere-ia` (no RG `rg-lab-intermediario`) precisa de permissão para **pullar imagens** do ACR `acrhelpsphere<rand>` recém-criado. Sem isso, o deploy do MCP Server (próximo capítulo) falha com `UNAUTHORIZED: authentication required`.
 
 **No Portal Azure (caminho visual):**
 
@@ -218,10 +225,10 @@ A Managed Identity `mi-helpsphere-ia` (criada no Bloco 2 no RG `rg-lab-intermedi
 
 <!-- screenshot: cap02-passo2.4-acrpull-role-assignment.png -->
 
-> **Alternativa via Azure CLI** (mais robusta — recomendada porque captura IDs dinamicamente):
+> **Alternativa via Azure CLI (PowerShell 7 — Windows-first)** (mais robusta — recomendada porque captura IDs dinamicamente):
 >
 > ```powershell
-> # Capturar Principal ID do MI do Bloco 2
+> # Capturar Principal ID do MI existente
 > $PrincipalId = az identity show `
 >   --name mi-helpsphere-ia `
 >   --resource-group rg-lab-intermediario `
@@ -247,6 +254,8 @@ A Managed Identity `mi-helpsphere-ia` (criada no Bloco 2 no RG `rg-lab-intermedi
 >   --query "[].{role:roleDefinitionName, scope:scope}" -o table
 > # Esperado: 1 linha com role=AcrPull
 > ```
+>
+> **Linux/Mac/WSL:** troque `$Var = az ...` por `VAR=$(az ...)` e `` ` `` (backtick) por `\`.
 
 > **Custo:** RBAC role assignments são **gratuitos** — não há cobrança por número de roles ou scopes.
 
@@ -327,10 +336,11 @@ az acr login --name $AcrName 2>&1 | Select-Object -First 5
 ## Surpresas pedagógicas (capturadas em smoke runs)
 
 - ⚠️ **ACR name globalmente único + sem hífen + lowercase** — Azure rejeita `acr-helpsphere` (hífen), `ACRhelpsphere` (uppercase) e qualquer nome já usado no mundo (formato DNS). Workaround: sempre concatenar 6 hex chars aleatórios (`acrhelpsphere8a3f2d`). **Anti-pattern comum:** copy-paste do nome de outro aluno → falha "Registry name not available".
-- ⚠️ **ACA Environment provisiona Log Analytics novo se você esquecer de selecionar o existente** — no tab **Monitoring**, se deixar **Logs destination = Azure Log Analytics** mas NÃO selecionar workspace, o Portal **silenciosamente cria** `workspace-cae-helpsphere-final<rand>` no `rg-lab-final`. Isso **fragmenta** os logs (Bloco 2 vai pra um, Lab Final pra outro) e duplica cobrança de ingestão. Workaround: sempre selecionar `log-helpsphere-ia` explicitamente; se errou, delete o ACA Env e refaça (não dá pra trocar workspace depois de criado).
-- ⚠️ **`AcrPull` role assignment leva 30-60s para propagar** — atribui via Portal/CLI, mas se você imediatamente rodar `az containerapp create --image acrhelpsphere<rand>.azurecr.io/...` no Cap 05, pode dar `UNAUTHORIZED`. Workaround: aguarde 60s após criar o role antes de fazer pull/deploy. **Anti-pattern:** debugar erro de imagem por 20min sem perceber que é só propagação RBAC.
+- ⚠️ **ACA Environment provisiona Log Analytics novo se você esquecer de selecionar o existente** — no tab **Monitoring**, se deixar **Logs destination = Azure Log Analytics** mas NÃO selecionar workspace, o Portal **silenciosamente cria** `workspace-cae-helpsphere-final<rand>` no `rg-lab-final`. Isso **fragmenta** os logs (recursos compartilhados vão pra um, Lab Final pra outro) e duplica cobrança de ingestão. Workaround: sempre selecionar `log-helpsphere-ia` explicitamente; se errou, delete o ACA Env e refaça (não dá pra trocar workspace depois de criado).
+- ⚠️ **`AcrPull` role assignment leva 30-60s para propagar** — atribui via Portal/CLI, mas se você imediatamente rodar `az containerapp create --image acrhelpsphere<rand>.azurecr.io/...`, pode dar `UNAUTHORIZED`. Workaround: aguarde 60s após criar o role antes de fazer pull/deploy. **Anti-pattern:** debugar erro de imagem por 20min sem perceber que é só propagação RBAC.
 - ⚠️ **`az role assignment create --assignee <upn>` falha com permissões mínimas** — o flag `--assignee` faz lookup no Microsoft Graph e exige `Directory.Read.All`. Em subs corporativas restritas, isso falha mesmo se o usuário tem `User Access Administrator`. Workaround: usar `--assignee-object-id <objectId> --assignee-principal-type ServicePrincipal` (pula o lookup). **Cravar pattern em todos os scripts CI/CD.**
-- ⚠️ **MI do Bloco 2 vive em RG separado (`rg-lab-intermediario`) — não tente recriar local** — alguns alunos criam `mi-lab-final` novo no `rg-lab-final` para "simplificar". Resultado: o MI novo NÃO tem roles em Service Bus (Cap 08), AI Search (do `apex-rag-lab` Cap 05), ou Speech (Cap 06) — todas pré-cravadas no MI do Bloco 2. Você teria que repetir 5+ role assignments. Workaround: **sempre reusar `mi-helpsphere-ia` cross-RG**. RBAC funciona perfeitamente em escopos cruzados.
+- ⚠️ **MI `mi-helpsphere-ia` vive em RG separado (`rg-lab-intermediario`) — não tente recriar local** — alguns alunos criam `mi-lab-final` novo no `rg-lab-final` para "simplificar". Resultado: o MI novo NÃO tem roles em Service Bus, AI Search e Speech — todas pré-cravadas no MI compartilhado. Você teria que repetir 5+ role assignments. Workaround: **sempre reusar `mi-helpsphere-ia` cross-RG**. RBAC funciona perfeitamente em escopos cruzados.
+- ⚠️ **Service Bus tier Basic NÃO suporta Topics** — Basic só permite Queues. Para pub/sub (1 Topic + 2 Subscriptions: `ticket-escalations` + `ticket-notifications`) você precisa Standard. Custo: ~R$ 50/mês fixo (cobra parado, sem scale-to-zero). Workaround: ao provisionar Service Bus em capítulo futuro, sempre `--sku Standard`. **Anti-pattern:** subir Basic para "economizar" e descobrir limitação só na hora do deploy do workflow.
 - ⚠️ **ACR Basic tem limit de 10 GiB de storage** — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-1** para o cap absoluto. Sintoma: `denied: requested access to the resource is denied` no `docker push`. Workaround: `az acr repository delete --name <acr> --image <repo>:<tag>` para liberar espaço, ou subir para Standard. **Em produção, sempre cravar política de retention de tags (`az acr config retention`).**
 - ⚠️ **Workload profile `Consumption + Dedicated` aparece como default em algumas subs** — se você tem subs corporate com policy padrão, o Portal pode pré-selecionar Consumption + Dedicated → cobra ~R$ 250/mês reservados mesmo com 0 apps deployados. Workaround: **explicitamente selecionar `Consumption only`** no Tab **Workload profiles**. Verificar via CLI: `az containerapp env show --query 'properties.workloadProfiles'` (deve listar apenas `Consumption`).
 - ⚠️ **`--admin-enabled true` no ACR vira credencial órfã** — se em algum debug você habilitou admin user (ex.: para um `docker login` rápido), as 2 senhas master nunca expiram automaticamente. Vetor de comprometimento de longo prazo. Workaround: depois de debugar, `az acr update --name <acr> --admin-enabled false` + rotacionar passwords (`az acr credential renew`). **Em produção: nunca habilite — Bicep policy `Microsoft.Authorization/policyDefinitions` deve denyar.**

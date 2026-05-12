@@ -1,8 +1,8 @@
 # Capítulo 01 — Pré-requisitos
 
-> **Objetivo:** validar **toda** a base operacional antes de provisionar qualquer recurso do Lab Final — sub Pay-As-You-Go, Foundry Hub do Bloco 2, conta Microsoft Power Platform com Copilot Studio, Docker Desktop, Azure CLI, e stack dev local. Saída esperada: 9 checklist boxes marcados verdes + nenhum bloqueio para o Capítulo 02.
+> **Objetivo:** validar **toda** a base operacional antes de provisionar qualquer recurso do Lab Final — sub Pay-As-You-Go, Foundry Hub do ambiente SaaS base (`apex-helpsphere`), conta Microsoft Power Platform com Copilot Studio, Docker Desktop, Azure CLI, e stack dev local. Saída esperada: 9 checklist boxes marcados verdes + nenhum bloqueio para o próximo capítulo.
 >
-> **Tempo:** 30-45 min (skip ~20 min se você fez o Bloco 2 / Lab Intermediário sem reset; +60-90 min se precisar provisionar Foundry Hub do zero).
+> **Tempo:** 30-45 min (skip ~20 min se o ambiente base SaaS + lab RAG anterior já estão provisionados; +60-90 min se precisar provisionar Foundry Hub do zero).
 >
 > **Status:** `v0.2.0-portal` ⚠️ EXPANDIDO (era `v0.1.0-init` outline) — derivado de `Lab_Final_Agente_Workflow_Guia_Portal.md` Pré-requisitos (linhas 24-58) + Tabela de recursos (linhas 59-80).
 
@@ -10,7 +10,7 @@
 
 ## ⚙️ Sintaxe de comandos shell
 
-> **Os blocos shell deste guia usam PowerShell** (Windows-first, alinhado ao público da disciplina). Continuação de linha é `` ` `` (backtick), variáveis de ambiente via `$env:VAR = "..."`, substituição de comando via `(cmd)` ou `$(cmd)`.
+> **Os blocos shell deste guia usam PowerShell** (Windows-first). Continuação de linha é `` ` `` (backtick), variáveis de ambiente via `$env:VAR = "..."`, substituição de comando via `(cmd)` ou `$(cmd)`.
 >
 > **Linux / Mac / WSL:** troque `$env:VAR = "..."` por `export VAR="..."`, `$env:VAR = (cmd)` por `export VAR=$(cmd)`, e `` ` `` por `\` no fim das linhas.
 
@@ -18,12 +18,11 @@
 
 ## Pré-requisitos (este capítulo é o root — pré-condições externas ao repo)
 
-- ✅ Você completou o **Bloco 2 da Disciplina 06** (apex-helpsphere SaaS provisionado em `rg-lab-intermediario`) — fornece Foundry Hub `aifhub-apex-prod` + Managed Identity `mi-helpsphere-ia` + Log Analytics `log-helpsphere-ia` que serão **reusados** neste lab.
-- ✅ Você completou o **Lab Intermediário** (RAG HelpSphere) — fornece Function App `func-helpsphere-rag-{rand}` que será chamada pela tool `search_kb` no Capítulo 04.
+- ✅ Você completou o **lab SaaS base** (`apex-helpsphere` provisionado em `rg-helpsphere-saas`) e o **lab RAG anterior** (`apex-rag-lab` provisionado em `rg-lab-intermediario`) — em conjunto fornecem Foundry Hub `aifhub-apex-prod` + Managed Identity `mi-helpsphere-ia` + Log Analytics `log-helpsphere-ia` + Function App `func-helpsphere-rag-{rand}` que serão **reusados** neste lab.
 - ✅ Você tem acesso de Owner ou Contributor + UAA na sub Azure que vai usar.
 - ✅ Você tem ~R$ 22-30 disponíveis (custo realista do lab provisionado e deletado no mesmo dia — ver tabela abaixo).
 
-> **Atenção custo + Free Trial:** este lab **NÃO funciona em Free Trial USD 200** — Foundry Agent Service exige sub Pay-As-You-Go ativa. ~R$ 380/mês se ligado, **R$ 22-30 no lab realista** (provisionar + deletar mesmo dia). Capítulo 09 (cleanup obrigatório) é parte do lab, não opcional.
+> **Atenção custo + Free Trial:** este lab **NÃO funciona em Free Trial USD 200** — Foundry Agent Service exige sub Pay-As-You-Go ativa. ~R$ 380/mês se ligado, **R$ 22-30 no lab realista** (provisionar + deletar mesmo dia). O cleanup obrigatório no final do lab é parte do fluxo, não opcional.
 
 ---
 
@@ -31,20 +30,20 @@
 
 | # | Pré-requisito | Como validar | Bloqueia? |
 |---|---|---|---|
-| 1 | Sub Azure Pay-As-You-Go + roles | `az account show` + `az role assignment list` | Cap 02 |
-| 2 | Foundry Hub `aifhub-apex-prod` em `rg-lab-intermediario` | Portal AI Foundry → Hubs | Cap 04 |
-| 3 | Conta Microsoft + Copilot Studio Trial 30d | https://copilotstudio.microsoft.com/ | Cap 03 |
-| 4 | Fork `apex-helpsphere-agente-lab` + clone local | `git remote -v` | Todos |
-| 5 | Docker Desktop 4.30+ com WSL 2 | `docker version` | Cap 05 (build imagem MCP) |
-| 6 | Azure CLI 2.60+ + extensions `containerapp` + `ml` | `az --version` | Todos |
-| 7 | Stack dev local (Python 3.11+ / Node 18+ / Git / VS Code) | `python --version` etc | Cap 04+ |
+| 1 | Sub Azure Pay-As-You-Go + roles | `az account show` + `az role assignment list` | Provisionamento ACR/ACA |
+| 2 | Foundry Hub `aifhub-apex-prod` em `rg-lab-intermediario` | Portal AI Foundry → Hubs | Criação do agente Foundry |
+| 3 | Conta Microsoft + Copilot Studio Trial 30d | https://copilotstudio.microsoft.com/ | Front-end conversacional |
+| 4 | Fork `apex-helpsphere-agente-lab` + clone local | `git remote -v` | Todas as etapas |
+| 5 | Docker Desktop 4.30+ com WSL 2 | `docker version` | Build da imagem MCP |
+| 6 | Azure CLI 2.60+ + extensions `containerapp` + `ml` | `az --version` | Todas as etapas |
+| 7 | Stack dev local (Python 3.11+ / Node 18+ / Git / VS Code) | `python --version` etc | SDK Python + tooling |
 
-**Decisões cravadas neste lab:** ACR `Basic` + Service Bus `Standard` obrigatório (Cap 08 cria Topic `ticket-escalations`, e tier Basic NÃO suporta Topics).
+**Decisões cravadas neste lab:** ACR `Basic` + Service Bus `Standard` obrigatório (o fluxo de escalação cria Topic `ticket-escalations`, e tier Basic NÃO suporta Topics).
 
 > [!IMPORTANT] **Tier / Licenciamento**
 > Decisões de tier e licenciamento consolidadas em [`_disclaimers.md`](./_disclaimers.md). Veja **AMB-1** (ACR Basic) e **AMB-4** (Service Bus Standard).
 
-> **Nota pedagógica — por que validar TUDO antes em vez de tropeçar capítulo a capítulo?** Lab Final tem 9h de duração e 8 partes com dependências cross-recurso (Foundry → MCP → Speech → Service Bus → n8n → Logic App). Cada falha de pré-requisito descoberta no meio custa 30-60min de retrabalho. **Front-load a validação aqui** e o resto do lab flui.
+> **Nota pedagógica — por que validar TUDO antes em vez de tropeçar etapa a etapa?** O lab tem ~9h de duração e dependências cross-recurso (Foundry → MCP → Speech → Service Bus → n8n → Logic App). Cada falha de pré-requisito descoberta no meio custa 30-60min de retrabalho. **Front-load a validação aqui** e o resto do lab flui.
 
 ---
 
@@ -63,7 +62,7 @@ az role assignment list --assignee $(az account show --query user.name -o tsv) `
 # Esperado: Owner OU (Contributor + User Access Administrator) no scope da sub
 ```
 
-Se você só tem `Reader` ou `Contributor` sem UAA, **peça ao admin do tenant** antes de continuar — Capítulo 04 (RBAC do MI no Foundry Project) e Capítulo 05 (App Registration MCP) vão falhar.
+Se você só tem `Reader` ou `Contributor` sem UAA, **peça ao admin do tenant** antes de continuar — atribuição de RBAC do MI no Foundry Project e App Registration do MCP Server vão falhar mais adiante no lab.
 
 <!-- screenshot: cap01-passo1.1-az-account-show-output.png -->
 
@@ -72,27 +71,28 @@ Se você só tem `Reader` ou `Contributor` sem UAA, **peça ao admin do tenant**
 
 > **Custo:** validação é gratuita (só leitura). R$ 0,00.
 
-> **Nota pedagógica — por que UAA importa em vez de só Contributor?** O Capítulo 04 atribui role `Cognitive Services User` ao Managed Identity do MCP Server no Foundry Hub. **Atribuir role exige UAA**, não só Contributor. Owner já tem UAA implícito; Contributor pelado falha em `az role assignment create` com erro `AuthorizationFailed`.
+> **Nota pedagógica — por que UAA importa em vez de só Contributor?** O fluxo do agente atribui role `Cognitive Services User` ao Managed Identity do MCP Server no Foundry Hub. **Atribuir role exige UAA**, não só Contributor. Owner já tem UAA implícito; Contributor pelado falha em `az role assignment create` com erro `AuthorizationFailed`.
 
 ---
 
-## Passo 1.2 — Validar Foundry Hub `aifhub-apex-prod` (do Bloco 2)
+## Passo 1.2 — Validar Foundry Hub `aifhub-apex-prod` (lab anterior)
 
 **No Azure Portal (https://portal.azure.com):**
 
-1. Resource Groups → abra `rg-lab-intermediario` (criado no Bloco 2).
+1. Resource Groups → abra `rg-lab-intermediario` (criado no lab RAG anterior).
 2. Verifique que existem nesse RG:
    - **Hub** Azure AI Foundry: `aifhub-apex-prod`
    - **Managed Identity** (User-assigned): `mi-helpsphere-ia`
    - **Log Analytics workspace**: `log-helpsphere-ia`
-   - **Application Insights**: `ai-helpsphere-rag` (compartilhado com Lab Inter)
+   - **Application Insights**: `ai-helpsphere-rag` (compartilhado com o lab RAG anterior)
 3. Abra `aifhub-apex-prod` → menu lateral **Models + endpoints** → confirme deployment `gpt-4.1-mini` ativo (status `Succeeded`).
 
 <!-- screenshot: cap01-passo1.2-foundry-hub-aifhub-apex-prod.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (PowerShell — Windows-first):**
+>
 > ```powershell
-> # Confirma os 4 recursos do Bloco 2 existindo
+> # Confirma os 4 recursos da fundação existindo
 > az resource list --resource-group rg-lab-intermediario `
 >   --query "[].{name:name, type:type}" -o table
 >
@@ -102,12 +102,14 @@ Se você só tem `Reader` ou `Contributor` sem UAA, **peça ao admin do tenant**
 >   --resource-group rg-lab-intermediario `
 >   -o table
 > ```
+>
+> **Linux/Mac/WSL:** troque `` ` `` (backtick) por `\` no fim das linhas.
 
 > **Custo:** Hub e MI são gratuitos (cobrança vem em deployments). R$ 0,00 só por validar.
 
-> **Atenção breaking — se o Hub não existe:** volte ao Bloco 2 e provisione o ambiente base. Criar Hub do zero aqui dispara fluxo de quota Azure OpenAI (aprovação 24-72h). Não pule o Bloco 2.
+> **Atenção breaking — se o Hub não existe:** volte ao lab RAG anterior e provisione o ambiente base (Hub + MI + Log Analytics + deployment `gpt-4.1-mini`). Criar Hub do zero aqui dispara fluxo de quota Azure OpenAI (aprovação 24-72h). Não pule a fundação.
 
-> **Nota pedagógica — Hub vs Project, por quê:** Hub centraliza networking + storage + Application Insights + Key Vault. Projects (criados no Cap 04) herdam essa fundação e isolam **agentes + threads + deployments**. Pattern Microsoft para multi-equipe: 1 Hub corporate, N Projects por squad.
+> **Nota pedagógica — Hub vs Project, por quê:** Hub centraliza networking + storage + Application Insights + Key Vault. Projects (criados mais adiante neste lab) herdam essa fundação e isolam **agentes + threads + deployments**. Pattern Microsoft para multi-equipe: 1 Hub corporate, N Projects por squad.
 
 ---
 
@@ -125,7 +127,7 @@ Se você só tem `Reader` ou `Contributor` sem UAA, **peça ao admin do tenant**
 
 > **Custo:** Trial gratuito 30 dias · após trial R$ 90/usuário/mês · no lab realista R$ 0 (cleanup antes do trial expirar).
 
-> **Nota pedagógica — Copilot Studio Trial é por usuário, não por tenant:** trial não compartilha. Em sala de aula cada aluno precisa da própria trial — confirme antes do recording.
+> **Nota pedagógica — Copilot Studio Trial é por usuário, não por tenant:** trial não compartilha. Cada aluno precisa da própria trial — confirme antes de avançar.
 
 ---
 
@@ -144,7 +146,7 @@ git remote -v    # Esperado: origin=<SEU-USER>, upstream=tftec-guilherme
 
 > **Custo:** R$ 0,00. GitHub fork é gratuito.
 
-> **Nota pedagógica — fork vs clone direto:** o fork dá a você um `origin` mutável (commitar adaptações suas — secrets, customizações de prompt, screenshots). O `upstream` permite puxar atualizações da turma quando o prof publicar. Clone direto = read-only.
+> **Nota pedagógica — fork vs clone direto:** o fork dá a você um `origin` mutável (commitar adaptações suas — secrets, customizações de prompt, screenshots). O `upstream` permite puxar atualizações do repo canônico quando houver novas versões publicadas. Clone direto = read-only.
 
 ---
 
@@ -162,7 +164,7 @@ Se aparecer `Cannot connect to the Docker daemon`, abra Docker Desktop no menu I
 
 > **Custo:** R$ 0,00 (Docker Desktop pessoal é gratuito; uso comercial >250 funcionários exige Pro/Team).
 
-> **Nota pedagógica — por que precisamos Docker se o ACA roda na nuvem?** Capítulo 05 builda a imagem `mcp-helpsphere:v1.0` localmente via `docker build` (mais rápido que ACR Tasks remoto), depois `az acr login` + `docker push`. Pattern: build local quando dev rápido + push pro ACR; build remoto (ACR Tasks) quando CI/CD ou hardware fraco.
+> **Nota pedagógica — por que precisamos Docker se o ACA roda na nuvem?** Mais adiante neste lab você builda a imagem `mcp-helpsphere:v1.0` localmente via `docker build` (mais rápido que ACR Tasks remoto), depois `az acr login` + `docker push`. Pattern: build local quando dev rápido + push pro ACR; build remoto (ACR Tasks) quando CI/CD ou hardware fraco.
 
 ---
 
@@ -212,7 +214,7 @@ code --install-extension ms-azuretools.vscode-azurecontainerapps
 
 > **Custo:** R$ 0,00. Tudo gratuito.
 
-> **Nota — Functions Core Tools 4.x é OPCIONAL no Lab Final:** o agente Foundry roda via SDK Python `azure-ai-projects`, não Functions. Só instale (`npm install -g azure-functions-core-tools@4`) se quiser debugar a `RAG_FUNCTION_URL` do Lab Intermediário localmente.
+> **Nota — Functions Core Tools 4.x é OPCIONAL neste lab:** o agente Foundry roda via SDK Python `azure-ai-projects`, não Functions. Só instale (`npm install -g azure-functions-core-tools@4`) se quiser debugar a `RAG_FUNCTION_URL` (Function App do lab RAG anterior) localmente.
 
 ---
 
@@ -225,7 +227,7 @@ Rode este bloco depois de completar Passos 1.1 a 1.7. **Todos** os comandos deve
 az account show --query "{state:state, name:name}" -o table
 # Esperado: state=Enabled
 
-# 2. RG do Bloco 2 existindo com Foundry Hub
+# 2. RG da fundação existindo com Foundry Hub
 az resource show `
   --resource-group rg-lab-intermediario `
   --name aifhub-apex-prod `
@@ -256,7 +258,7 @@ az extension list --query "[?contains(['containerapp','ml'], name)].name" -o tsv
 
 ```text
 [ ] Sub Azure Pay-As-You-Go ativa, role Owner ou Contributor+UAA confirmada
-[ ] Foundry Hub aifhub-apex-prod existindo em rg-lab-intermediario (Bloco 2)
+[ ] Foundry Hub aifhub-apex-prod existindo em rg-lab-intermediario (fundação do lab anterior)
 [ ] Deployment gpt-4.1-mini ativo no Hub
 [ ] mi-helpsphere-ia + log-helpsphere-ia + ai-helpsphere-rag presentes em rg-lab-intermediario
 [ ] Conta Microsoft com Copilot Studio Trial 30d ativo (NÃO live.com)
@@ -266,7 +268,7 @@ az extension list --query "[?contains(['containerapp','ml'], name)].name" -o tsv
 [ ] Python 3.11+, Node 18+, Git, VS Code com 5 extensions instaladas
 ```
 
-Se TODOS os 9 boxes estão marcados → siga para Capítulo 02. Se algum falhou → resolva antes (este capítulo é hard-gate).
+Se TODOS os 9 boxes estão marcados → siga para o próximo capítulo. Se algum falhou → resolva antes (este capítulo é hard-gate).
 
 ---
 
@@ -276,7 +278,7 @@ Se TODOS os 9 boxes estão marcados → siga para Capítulo 02. Se algum falhou 
 - ⚠️ **Conta `live.com` rejeitada em Copilot Studio** — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-2** para causa-raiz, workaround (tenant dev M365 grátis) e referência cravada no Apêndice E.
 - ⚠️ **Service Bus Basic não suporta Topics** — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-4** para a decisão Standard obrigatório + custo + erro `BadRequest: Topics are not supported on Basic tier`.
 - ⚠️ **Contributor sem User Access Administrator falha em `az role assignment create`** — erro `AuthorizationFailed: client does not have authorization to perform action 'Microsoft.Authorization/roleAssignments/write'`. Workaround: peça ao admin do tenant para conceder `User Access Administrator` no scope da sub OU `Owner` direto.
-- ⚠️ **`gpt-4.1-mini` quota request leva 24-72h em sub nova** — se for primeira vez deployando Azure OpenAI nesta sub, Microsoft pode pedir aprovação manual. Workaround: faça o **Bloco 2 da disciplina antes** (já passa pela aprovação) — neste lab você só reusa o deployment existente.
+- ⚠️ **`gpt-4.1-mini` quota request leva 24-72h em sub nova** — se for primeira vez deployando Azure OpenAI nesta sub, Microsoft pode pedir aprovação manual. Workaround: provisione o ambiente base SaaS + lab RAG anterior antes (já passam pela aprovação) — neste lab você só reusa o deployment existente.
 - ⚠️ **`az upgrade` não atualiza extensions** — comum: aluno roda `az upgrade`, comemora `2.60.0`, mas `containerapp` extension fica em versão antiga e dá erro `unknown command`. Sempre `az extension add --name <nome> --upgrade` em paralelo.
 
 ---

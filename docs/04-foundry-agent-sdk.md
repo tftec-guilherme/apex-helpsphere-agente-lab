@@ -12,8 +12,8 @@
 
 - ✅ Capítulo 02 concluído — RG `rg-lab-final` existe, ACR `acrhelpsphere{rand}` e ACA Environment `cae-helpsphere-final` provisionados
 - ✅ Capítulo 03 concluído — Copilot Studio agent `cps-helpsphere-tier1` criado (será integrado ao agent Foundry no final do Capítulo 08)
-- ✅ Foundry Hub `aifhub-apex-prod` existindo na sua sub (criado no Bloco 2 da disciplina; se não existe, ver Lab Intermediário Parte 1)
-- ✅ Lab Intermediário deployado (precisamos da `RAG_FUNCTION_URL` para a tool `search_kb`)
+- ✅ Foundry Hub `aifhub-apex-prod` existindo na sua subscription, no RG `rg-lab-intermediario` (se não existe, provisione um Hub vazio no portal `https://ai.azure.com` antes de seguir)
+- ✅ RAG Function App `func-helpsphere-rag-{rand}` deployada e funcional no `rg-lab-intermediario` (precisamos da `RAG_FUNCTION_URL` para a tool `search_kb`)
 - ✅ Python 3.11+ instalado localmente
 - ✅ `az` CLI logado na sub correta (`az account show` confirma)
 - ✅ VS Code com extensão **Python** instalada
@@ -40,7 +40,7 @@
 **No Azure AI Foundry portal (https://ai.azure.com):**
 
 1. Abra o navegador em `https://ai.azure.com` → faça login com a mesma conta Azure usada nos Capítulos anteriores
-2. Tela inicial → seção **Hubs** → entre no Hub `aifhub-apex-prod` (criado no Bloco 2 da disciplina)
+2. Tela inicial → seção **Hubs** → entre no Hub `aifhub-apex-prod`
 3. Dentro do Hub → botão **+ New project** (canto superior direito)
 4. Preencher:
    - **Project name:** `aifproj-helpsphere-agente`
@@ -207,6 +207,8 @@ AGENT_ID=""
 ```
 
 > **Nota:** `MCP_SERVER_URL`, `MCP_TOKEN`, `SB_CONNECTION_STRING` ficam **placeholder** até os Capítulos 05 e 07/08. O smoke run do Passo 4.5 só exercita `search_kb` (que chama RAG real).
+
+> ⚠️ **`tool_get_ticket` e `tool_escalate_ticket` retornam erro em smoke run — esperado, MCP Server + Service Bus não configurados ainda.** Só `tool_search_kb` funciona (chama RAG real do Lab Intermediário). Os Capítulos 05-08 ativam tools restantes (05 MCP, 08 Service Bus).
 
 ---
 
@@ -602,6 +604,8 @@ python agent_runner.py
 - ⚠️ **`DefaultAzureCredential` cai em `InteractiveBrowserCredential` se `az login` expirou** — abre browser do nada no meio do script. Workaround: rode `az account get-access-token` antes pra confirmar sessão válida.
 - ⚠️ **Tool call falha em Playground** — esperado. Playground só executa o modelo, não suas tools (RAG, MCP, SB). Para teste end-to-end, sempre `python agent_runner.py`.
 - ⚠️ **`requires_action` infinito** — se o agente entra em loop chamando a mesma tool repetidamente, **o problema é tool retornando JSON inválido** ou **payload quebrado**. Adicione `print(json.dumps(result))` antes de `tool_outputs.append` pra debugar.
+- ⚠️ **Truncation 8000 tokens para text-embedding-3-large** — limite Azure é 8192 tokens; código RAG implementa tiktoken truncation a 8000 para margem segura. Sem truncation, batch fails com BadRequest 400 em documentos longos.
+- ⚠️ **Índice sem vectorizer integrado exige VectorizedQuery (não VectorizableTextQuery)** — se você cria índice no Foundry UI sem ativar vectorizer, o agente deve pré-computar embeddings via text-embedding-3-large ANTES de chamar search. Se usar VectorizableTextQuery sem vectorizer no index, retorna 0 resultados silenciosamente.
 
 ---
 

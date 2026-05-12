@@ -18,6 +18,8 @@
 > [!IMPORTANT] **Tier / Licenciamento**
 > Decisão `live.com` rejeitada + workaround tenant dev M365 consolidada em [`_disclaimers.md`](./_disclaimers.md). Veja **AMB-2** para detalhe completo + cleanup link.
 
+> **⚠️ Atenção — conta Microsoft pessoal não funciona:** `copilotstudio.microsoft.com` **rejeita autenticação com `live.com`, `outlook.com`, `hotmail.com`** retornando `AADSTS50020` ("user account does not exist in tenant"). O Copilot Studio exige conta de tenant Microsoft 365 / Entra (corporativa ou trial). Se você só tem conta pessoal MS, **vá direto para a seção [Passo 3.7 — Fallback Entra Tenant Trial 30 dias](#passo-37--fallback-entra-tenant-trial-30-dias--30min--só-se-você-não-tem-conta-corporativa-m365)** antes de continuar com o Passo 3.1.
+
 ---
 
 ## Resumo dos 5 elementos que vamos cravar no Copilot Studio
@@ -45,7 +47,7 @@
 | **Pay-As-You-Go** | ~R$ 0,07/mensagem | Produção com volume baixo/intermitente | Difícil prever budget mensal |
 | **Power Platform Cap** | Embutido em E5 enterprise | Tenants já em E5 com Power Platform incluso | Negociação contrato Microsoft |
 
-> **Decisão da disciplina:** Trial 30d para o recording deste lab. Em prova de conceito real corporate, partir para Pay-As-You-Go (controle de custo) e migrar para Per-User só quando volume justificar (~14k mensagens/mês = break-even). Discussão completa no Apêndice E do material autoral D06 (cheat sheet `cheat-licenciamento-power-platform.md`).
+> **Decisão deste lab:** Trial 30d para o cenário guiado. Em prova de conceito real corporate, partir para Pay-As-You-Go (controle de custo) e migrar para Per-User só quando volume justificar (~14k mensagens/mês = break-even). Cheat sheet `cheat-licenciamento-power-platform.md` consolida a árvore de decisão completa.
 
 ---
 
@@ -99,7 +101,7 @@ Antes de tocar Copilot Studio, valide 2 coisas que matam 80% dos labs com erro "
 
 > **Custo:** Trial Copilot Studio é **R$ 0,00** durante 30 dias. Após trial: **R$ 1.000+/mês** licença Per-User Premium corporate (não é por mensagem — é por usuário/mês fixo); ou pay-as-you-go ~R$ 0,07/mensagem (PAYG). **No lab realista: R$ 0,00** (cleanup obrigatório no Capítulo 09 antes do trial expirar). Tenant dev M365 grátis também não cobra.
 
-> **Nota pedagógica — por que Trial expira em 30 dias e o Power Platform corporate paga ~R$ 1.000/usuário/mês?** Copilot Studio entrega 3 capacidades caras: (1) GPT-4o consumido por trás do Generative AI mode (Microsoft paga OpenAI), (2) integração nativa com Dataverse/SharePoint/Teams sem cobrar extra, (3) governance enterprise (DLP policies, Power Platform CoE). É um SaaS verticalizado em chatbots de negócio. Para PoC/aprendizado, trial resolve. Para produção, é decisão de comitê — o Apêndice E do material autoral do D06 detalha o ROI breakdown.
+> **Nota pedagógica — por que Trial expira em 30 dias e o Power Platform corporate paga ~R$ 1.000/usuário/mês?** Copilot Studio entrega 3 capacidades caras: (1) GPT-4o consumido por trás do Generative AI mode (Microsoft paga OpenAI), (2) integração nativa com Dataverse/SharePoint/Teams sem cobrar extra, (3) governance enterprise (DLP policies, Power Platform CoE). É um SaaS verticalizado em chatbots de negócio. Para PoC/aprendizado, trial resolve. Para produção, é decisão de comitê — o cheat sheet `cheat-licenciamento-power-platform.md` detalha o ROI breakdown completo.
 
 ---
 
@@ -259,6 +261,53 @@ Esse é o topic principal — ele é disparado pela Generative AI quando detecta
 
 ---
 
+## Passo 3.7 — Fallback Entra Tenant Trial 30 dias (~30min · só se você não tem conta corporativa M365)
+
+**Quando aplicar:** você caiu em `AADSTS50020` ("user account does not exist in tenant") no Passo 3.1 porque sua conta é `live.com` / `outlook.com` / `hotmail.com`. Esta seção provisiona um tenant Entra ID novo gratuito por 30 dias, com licença de teste do Copilot Studio incluída — é o único workaround que evita comprar licença M365 corporate só para o lab.
+
+**No Portal Azure (https://portal.azure.com — login com sua conta pessoal MS):**
+
+1. Buscar **Microsoft Entra ID** na barra superior
+2. Menu lateral → **Manage tenants** → **+ Create**
+3. Selecionar **Microsoft Entra ID** (não **External ID** — esse é outro produto, para B2C / parceiros) → **Next: Configuration**
+4. Preencher:
+   - **Organization name:** `helpsphere-trial-{seu-nome}` (ex.: `helpsphere-trial-diego`)
+   - **Initial domain:** `helpsphere{rand}` (vai virar `helpsphere{rand}.onmicrosoft.com` — escolha 4-6 chars random pra evitar colisão de nome)
+   - **Country/Region:** Brasil
+5. Clique **Next: Review + Create** → **Create**
+6. Aguarde ~1-2min até banner "Tenant created successfully"
+
+<!-- screenshot: cap03-passo3.7-criar-entra-tenant-trial.png -->
+
+7. **Switch para o novo tenant:** ícone perfil (canto sup. direito) → **Switch directory** → selecione `helpsphere-trial-{seu-nome}`
+8. Você está agora no novo tenant. Pré-condição para Copilot Studio: ter um usuário admin **nativo** neste tenant (sua conta pessoal MS é só "convidada" se logou via Switch directory — não serve como admin do Copilot Studio).
+9. Menu lateral Entra → **Users** → **+ New user** → **Create new user**
+   - **User principal name:** `admin@helpsphere{rand}.onmicrosoft.com` (use o mesmo `{rand}` do passo 4)
+   - **Display name:** `Admin`
+   - **Auto-generated password** → clique **Show password** → **anote** (você vai precisar agora e o portal NÃO mostra de novo)
+   - **Assignments → Roles:** marque `Global administrator` (precisa pra ativar trial Copilot Studio + criar environments Power Platform)
+10. Clique **Create** → usuário aparece na lista após ~10s
+
+**Voltar para Copilot Studio:**
+
+11. Abrir **aba anônima / InPrivate** (não no perfil normal — cookie de sessão da conta pessoal MS interfere) → `https://copilotstudio.microsoft.com`
+12. Login com `admin@helpsphere{rand}.onmicrosoft.com` + senha do passo 9
+13. **Trocar senha no primeiro login** (obrigatório pelo Entra). Anote a nova senha em local seguro.
+14. Aceite o prompt **Start free trial** quando aparecer (Copilot Studio Trial 30d ativa automaticamente em tenant novo)
+15. Você está dentro do Copilot Studio do novo tenant. **Volte ao Passo 3.1** deste capítulo e siga normal a partir dali (selecionar / criar Development environment).
+
+<!-- screenshot: cap03-passo3.7-copilot-studio-tenant-novo-logado.png -->
+
+> **Custo:** R$ 0 — Entra ID trial é gratuito por 30 dias. Copilot Studio licença de teste vem inclusa. **Atenção:** após 30 dias o tenant entra em "grace period" + bloqueio progressivo de recursos. Conclua o lab antes disso ou converta para tenant pago em Entra → **Manage tenants** → **Edit** (cobra ~US$ 6/usuário/mês a partir da conversão).
+
+> **Nota pedagógica — por que `live.com` não funciona em Copilot Studio?** Power Platform (família onde Copilot Studio mora) foi desenhado para B2B / corporate, não consumer. Conta pessoal MS (`live.com` / `outlook.com` / `hotmail.com`) não tem o conceito de "tenant" — é só uma identidade flutuante no Microsoft Account directory. Copilot Studio precisa de tenant para licenciamento (atrelar trial), ALM (Solutions, environments segregados Dev/Test/Prod), e governance (DLP policies, Power Platform CoE). É decisão arquitetural deliberada da Microsoft, não bug. **Pattern correto em produção:** sempre fluxos B2B/corporate rodam em tenant dedicado, mesmo para PoC.
+
+> **Nota pedagógica — por que aba anônima / InPrivate no passo 11?** O navegador armazena cookie de sessão Microsoft que prefere sua conta pessoal MS — se você clicar em `copilotstudio.microsoft.com` no perfil normal, ele tenta logar com `live.com` de novo e cai em `AADSTS50020`. Janela anônima força login limpo do zero. Alternativa: usar **perfil de browser separado** (Chrome Profile, Edge Profile) só para o tenant trial. **Em produção corporate:** desktops corporativos vêm com cookie de tenant já gravado — esse problema não acontece. É só dor de lab/dev local.
+
+> **Cleanup pós-lab:** depois de concluir todos os 9 capítulos, vá em Entra → **Manage tenants** → selecione `helpsphere-trial-{seu-nome}` → **Delete tenant**. Confirma deletando todos os usuários internos primeiro (Users → seleciona Admin → Delete). Trial expirado também pode ser deletado direto sem custo.
+
+---
+
 ## Validação end-to-end
 
 Não há `az` CLI para Copilot Studio (Power Platform tem `pac` CLI mas com cobertura parcial). Validação é **visual + funcional via Test panel**:
@@ -323,13 +372,14 @@ customEvents
 [ ] Canal Microsoft Teams provisionado via Test in Teams
 [ ] Smoke test "bom dia" no Teams retorna saudação determinística
 [ ] Smoke test "problema no ticket X" dispara Resolver_ticket e cai no placeholder
+[ ] (Condicional) Passo 3.7 executado: se caiu em AADSTS50020, tenant trial `helpsphere-trial-<seu-nome>` provisionado + admin nativo + Copilot Studio acessado em aba anônima
 ```
 
 ---
 
 ## Surpresas pedagógicas (capturadas em smoke runs)
 
-- ⚠️ **Conta `live.com` rejeitada — só workaround real é tenant developer M365** — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-2** para causa-raiz, mensagem de erro completa e workaround único (tenant dev M365 90d renováveis).
+- ⚠️ **Conta `live.com` rejeitada com `AADSTS50020`** — causa: Copilot Studio só aceita identidade de tenant Entra (corporativa ou trial), nunca conta pessoal MS (`live.com` / `outlook.com` / `hotmail.com`). Workaround único: provisionar tenant Entra ID trial 30 dias gratuito + admin nativo (passo-a-passo no [Passo 3.7 deste capítulo](#passo-37--fallback-entra-tenant-trial-30-dias--30min--só-se-você-não-tem-conta-corporativa-m365)). Veja também [`_disclaimers.md`](./_disclaimers.md) **AMB-2** para o contexto consolidado entre capítulos.
 - ⚠️ **Default environment compartilha permissões com TODO o tenant** — em tenant corporate, qualquer colega com licença Power Platform pode editar/deletar seu agent acidentalmente se você criar em Default. Sintoma: agent some de um dia pro outro, ninguém assume autoria. Workaround: sempre criar em environment Development isolado (Power Platform Admin Center → New → type Developer). **Anti-pattern:** ignorar warning de environment achando que "depois eu mudo" — não dá pra mover agent entre environments sem export/import manual.
 - ⚠️ **Language mudada após criação quebra Topics declarativos** — se você cria agent com Language `English (US)` e depois muda para `Portuguese (Brazil)` em Settings, Topics existentes com `Trigger phrases` em pt-BR (`oi`, `olá`) param de matchar. Causa: orchestrator usa Language para tokenização/stemming de trigger phrases. Workaround: **decida Language no momento da criação** — replanejar é doloroso (deletar/recriar topics). Documentar em runbook do time.
 - ⚠️ **Generative AI mode `Classic` em alguns tenants é o default — surpresa silenciosa** — em tenants antigos ou com policy CoE, o agent vem com Mode = `Classic`. Sintoma: topic `Resolver_ticket` description-based **nunca dispara** (Classic não usa Description). Workaround: sempre confirmar Mode = `Generative (free-flowing)` no Passo 3.3 antes de criar topics description-based. Verificar via Settings → Generative AI no header.
@@ -337,7 +387,7 @@ customEvents
 - ⚠️ **Description-based topic com descrição vaga dispara em casos errados** — ex.: descrição "Use para tickets" faz orchestrator disparar `Resolver_ticket` em qualquer mensagem com a palavra "ticket" (incluindo "tickets de show"). Causa: GPT-4o orchestrator interpreta literalmente. Workaround: descrição em 1-3 frases com **inclui** + **não use para**. Iterar com base em telemetria real (Analytics → Topic insights). **Nunca hardcode topic em produção sem ver primeiras 50 conversas reais.**
 - ⚠️ **Trial 30 dias começa no primeiro acesso, não no signup** — se você fez signup há 60 dias mas só agora abriu Copilot Studio, o Trial está rodando há 30 dias e expira **imediatamente**. Causa: política Microsoft de ativação por uso. Workaround: confirmar dias restantes em Power Platform Admin Center → Licenses → Copilot Studio Trial → coluna "Expires". Se < 7 dias, planejar migração de licença ou cleanup antes de continuar lab.
 - ⚠️ **Action placeholder gera banner amarelo persistente em Topics** — após criar `CallFoundryAgent` como placeholder no Passo 3.5, o canvas fica com warning "Action not yet configured" amarelo. Isso é **esperado** até Capítulo 08 (wiring final). **Anti-pattern:** alguns alunos deletam o node "para limpar warning" e quebram o flow do topic — depois precisam recriar. Mantenha o placeholder até o Cap 08 fechar.
-- ⚠️ **Topic name com hífen ou espaço quebra exportação para Solution** — Power Platform tolera espaço no Maker UI mas falha em export/import (`Resolver Ticket` vira erro `Invalid logical name`). Convenção da disciplina: snake_case ou PascalCase sem hífen (`Saudacao_inicial`, `ResolverTicket`). Workaround: renomear antes de exportar — Maker UI permite rename mas precisa atualizar referências cross-topic manualmente. **Em produção sempre snake_case desde o início.**
+- ⚠️ **Topic name com hífen ou espaço quebra exportação para Solution** — Power Platform tolera espaço no Maker UI mas falha em export/import (`Resolver Ticket` vira erro `Invalid logical name`). Convenção deste lab: snake_case ou PascalCase sem hífen (`Saudacao_inicial`, `ResolverTicket`). Workaround: renomear antes de exportar — Maker UI permite rename mas precisa atualizar referências cross-topic manualmente. **Em produção sempre snake_case desde o início.**
 - ⚠️ **Trial Copilot Studio + Tenant Dev M365 podem colidir em conta única** — se você usa a mesma conta Microsoft para múltiplos tenants (ex.: corporate `@empresa.com` e dev `@meunome.onmicrosoft.com`), Copilot Studio pode abrir no tenant errado e mostrar "no environments". Causa: cookie de sessão M365 multi-tenant. Workaround: abrir Copilot Studio em **janela anônima/incognito** + login explícito com a conta dev, OU usar perfil de browser separado. Verificar tenant ativo no header (canto superior direito mostra `<conta>@<tenant>`).
 
 ---
@@ -346,7 +396,7 @@ customEvents
 
 | Sintoma | Causa provável | Fix |
 |---|---|---|
-| `Your account doesn't have access to Copilot Studio` | Conta MSA pessoal (`live.com`) — ver AMB-2 em [`_disclaimers.md`](./_disclaimers.md) | Criar tenant dev M365 em developer.microsoft.com |
+| `AADSTS50020` ou `Your account doesn't have access to Copilot Studio` | Conta MSA pessoal (`live.com` / `outlook.com` / `hotmail.com`) — não tem tenant Entra | Executar **Passo 3.7 — Fallback Entra Tenant Trial** deste capítulo (~30min, R$ 0) |
 | Agent não aparece em Topics → Resolver_ticket nunca dispara | Mode = `Classic` (não Generative) | Settings → Generative AI → mudar para `Generative (free-flowing)` |
 | Test panel responde em inglês mesmo com Language pt-BR | Cache do Maker UI pós-mudança de Language | Recarregar página com Ctrl+Shift+R |
 | `+ Add channel` em Teams retorna erro `Tenant policy denies bot installation` | Tenant corporate com Bot Framework policy | Trocar para tenant dev M365 OU pedir Tenant Admin ajuste |
