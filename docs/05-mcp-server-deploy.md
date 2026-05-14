@@ -2,29 +2,34 @@
 
 > **Objetivo:** buildar a imagem `mcp-helpsphere:v1` via **ACR Tasks remoto**, criar **2 App Registrations** (server `app-mcp-helpsphere-server` com 3 scopes + client `app-mcp-helpsphere-client` com client secret), deployar Container App `ca-mcp-helpsphere` no `cae-helpsphere-final` com a Managed Identity `mi-helpsphere-ia` puxando do ACR, capturar o **`MCP_SERVER_URL` canônico** consumido pelo agente Foundry, validar via `tools/list` + `tools/call get_ticket` autenticado com Bearer token Entra OAuth, e atualizar o `.env` do `agent-code/` para destrancar as 3 tools que estavam em placeholder.
 >
-> **Tempo:** 90-120 min (60-75 min se `acrhelpsphere<rand>` + `cae-helpsphere-final` + `mi-helpsphere-ia` já estão prontos do capítulo anterior — caminho normal)
+> **Tempo:** 100-130 min (este capítulo agora também cria o **ACA Environment `cae-helpsphere-final`** e cravo **RBAC AcrPull** — movidos do Cap 02 na Story 06.27 porque o Portal Azure não permite criar ACA Environment standalone)
 
 ---
 
 ## Pré-requisitos
 
-- ✅ RG `rg-lab-final` provisionado com ACR `acrhelpsphere<rand>` (Basic), ACA Environment `cae-helpsphere-final` e role `AcrPull` cravado em `mi-helpsphere-ia` no scope do ACR
+- ✅ RG `rg-lab-final` provisionado com ACR `acrhelpsphere<rand>` (Basic) do Cap 02
+- ✅ Managed Identity `mi-helpsphere-ia` existe no RG `rg-lab-intermediario` (provisionada previamente no Lab Intermediário)
+- ✅ Log Analytics workspace `log-helpsphere-ia` existe no RG `rg-lab-intermediario` (compartilhado, será reusado pelo ACA Environment no Passo 5.4)
+- ✅ Permissão `Contributor` + `User Access Administrator` (ou `Owner`) na sub — necessárias para criar ACA Environment + role assignment AcrPull (Passos 5.4 e 5.5)
 - ✅ Agente `helpsphere-tier1-agent` criado no Foundry com schema das 4 tools, `agent-code/.env` com `MCP_SERVER_URL="https://placeholder.azurecontainerapps.io"` e `MCP_TOKEN=""` aguardando preenchimento
-- ✅ HelpSphere SQL connection string disponível — capturada do stack SaaS: Portal → `rg-helpsphere-saas` → `sql-helpsphere-{rand}` → DB `helpsphere` → **Connection strings** → ADO.NET (autenticação SQL ou Entra com MI — ver Passo 5.4)
+- ✅ HelpSphere SQL connection string disponível — capturada do stack SaaS: Portal → `rg-helpsphere-saas` → `sql-helpsphere-{rand}` → DB `helpsphere` → **Connection strings** → ADO.NET (autenticação SQL ou Entra com MI — ver Passo 5.6)
 - ✅ Permissão para criar **App Registrations** no tenant Entra (role mínima `Application Developer` ou `Cloud Application Administrator`; `Global Administrator` resolve mas é overkill)
 - ✅ Docker Desktop 4.30+ rodando — usado **somente para inspeção local da imagem opcional**; o build oficial é remoto via `az acr build` (mais rápido + sem problema de WSL/proxy corporate)
 - ✅ `jq` instalado para parse dos curl smoke tests (`winget install jqlang.jq` no Windows · `brew install jq` no macOS · `apt install jq` no Linux/WSL) — ou use o fallback PowerShell nativo `ConvertFrom-Json` mostrado nos smoke tests
 
 > **Fallback se o stack SaaS HelpSphere não está provisionado:** se você ainda não tem `sql-helpsphere-{rand}` em `rg-helpsphere-saas`, pode rodar o MCP Server contra um SQL Database vazio só para exercitar a infra (`tools/list` + auth Entra funcionam). As tools `get_ticket`/`list_tickets` vão retornar `[]` ou erro de tabela inexistente — esperado. Para validação completa do Passo 5.7 Smoke 2, provisione o stack SaaS antes OU aponte `HELPSPHERE_SQL_CONNECTION` para qualquer SQL Database com schema mínimo (`tickets(id, title, status, category, priority, created_at)`).
 
-> **Atenção breaking — `MCP_SERVER_URL` é contrato do `agent_runner.py`:** o runner do agente Foundry já consome `os.environ["MCP_SERVER_URL"]` com fallback para `placeholder`. O **valor canônico final** que vamos cravar aqui é `https://ca-mcp-helpsphere.<rand>.<region>.azurecontainerapps.io` (formato FQDN do ACA Consumption — Azure gera o `<rand>` automaticamente). **Não invente nome próprio** — o aluno copia da Overview do Container App no Portal (Passo 5.4).
+> **Atenção breaking — `MCP_SERVER_URL` é contrato do `agent_runner.py`:** o runner do agente Foundry já consome `os.environ["MCP_SERVER_URL"]` com fallback para `placeholder`. O **valor canônico final** que vamos cravar aqui é `https://ca-mcp-helpsphere.<rand>.<region>.azurecontainerapps.io` (formato FQDN do ACA Consumption — Azure gera o `<rand>` automaticamente). **Não invente nome próprio** — o aluno copia da Overview do Container App no Portal (Passo 5.6).
 
 ---
 
-## Resumo dos 5 artefatos que vamos cravar
+## Resumo dos 7 artefatos que vamos cravar
 
 | Artefato | Implementação | Backend / Identidade | Custo (R$/mês ligado) |
 |---|---|---|---|
+| ACA Environment `cae-helpsphere-final` (Passo 5.4) | Portal/Marketplace direct link OU CLI OU inline durante criação do Container App | Workload profile Consumption, Log Analytics compartilhado | R$ 0 parado · ~R$ 0,000024/vCPU-s + R$ 0,0000028/GiB-s ativo |
+| Role Assignment `AcrPull` em `mi-helpsphere-ia` (Passo 5.5) | Portal IAM ou `az role assignment create` no scope do ACR | RBAC cross-RG (ACR em `rg-lab-final`, MI em `rg-lab-intermediario`) | R$ 0 (RBAC é gratuito) |
 | Imagem `mcp-helpsphere:v1` no ACR | `az acr build` remoto (~3-5min) | Buildado no ACR `acrhelpsphere<rand>` | R$ 0 build (incluso no Basic) · ~50 MiB armazenamento (R$ 0,03/mês) |
 | App Reg `app-mcp-helpsphere-server` | Portal Entra → 3 OAuth scopes (`tickets.read`, `tickets.write`, `kb.read`) + Application ID URI `api://mcp-helpsphere` | Tenant Entra (sem cobrança) | R$ 0 |
 | App Reg `app-mcp-helpsphere-client` | Portal Entra → client secret 90d + admin consent das 3 permissions | Tenant Entra | R$ 0 |
@@ -223,7 +228,7 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
 1. Ainda em `app-mcp-helpsphere-server` → menu lateral **Expose an API**
 2. Em **Application ID URI** clique **Add** (Portal sugere `api://{guid}`)
 3. **Edite o valor sugerido** para `api://mcp-helpsphere` → **Save**
-   - ⚠️ Se o tenant tiver policy bloqueando custom URIs, mantenha o `api://{guid}` default e cravar **esse GUID** no `EXPECTED_AUDIENCE` do Passo 5.4
+   - ⚠️ Se o tenant tiver policy bloqueando custom URIs, mantenha o `api://{guid}` default e cravar **esse GUID** no `EXPECTED_AUDIENCE` do Passo 5.6
 
 <!-- screenshot: cap05-passo5.3-application-id-uri.png -->
 
@@ -266,13 +271,140 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
 
 > **Custo:** App Registrations são **gratuitas** no Entra ID — sem cobrança por número de apps ou scopes. Cobrança aparece só com features Premium P1/P2 (Conditional Access, PIM) que **não usamos no lab**.
 
-> **Nota pedagógica — `Who can consent: Admins and users` vs `Admins only`:** "Admins and users" permite que o flow `authorization_code` (delegate) consinta sem admin. "Admins only" força admin consent obrigatório. **No lab, escolhemos "Admins and users"** porque o flow client-credentials que usaremos no Passo 5.6 **bypassa consent de usuário** mas o Portal oferece o switch independente — manter aberto não tem downside já que **a posse do client secret** é o gate real de segurança.
+> **Nota pedagógica — `Who can consent: Admins and users` vs `Admins only`:** "Admins and users" permite que o flow `authorization_code` (delegate) consinta sem admin. "Admins only" força admin consent obrigatório. **No lab, escolhemos "Admins and users"** porque o flow client-credentials que usaremos no Passo 5.8 **bypassa consent de usuário** mas o Portal oferece o switch independente — manter aberto não tem downside já que **a posse do client secret** é o gate real de segurança.
 
 > **Linux/Mac/WSL — alternativa CLI:** no bloco PowerShell acima, substitua `$Var = az ...` por `VAR=$(az ...)` e backticks (`` ` ``) por backslashes (`\`).
 
 ---
 
-## Passo 5.4 — Deploy do Container App `ca-mcp-helpsphere`
+## Passo 5.4 — Criar ACA Environment `cae-helpsphere-final`
+
+> **Nota pedagógica (Q2-2026):** o Portal Azure **não permite** criar um Container Apps Environment standalone sem associar a um Container App. Por isso fazemos a criação do Environment **junto** com o primeiro Container App (Passo 5.6) ou usando o caminho específico **"Container Apps Environments"** (plural) no Marketplace. Este passo foi movido do Cap 02 na Story 06.27.
+
+**Opção A — via Portal (caminho direto, recomendado):**
+
+1. Acesse `https://portal.azure.com/#create/Microsoft.ManagedEnvironment` (link direto pro blade do Environment standalone — sem precisar do menu Container Apps)
+2. Preencher tab **Basics:**
+   - **Subscription:** sua sub (a mesma do ACR)
+   - **Resource group:** `rg-lab-final`
+   - **Environment name:** `cae-helpsphere-final`
+   - **Region:** `East US 2`
+   - **Zone redundancy:** `Disabled` (lab — em prod ative para multi-AZ)
+3. Tab **Workload profiles:**
+   - **Workload profiles:** `Consumption only` (deixe default)
+   - ⚠️ Se aparecer `Consumption + Dedicated`, troque para `Consumption only` — Dedicated cobra ~R$ 250/mês reservados que não usaremos no lab
+4. Tab **Monitoring:**
+   - **Logs destination:** `Azure Log Analytics`
+   - **Log Analytics workspace:** clique no dropdown e selecione `log-helpsphere-ia` do RG `rg-lab-intermediario` (compartilhado)
+     - Se você não vê esse workspace na lista: **pare aqui** — o workspace não existe ou a sub está errada
+5. Tab **Networking:** deixe defaults (managed network, public ingress)
+6. Tab **Tags:** herde do RG
+7. Clique **Review + create** → **Create**
+8. Aguarde provisioning ~3-5min (tempo maior — o ACA Env provisiona infra subjacente AKS-managed) até **Status: Succeeded**
+
+<!-- screenshot: cap05-passo5.4-criar-aca-environment.png -->
+
+**Opção B — via Azure CLI (PowerShell 7 — Windows-first):**
+
+```powershell
+# Capturar customerId + sharedKey do Log Analytics existente
+$WorkspaceId = az monitor log-analytics workspace show `
+  --resource-group rg-lab-intermediario `
+  --workspace-name log-helpsphere-ia `
+  --query customerId -o tsv
+
+$WorkspaceKey = az monitor log-analytics workspace get-shared-keys `
+  --resource-group rg-lab-intermediario `
+  --workspace-name log-helpsphere-ia `
+  --query primarySharedKey -o tsv
+
+az containerapp env create `
+  --name cae-helpsphere-final `
+  --resource-group rg-lab-final `
+  --location eastus2 `
+  --logs-destination log-analytics `
+  --logs-workspace-id $WorkspaceId `
+  --logs-workspace-key $WorkspaceKey
+```
+
+> **Linux/Mac/WSL:** troque `$WorkspaceId = az ...` por `WORKSPACE_ID=$(az ...)` e `` ` `` (backtick) por `\`.
+
+**Opção C — inline durante Passo 5.6 (Create Container App):** ao escolher o Environment no dropdown do Container App, clicar **+ Create new** e preencher inline. Funciona, mas dá menos visibilidade do que aconteceu no Environment standalone.
+
+> **Custo:** ACA Environment em si = **R$ 0 parado** (sem replicas rodando = sem cobrança). Quando você deployar o MCP Server (Passo 5.6) e o workflow n8n (Cap 07), o billing vira: **R$ 0,000024/vCPU-segundo + R$ 0,0000028/GiB-segundo** apenas durante execução (scale-to-zero quando ocioso). Estimativa para o lab: ~R$ 5-10/dia ligado, ~R$ 0,50/dia ocioso.
+
+> **Nota pedagógica — por que workload profile Consumption e não Dedicated?** Consumption cobra por execução (scale-to-zero possível). Dedicated reserva vCPU/RAM 24×7 (R$ 250+/mês baseline). No lab, MCP Server e n8n ficam parados >90% do tempo → Consumption economiza ~80%. Em produção com SLA <100ms cold-start ou GPU/large-RAM, Dedicated faz sentido.
+
+> **Nota pedagógica — por que reusar Log Analytics `log-helpsphere-ia` e não criar `law-lab-final` novo?** 1 Log Analytics workspace = 1 cobrança fixa de ingestão (R$ 13/GiB) + retention. Centralizando no `log-helpsphere-ia`, todos os logs (Hub, Function App, ACA, MCP) caem no mesmo lugar → você consulta 1 query KQL e vê o trace inteiro cross-recurso. **Anti-pattern:** criar 1 workspace por RG → trace fragmentado, 5x cobrança duplicada de retention.
+
+---
+
+## Passo 5.5 — Atribuir role `AcrPull` à Managed Identity `mi-helpsphere-ia`
+
+A Managed Identity `mi-helpsphere-ia` (no RG `rg-lab-intermediario`) precisa de permissão para **pullar imagens** do ACR `acrhelpsphere<rand>` (provisionado no Cap 02). Sem isso, o deploy do MCP Server no Passo 5.6 falha com `UNAUTHORIZED: authentication required`.
+
+**No Portal Azure (caminho visual):**
+
+1. Barra superior → buscar `acrhelpsphere<rand>` → clicar no recurso
+2. Menu lateral esquerdo → **Access control (IAM)**
+3. Clique **+ Add** → **Add role assignment**
+4. Tab **Role:** busque `AcrPull` → selecione → **Next**
+5. Tab **Members:**
+   - **Assign access to:** `Managed identity`
+   - Clique **+ Select members** → no painel direito:
+     - **Subscription:** sua sub
+     - **Managed identity:** `User-assigned managed identity`
+     - Selecione `mi-helpsphere-ia` (vai aparecer com badge `rg-lab-intermediario`)
+   - **Select** → **Next**
+6. Tab **Conditions:** deixe `Constrain roles` desmarcado
+7. Tab **Review + assign** → **Review + assign** → confirme
+8. Aguarde ~30s — banner verde **"Added role assignment"**
+
+<!-- screenshot: cap05-passo5.5-acrpull-role-assignment.png -->
+
+> **Alternativa via Azure CLI (PowerShell 7 — Windows-first)** (mais robusta — recomendada porque captura IDs dinamicamente):
+>
+> ```powershell
+> # Capturar Principal ID do MI existente
+> $PrincipalId = az identity show `
+>   --name mi-helpsphere-ia `
+>   --resource-group rg-lab-intermediario `
+>   --query principalId -o tsv
+>
+> # Capturar Resource ID do ACR do Cap 02 (use $AcrName)
+> $AcrId = az acr show `
+>   --name $AcrName `
+>   --resource-group rg-lab-final `
+>   --query id -o tsv
+>
+> # Atribuir role AcrPull
+> az role assignment create `
+>   --assignee-object-id $PrincipalId `
+>   --assignee-principal-type ServicePrincipal `
+>   --role AcrPull `
+>   --scope $AcrId
+>
+> # Validar
+> az role assignment list `
+>   --assignee $PrincipalId `
+>   --scope $AcrId `
+>   --query "[].{role:roleDefinitionName, scope:scope}" -o table
+> # Esperado: 1 linha com role=AcrPull
+> ```
+>
+> **Linux/Mac/WSL:** troque `$Var = az ...` por `VAR=$(az ...)` e `` ` `` (backtick) por `\`.
+
+> **Custo:** RBAC role assignments são **gratuitos** — não há cobrança por número de roles ou scopes.
+
+> **Nota pedagógica — `--assignee-object-id` vs `--assignee`:** o flag `--assignee` aceita UPN/email/objectId mas faz **lookup no Microsoft Graph** que falha com `Insufficient privileges` se o usuário não tem permissão `Directory.Read.All`. Usar `--assignee-object-id` + `--assignee-principal-type ServicePrincipal` pula o lookup → funciona mesmo com permissões mínimas. **Cravar este pattern como default em scripts CI/CD.**
+
+> **Nota pedagógica — por que `AcrPull` e não `Contributor` no ACR?** Princípio do least-privilege. `Contributor` permite delete do registry inteiro, criar webhooks, push de imagens — o MI só precisa **ler/pull**. `AcrPull` é o role minimal exato. Em produção com auditor pelas costas, `Contributor` no ACR seria flag vermelho de compliance.
+
+> ⏱️ **Aguarde 60s** após criar o role assignment antes de prosseguir para o Passo 5.6 — RBAC leva 30-60s para propagar. Sem essa espera, o `Container App create` falha com `UNAUTHORIZED`.
+
+---
+
+## Passo 5.6 — Deploy do Container App `ca-mcp-helpsphere`
 
 **No Portal Azure:**
 
@@ -283,7 +415,7 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
    - **Resource group:** `rg-lab-final`
    - **Container app name:** `ca-mcp-helpsphere`
    - **Region:** `East US 2`
-   - **Container Apps Environment:** `cae-helpsphere-final` (já provisionado nos pré-requisitos)
+   - **Container Apps Environment:** `cae-helpsphere-final` (criado no Passo 5.4)
 4. Tab **Container:**
    - **Use quickstart image:** `Off`
    - **Image source:** `Azure Container Registry`
@@ -323,7 +455,7 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
    https://ca-mcp-helpsphere.<rand>.eastus2.azurecontainerapps.io
    ```
    (o `<rand>` é gerado pelo ACA, ex.: `politehill-1a2b3c4d`)
-3. **Copie esse valor inteiro** — é o `MCP_SERVER_URL` que vai no `.env` do `agent-code/` no Passo 5.8
+3. **Copie esse valor inteiro** — é o `MCP_SERVER_URL` que vai no `.env` do `agent-code/` no Passo 5.10
 4. **Validação visual:** ainda na blade do `ca-mcp-helpsphere`, abra **Revisions and replicas** no menu lateral → você deve ver pelo menos 1 revisão com **Running state: Running** e **Replicas: 0** (scale-to-zero ocioso, sobe pra 1 quando bater request) OU **Replicas: 1** se acabou de provisionar. Abra **Log stream** (também no menu lateral) → você verá `INFO:     Uvicorn running on http://0.0.0.0:8000` confirmando o `server.py` subindo
 4. **Endpoint MCP completo:** `${MCP_SERVER_URL}/mcp` (path `/mcp` é onde o FastMCP HTTP transport escuta)
 
@@ -381,7 +513,7 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
 
 ---
 
-## Passo 5.5 — Criar App Registration client (`app-mcp-helpsphere-client`) + Client Secret
+## Passo 5.7 — Criar App Registration client (`app-mcp-helpsphere-client`) + Client Secret
 
 **No Portal Azure:**
 
@@ -424,7 +556,7 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
 
 <!-- screenshot: cap05-passo5.5-api-permissions-granted.png -->
 
-> **Atenção breaking — Application permissions vs Delegated:** se você marcou **Delegated** por engano, o flow client-credentials do Passo 5.6 vai falhar com `AADSTS65001: The user or administrator has not consented to use the application`. Workaround: volte ao **API permissions**, **remove** as 3 delegated, **re-add** como Application. Re-grant admin consent.
+> **Atenção breaking — Application permissions vs Delegated:** se você marcou **Delegated** por engano, o flow client-credentials do Passo 5.8 vai falhar com `AADSTS65001: The user or administrator has not consented to use the application`. Workaround: volte ao **API permissions**, **remove** as 3 delegated, **re-add** como Application. Re-grant admin consent.
 
 > **Custo:** R$ 0 (App Reg + secret são gratuitos no Entra).
 
@@ -432,7 +564,7 @@ az acr repository show-tags --name "$AcrName" --repository mcp-helpsphere -o tab
 
 ---
 
-## Passo 5.6 — Obter Bearer token client-credentials (smoke)
+## Passo 5.8 — Obter Bearer token client-credentials (smoke)
 
 **No terminal local (Windows PowerShell 7):**
 
@@ -471,15 +603,15 @@ iss   : https://sts.windows.net/<TENANT_ID>/
 roles : {helpsphere.tickets.read, helpsphere.tickets.write, helpsphere.kb.read}
 ```
 
-> **Atenção troubleshooting:** se o token vier `null` ou se aparecer `AADSTS7000215: Invalid client secret`, **a causa é 99% das vezes copy-paste com espaço final** ou secret expirado. Workaround: regenere o secret no Passo 5.5 e copie com cuidado (Portal coloca um botão de copy direto — use ele). Se vier `AADSTS500011: The resource principal named api://mcp-helpsphere was not found`, falta admin consent → Passo 5.5 último item.
+> **Atenção troubleshooting:** se o token vier `null` ou se aparecer `AADSTS7000215: Invalid client secret`, **a causa é 99% das vezes copy-paste com espaço final** ou secret expirado. Workaround: regenere o secret no Passo 5.7 e copie com cuidado (Portal coloca um botão de copy direto — use ele). Se vier `AADSTS500011: The resource principal named api://mcp-helpsphere was not found`, falta admin consent → Passo 5.7 último item.
 
 > **Nota pedagógica — `roles` vs `scp` no payload do token:** Application permissions emitem o claim `roles` (array). Delegated permissions emitem `scp` (string). O middleware `auth.py` do `server.py` precisa **olhar para o claim certo** — confira que ele faz `if "roles" in payload` para o caso `client_credentials`. Anti-pattern: middleware que só olha `scp` e silenciosamente nega tudo em fluxo client-credentials.
 
 ---
 
-## Passo 5.7 — Smoke test do MCP Server (cURL `tools/list` + `tools/call`)
+## Passo 5.9 — Smoke test do MCP Server (cURL `tools/list` + `tools/call`)
 
-**No terminal local (token já capturado no Passo 5.6):**
+**No terminal local (token já capturado no Passo 5.8):**
 
 **Smoke 1 — listar tools (Windows PowerShell 7):**
 
@@ -571,7 +703,7 @@ Write-Host $HttpCode
 
 ---
 
-## Passo 5.8 — Atualizar `agent-code/.env` com `MCP_SERVER_URL` real
+## Passo 5.10 — Atualizar `agent-code/.env` com `MCP_SERVER_URL` real
 
 **No VS Code (clone local):**
 
@@ -656,6 +788,11 @@ az ad app list --filter "startswith(displayName,'app-mcp-helpsphere')" --query "
 ## Checklist final
 
 ```text
+[ ] ACA Environment cae-helpsphere-final criado em Consumption only (Passo 5.4)
+[ ] ACA Environment linkado ao Log Analytics log-helpsphere-ia (RG rg-lab-intermediario)
+[ ] Provisioning state de cae-helpsphere-final = Succeeded
+[ ] Role AcrPull atribuído à mi-helpsphere-ia no scope do ACR (Passo 5.5)
+[ ] az role assignment list confirma 1 entry de AcrPull
 [ ] Imagem mcp-helpsphere:v1 buildada via az acr build e visível em az acr repository show-tags
 [ ] App Reg app-mcp-helpsphere-server criada com Application ID URI api://mcp-helpsphere
 [ ] 3 scopes (tickets.read, tickets.write, kb.read) cravados em Expose an API
@@ -675,9 +812,15 @@ az ad app list --filter "startswith(displayName,'app-mcp-helpsphere')" --query "
 
 ## Surpresas pedagógicas (capturadas em smoke runs)
 
+- ⚠️ **Portal Azure não permite criar ACA Environment standalone (Q2-2026)** — ao tentar criar via blade "Container Apps" você é obrigado a criar um Container App junto. Workaround Story 06.27 (este capítulo): 3 opções no Passo 5.4 — (A) usar link direto Marketplace `https://portal.azure.com/#create/Microsoft.ManagedEnvironment`, (B) Azure CLI `az containerapp env create`, ou (C) inline durante criação do Container App (Passo 5.6). **Anti-pattern:** procurar "Container Apps Environment" no menu principal e desistir achando que feature foi removida.
+- ⚠️ **ACA Environment provisiona Log Analytics novo se você esquecer de selecionar o existente** — no Passo 5.4 tab **Monitoring**, se deixar **Logs destination = Azure Log Analytics** mas NÃO selecionar workspace, o Portal **silenciosamente cria** `workspace-cae-helpsphere-final<rand>` no `rg-lab-final`. Isso **fragmenta** os logs (recursos compartilhados vão pra um, Lab Final pra outro) e duplica cobrança de ingestão. Workaround: sempre selecionar `log-helpsphere-ia` explicitamente; se errou, delete o ACA Env e refaça (não dá pra trocar workspace depois de criado).
+- ⚠️ **`AcrPull` role assignment leva 30-60s para propagar** — atribui no Passo 5.5 via Portal/CLI, mas se você imediatamente rodar o Passo 5.6 `az containerapp create --image acrhelpsphere<rand>.azurecr.io/...`, pode dar `UNAUTHORIZED`. Workaround: aguarde 60s após criar o role antes de fazer pull/deploy. **Anti-pattern:** debugar erro de imagem por 20min sem perceber que é só propagação RBAC.
+- ⚠️ **`az role assignment create --assignee <upn>` falha com permissões mínimas** — o flag `--assignee` faz lookup no Microsoft Graph e exige `Directory.Read.All`. Em subs corporativas restritas, isso falha mesmo se o usuário tem `User Access Administrator`. Workaround: usar `--assignee-object-id <objectId> --assignee-principal-type ServicePrincipal` (pula o lookup — já aplicado no Passo 5.5 CLI). **Cravar pattern em todos os scripts CI/CD.**
+- ⚠️ **MI `mi-helpsphere-ia` vive em RG separado (`rg-lab-intermediario`) — não tente recriar local** — alguns alunos criam `mi-lab-final` novo no `rg-lab-final` para "simplificar". Resultado: o MI novo NÃO tem roles em Service Bus, AI Search e Speech — todas pré-cravadas no MI compartilhado. Você teria que repetir 5+ role assignments. Workaround: **sempre reusar `mi-helpsphere-ia` cross-RG**. RBAC funciona perfeitamente em escopos cruzados (já é o pattern do Passo 5.5).
+- ⚠️ **Workload profile `Consumption + Dedicated` aparece como default em algumas subs** — se você tem subs corporate com policy padrão, o Portal pode pré-selecionar Consumption + Dedicated no Passo 5.4 → cobra ~R$ 250/mês reservados mesmo com 0 apps deployados. Workaround: **explicitamente selecionar `Consumption only`** no Tab **Workload profiles**. Verificar via CLI: `az containerapp env show --query 'properties.workloadProfiles'` (deve listar apenas `Consumption`).
 - ⚠️ **`az acr build` falha com `unauthorized: authentication required` em sub corporate** — causa: tenant-policy bloqueando a Service Connection que o ACR Tasks cria temporariamente. Workaround: pedir ao tenant-admin para liberar `Microsoft.ContainerRegistry/registries/tasks/scheduledRuns/action` na sub OU fallback para build local + `docker push` (Passo 5.2 alternativa).
-- ⚠️ **`api://mcp-helpsphere` rejeitado pelo Portal com `Identifier URI is not a valid URI`** — causa: tenant tem policy de **Application Identifier URI** exigindo `api://{guid}` (não custom name). Workaround: aceitar o `api://{guid}` sugerido e cravar **esse GUID** como `EXPECTED_AUDIENCE` no env var do Container App. Atualizar também `scope=api://{guid}/.default` no Passo 5.6.
-- ⚠️ **`tools/list` retorna 200 mas `tools` vazio** — causa: `EXPECTED_AUDIENCE` no env do Container App não bate com o `aud` claim do token (typo de `api://mcp-helpsphere` vs `api://mcp-helpsphere/`). O `auth.py` rejeita silenciosamente e retorna lista vazia. Workaround: comparar `jq '.aud'` do payload do token (Passo 5.6) com `az containerapp show --query "properties.template.containers[0].env"` — devem ser **idênticos byte-a-byte** (sem trailing slash).
+- ⚠️ **`api://mcp-helpsphere` rejeitado pelo Portal com `Identifier URI is not a valid URI`** — causa: tenant tem policy de **Application Identifier URI** exigindo `api://{guid}` (não custom name). Workaround: aceitar o `api://{guid}` sugerido e cravar **esse GUID** como `EXPECTED_AUDIENCE` no env var do Container App. Atualizar também `scope=api://{guid}/.default` no Passo 5.8.
+- ⚠️ **`tools/list` retorna 200 mas `tools` vazio** — causa: `EXPECTED_AUDIENCE` no env do Container App não bate com o `aud` claim do token (typo de `api://mcp-helpsphere` vs `api://mcp-helpsphere/`). O `auth.py` rejeita silenciosamente e retorna lista vazia. Workaround: comparar `jq '.aud'` do payload do token (Passo 5.8) com `az containerapp show --query "properties.template.containers[0].env"` — devem ser **idênticos byte-a-byte** (sem trailing slash).
 - ⚠️ **Container App em `Provisioning` infinito (>10min)** — causa típica: imagem do ACR não pulla porque o `--registry-identity` foi setado mas o role `AcrPull` não propagou ainda. Sintoma: `az containerapp logs show` mostra `failed to authenticate to registry`. Workaround: aguardar 60s após criar o `AcrPull` no scope do ACR; se passou de 5min ainda falhando, deletar o Container App, esperar mais 60s e re-criar.
 - ⚠️ **`AADSTS500011: The resource principal named api://mcp-helpsphere was not found`** ao pegar token — causa: server App Reg foi criada mas **Application ID URI não foi salvo** (botão Save em Expose an API esquecido). Workaround: voltar ao Passo 5.3 → **Expose an API** → confirmar que `api://mcp-helpsphere` aparece no topo (não vazio).
 - ⚠️ **Application permissions exigem admin consent — User pode marcar mas não conceder** — em tenants com restrições, "Grant admin consent" fica cinza para usuários sem `Cloud Application Administrator`. Workaround: peça ao tenant-admin para abrir a página `app-mcp-helpsphere-client` → API permissions → clicar Grant admin consent. Sem esse step, token sai mas `roles` vem vazio → 403 no MCP.
@@ -690,11 +833,15 @@ az ad app list --filter "startswith(displayName,'app-mcp-helpsphere')" --query "
 
 | Sintoma | Causa provável | Fix |
 |---|---|---|
+| ACA Env stuck em `Provisioning` >10min (Passo 5.4) | Quota regional esgotada (raro em East US 2) | Trocar para `eastus` ou `southcentralus` no `--location` |
+| Log Analytics workspace não aparece no dropdown (Passo 5.4) | Workspace está em outra sub OU sem permissão `Microsoft.OperationalInsights/workspaces/sharedKeys/action` | Validar com `az monitor log-analytics workspace show -g rg-lab-intermediario -n log-helpsphere-ia` |
+| `Insufficient privileges to complete the operation` no role assignment (Passo 5.5) | Falta `User Access Administrator` ou `Owner` na sub | Solicitar elevação ou usar conta com Owner |
+| `UNAUTHORIZED: authentication required` ao pull do ACR (Passo 5.6) | Role `AcrPull` não propagado ainda (~30-60s) OU MI errado | Aguardar 60s pós-Passo 5.5; `az role assignment list --assignee <principalId>` confirma |
 | `az acr build` trava em "Queued" >5min | Quota regional ACR Tasks esgotada (raro) | Trocar região do ACR para outra próxima OU aguardar 10min |
 | `401 Unauthorized` no curl com Bearer válido | `EXPECTED_AUDIENCE` env != `aud` do token | Comparar exato (com/sem trailing slash) |
-| `403 Forbidden` no curl com 200 OK em `tools/list` | Falta `roles` no token (admin consent) | Passo 5.5 último item — Grant admin consent |
+| `403 Forbidden` no curl com 200 OK em `tools/list` | Falta `roles` no token (admin consent) | Passo 5.7 último item — Grant admin consent |
 | `pyodbc.OperationalError: Login failed` nos logs | `HELPSPHERE_SQL_CONNECTION` malformada ou IP do ACA bloqueado no SQL firewall | Add regra `0.0.0.0/0` temporária no SQL OU configurar VNet |
-| `MCP_TOKEN` vence durante demo da aula | TTL 1h client-credentials | Re-rodar Passo 5.6, atualizar `.env`, re-rodar smoke |
+| `MCP_TOKEN` vence durante demo da aula | TTL 1h client-credentials | Re-rodar Passo 5.8, atualizar `.env`, re-rodar smoke |
 | `Cannot find image acrhelpsphere<rand>.azurecr.io/mcp-helpsphere:v1` | MI sem `AcrPull` propagado ainda | Aguardar 60s após criar o role assignment; `az role assignment list --assignee <principalId>` confirma |
 | Container App `Failed` com `Internal Server Error` na primeira request | `requirements.txt` faltou `cryptography` (PyJWT signature) | Re-build (`az acr build`) com `cryptography>=42.0.0` adicionado |
 

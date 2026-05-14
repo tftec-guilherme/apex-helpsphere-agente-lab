@@ -10,7 +10,7 @@
 
 ## Pré-requisitos
 
-- ✅ Capítulo 02 concluído — RG `rg-lab-final` existe, ACR `acrhelpsphere{rand}` e ACA Environment `cae-helpsphere-final` provisionados
+- ✅ Capítulo 02 concluído — RG `rg-lab-final` existe e ACR `acrhelpsphere{rand}` provisionado (o ACA Environment `cae-helpsphere-final` será criado depois no Cap 05 Passo 5.4)
 - ✅ Capítulo 03 concluído — Copilot Studio agent `cps-helpsphere-tier1` criado (será integrado ao agent Foundry no final do Capítulo 08)
 - ✅ Foundry Hub `aifhub-apex-prod` existindo na sua subscription, no RG `rg-lab-intermediario` (se não existe, provisione um Hub vazio no portal `https://ai.azure.com` antes de seguir)
 - ✅ RAG Function App `func-helpsphere-rag-{rand}` deployada e funcional no `rg-lab-intermediario` (precisamos da `RAG_FUNCTION_URL` para a tool `search_kb`)
