@@ -83,10 +83,38 @@
 
 ---
 
+## SUR-CS-Q2-2026 — Copilot Studio UI Q2-2026 (Generative AI mode + Knowledge sources)
+
+> [!NOTE] **SUR-CS-Q2-2026 — Copilot Studio Maker mudou: Settings header (⚙️), auto-persist, novo agente já nasce Generative**
+>
+> **Categoria:** UI / Pedagogia
+> **Severidade:** MEDIUM (confunde aluno na hora de configurar, não bloqueia conclusão do lab)
+> **Capítulos afetados:** `00-Lab_Final_Agente_Workflow_Guia_Portal.md` Passo 2.2 + `03-copilot-studio-setup.md` Passo 3.3.
+>
+> **TL;DR:** UI do Copilot Studio Maker mudou em Q2-2026 vs versões anteriores. Aluno procura "Menu lateral → Generative AI" + botão "Save" e não encontra.
+>
+> **Sintoma:** aluno trava no Passo 2.2 / 3.3 procurando entry no menu lateral ou botão Save. Pode achar que "tela está bugada".
+>
+> **Causa raiz (3 mudanças Q2-2026):**
+> 1. Configurações de Generative AI migraram do menu lateral para **Settings header (⚙️)** (ou card "Generative AI" na home do agente).
+> 2. **Não há mais botão Save** nessa tela — mudanças persistem automaticamente ao sair da página (Topics ainda mantêm Save explícito; só a tela de Generative AI mudou).
+> 3. **Novos agentes Q2-2026 já nascem em modo Generative por default** — o passo é mais confirmação que configuração. Apenas tenants legacy/CoE policy ainda criam agentes em modo Classic.
+>
+> **Mudança adicional importante:** UI antiga misturava "Knowledge sources" com "Tools/Plugins" na mesma tela; Q2-2026 ainda exibe Knowledge sources em Generative AI, mas a integração com Foundry Agent acontece via **Tools/Plugins** (não Knowledge sources). Este lab mantém Knowledge sources **vazio** propositalmente — RAG vive no Foundry Agent (Parte 3 + MCP Parte 4), não no Copilot Studio nativo.
+>
+> **Fix adotado:** Passo 2.2 (guia consolidado) e Passo 3.3 (Cap 03) reescritos em **3-4 sub-passos** com (a) caminho atual Settings ⚙️ + alternativa via card "Generative AI" na home, (b) nota explícita sobre default Generative, (c) Knowledge sources vazio + justificativa Foundry-as-Tool, (d) persistência automática sem botão Save.
+>
+> **Onde aparece:** `00-Lab_Final_Agente_Workflow_Guia_Portal.md` Passo 2.2, `03-copilot-studio-setup.md` Passo 3.3 + Surpresa #4 + Troubleshooting.
+>
+> **Lição:** UI do Copilot Studio muda rápido (3-4 releases/ano) — re-validar a cada 6 meses. Sempre versionar com tag de quarter (Q2-2026, Q3-2026) e cravar como surpresa quando UI mudar.
+
+---
+
 ## Histórico de mudanças
 
 | Data | Versão | Mudança | Origem |
 |---|---|---|---|
+| 2026-05-14 | Q2-2026 | SUR-CS-Q2-2026 adicionada — UI Copilot Studio mudou (Settings ⚙️ header, auto-persist, default Generative) | Story 06.28 |
 | 2026-05-09 | Q2-2026 | Arquivo cravado consolidando AMB-1 a AMB-4 (drift fix sessão noturna 2026-05-09) | @aiox-master sessão close-the-day |
 
 ---

@@ -28,7 +28,7 @@
 |---|---|---|---|
 | Trial + Environment | Licenciamento | `Development` (não `Default`) | Passo 3.1 |
 | `HelpSphere Tier 1 Agent` | Agent (copilot) | Language `Portuguese (Brazil)` + system prompt 5 regras | Passo 3.2 |
-| Generative AI mode | Setting | `Generative (free-flowing)` | Passo 3.3 |
+| Generative AI mode | Setting | `Generative (free-flowing)` — Q2-2026 já é default em agentes novos; passo é confirmação | Passo 3.3 |
 | Topic `Saudacao_inicial` | Declarativo (5 trigger phrases) | Send a message inicial | Passo 3.4 |
 | Topic `Resolver_ticket` | Description-based (Generative AI decide) | Ask question → **placeholder** Call an action | Passo 3.5 |
 | Canal Microsoft Teams | Channel | **Test in Teams** (sem Tenant Admin) | Passo 3.6 (após Parte 3 do guia canônico) |
@@ -143,17 +143,40 @@ Antes de tocar Copilot Studio, valide 2 coisas que matam 80% dos labs com erro "
 
 ---
 
-## Passo 3.3 — Habilitar Generative AI mode (free-flowing)
+## Passo 3.3 — Confirmar Generative AI mode (free-flowing) + Knowledge sources vazio
+
+> **Nota Q2-2026:** a UI do Copilot Studio Maker mudou. Configurações de Generative AI saíram do **menu lateral** e foram para **Settings (⚙️ header)**. Além disso, **novos agentes Q2-2026 já nascem em modo Generative por default** — este passo é mais **confirmação** que configuração. Tenants antigos podem ainda exibir Mode = `Classic` (cenário de drift); por isso vale confirmar. Ver Surpresa #4 abaixo + `_disclaimers.md` SUR-CS-Q2-2026.
 
 **No Copilot Studio Maker — agente aberto no canvas:**
 
-1. Menu lateral esquerdo → **Generative AI** (ou clique em **Settings** no header → tab **Generative AI** dependendo da versão)
-2. Localize a seção **Orchestration** ou **Mode**:
-   - **Mode:** mude de `Classic` (default em alguns tenants) para `Generative (free-flowing)`
-   - Banner amarelo aparece confirmando "Topics will be triggered by AI based on description"
-3. **Knowledge sources:** **deixe vazio** neste capítulo. Vamos popular via MCP no Capítulo 05 (a tool `search_kb` no Capítulo 04 chama RAG diretamente — Knowledge sources nativas do Copilot Studio não são usadas neste lab, é decisão arquitetural)
-4. **Content moderation:** mantenha default (`Medium` — content filter padrão)
-5. Clique **Save** (header)
+### Sub-passo 3.3.1 — Confirmar modo Generative
+
+1. Header do agente → ícone **⚙️ Settings** (ou menu **...** → **Settings**)
+2. Tab **Generative AI** → seção **Generative answers** (ou **Orchestration**, depende da versão UI)
+3. Verificar:
+   - ✅ **"Allow the AI to use general knowledge"** = ligado (= Generative free-flowing)
+   - ❌ **"Only respond when a topic matches"** = desligado (= NÃO Classic)
+4. Caminho alternativo se não encontrar via Settings: home do agente → card **Generative AI** → **Configure**
+
+> Em tenants antigos ou com policy CoE legacy, o agente pode vir com Mode = `Classic` (anti-pattern silencioso — ver Surpresa #4). Se for esse o caso, vire o toggle para Generative e prossiga.
+
+### Sub-passo 3.3.2 — Confirmar Knowledge sources vazio
+
+Na mesma página de Generative AI (ou em **Knowledge** no menu lateral — varia por versão):
+
+1. Localize a seção **Knowledge sources**
+2. **Deixe TODOS os toggles desligados / lista vazia.** Vamos popular via MCP no Capítulo 05 (a tool `search_kb` do Capítulo 04 chama RAG diretamente — Knowledge sources nativas do Copilot Studio **não** são usadas neste lab, é decisão arquitetural — ver nota pedagógica abaixo).
+
+### Sub-passo 3.3.3 — Content moderation (opcional)
+
+> [!NOTE] Em algumas versões UI Q2-2026 essa entrada migrou para outro tab; se não encontrar **Content moderation** em Generative AI, procure em **Settings → Security** ou pule (default `Medium` já está aplicado).
+
+1. Se a entry existir, mantenha default (`Medium` — content filter padrão)
+2. Não precisa mudar nada para o lab
+
+### Sub-passo 3.3.4 — Persistência (não há "Save")
+
+Mudanças em Settings/Generative AI do Copilot Studio Q2-2026 **persistem automaticamente** quando você sai da página. Não procure botão "Save" nesta tela — ele não existe (diferente de Topics, onde Save explícito no header continua valendo).
 
 <!-- screenshot: cap03-passo3.3-generative-ai-mode.png -->
 
@@ -326,7 +349,8 @@ Agent → menu Topics → lista deve mostrar:
 - + outros topics System (Conversation Start, End, Fallback) — auto-criados
 
 # 3. Confirmar Generative AI mode
-Agent → menu Generative AI → Mode = "Generative (free-flowing)"
+Agent → Settings (⚙️ header) → tab Generative AI → "Allow the AI to use general knowledge" ligado
+# (Q2-2026: caminho mudou de "menu lateral → Generative AI" para "Settings ⚙️ header")
 
 # 4. Confirmar canal Teams
 Agent → menu Channels → Microsoft Teams → status "Available"
@@ -382,7 +406,7 @@ customEvents
 - ⚠️ **Conta `live.com` rejeitada com `AADSTS50020`** — causa: Copilot Studio só aceita identidade de tenant Entra (corporativa ou trial), nunca conta pessoal MS (`live.com` / `outlook.com` / `hotmail.com`). Workaround único: provisionar tenant Entra ID trial 30 dias gratuito + admin nativo (passo-a-passo no [Passo 3.7 deste capítulo](#passo-37--fallback-entra-tenant-trial-30-dias--30min--só-se-você-não-tem-conta-corporativa-m365)). Veja também [`_disclaimers.md`](./_disclaimers.md) **AMB-2** para o contexto consolidado entre capítulos.
 - ⚠️ **Default environment compartilha permissões com TODO o tenant** — em tenant corporate, qualquer colega com licença Power Platform pode editar/deletar seu agent acidentalmente se você criar em Default. Sintoma: agent some de um dia pro outro, ninguém assume autoria. Workaround: sempre criar em environment Development isolado (Power Platform Admin Center → New → type Developer). **Anti-pattern:** ignorar warning de environment achando que "depois eu mudo" — não dá pra mover agent entre environments sem export/import manual.
 - ⚠️ **Language mudada após criação quebra Topics declarativos** — se você cria agent com Language `English (US)` e depois muda para `Portuguese (Brazil)` em Settings, Topics existentes com `Trigger phrases` em pt-BR (`oi`, `olá`) param de matchar. Causa: orchestrator usa Language para tokenização/stemming de trigger phrases. Workaround: **decida Language no momento da criação** — replanejar é doloroso (deletar/recriar topics). Documentar em runbook do time.
-- ⚠️ **Generative AI mode `Classic` em alguns tenants é o default — surpresa silenciosa** — em tenants antigos ou com policy CoE, o agent vem com Mode = `Classic`. Sintoma: topic `Resolver_ticket` description-based **nunca dispara** (Classic não usa Description). Workaround: sempre confirmar Mode = `Generative (free-flowing)` no Passo 3.3 antes de criar topics description-based. Verificar via Settings → Generative AI no header.
+- ⚠️ **Generative AI mode `Classic` em alguns tenants é o default — surpresa silenciosa (Q2-2026: só tenants legacy)** — Q2-2026 mudou o default para Generative em agentes novos, mas tenants antigos ou com policy CoE legacy ainda nascem com Mode = `Classic`. Sintoma: topic `Resolver_ticket` description-based **nunca dispara** (Classic não usa Description). Workaround: sempre confirmar Mode = `Generative (free-flowing)` no Passo 3.3 antes de criar topics description-based. Verificar via **Settings (⚙️ header) → Generative AI** (não mais via menu lateral — a entry migrou em Q2-2026).
 - ⚠️ **`Test in Teams` instala bot pessoal, mas notificações ficam mudas até reload** — após Add channel + Open in Teams, o bot aparece no chat mas a primeira mensagem pode não receber resposta. Causa: caching do Teams web/desktop não pegou novo bot ainda. Workaround: feche Teams (Ctrl+Q no desktop) e reabra, ou hard-refresh `Ctrl+Shift+R` no Teams web. Aguarde 60-120s após Add channel.
 - ⚠️ **Description-based topic com descrição vaga dispara em casos errados** — ex.: descrição "Use para tickets" faz orchestrator disparar `Resolver_ticket` em qualquer mensagem com a palavra "ticket" (incluindo "tickets de show"). Causa: GPT-4o orchestrator interpreta literalmente. Workaround: descrição em 1-3 frases com **inclui** + **não use para**. Iterar com base em telemetria real (Analytics → Topic insights). **Nunca hardcode topic em produção sem ver primeiras 50 conversas reais.**
 - ⚠️ **Trial 30 dias começa no primeiro acesso, não no signup** — se você fez signup há 60 dias mas só agora abriu Copilot Studio, o Trial está rodando há 30 dias e expira **imediatamente**. Causa: política Microsoft de ativação por uso. Workaround: confirmar dias restantes em Power Platform Admin Center → Licenses → Copilot Studio Trial → coluna "Expires". Se < 7 dias, planejar migração de licença ou cleanup antes de continuar lab.
@@ -397,7 +421,7 @@ customEvents
 | Sintoma | Causa provável | Fix |
 |---|---|---|
 | `AADSTS50020` ou `Your account doesn't have access to Copilot Studio` | Conta MSA pessoal (`live.com` / `outlook.com` / `hotmail.com`) — não tem tenant Entra | Executar **Passo 3.7 — Fallback Entra Tenant Trial** deste capítulo (~30min, R$ 0) |
-| Agent não aparece em Topics → Resolver_ticket nunca dispara | Mode = `Classic` (não Generative) | Settings → Generative AI → mudar para `Generative (free-flowing)` |
+| Agent não aparece em Topics → Resolver_ticket nunca dispara | Mode = `Classic` (não Generative — só em tenants legacy Q2-2026) | **Settings ⚙️ (header) → Generative AI** → ativar "Allow the AI to use general knowledge" / desativar "Only respond when a topic matches" (auto-persist, sem botão Save) |
 | Test panel responde em inglês mesmo com Language pt-BR | Cache do Maker UI pós-mudança de Language | Recarregar página com Ctrl+Shift+R |
 | `+ Add channel` em Teams retorna erro `Tenant policy denies bot installation` | Tenant corporate com Bot Framework policy | Trocar para tenant dev M365 OU pedir Tenant Admin ajuste |
 | Saudação aparece com texto improvisado em vez do literal | Topic Saudacao_inicial não foi salvo OU Trigger phrases vazias | Topics → Saudacao_inicial → confirmar 5 phrases + Save |
