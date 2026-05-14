@@ -291,16 +291,39 @@ Copilot Studio é Power Platform, com licenciamento separado do Azure. Para esta
 
 > **Atenção licença:** Copilot Studio Trial é gratuito 30 dias. Após trial, cobrança ~R$ 90/usuário/mês (Premium) ou pay-as-you-go por mensagem.
 
-## Passo 2.2 — Configurar Generative AI mode
+## Passo 2.2 — Confirmar Generative mode + Knowledge sources
 
-**No Copilot Studio Maker — agente aberto no canvas:**
+> **Nota Q2-2026:** novos agentes do Copilot Studio já nascem em **modo Generative por default**. Esse passo é mais **confirmação** do que configuração — provavelmente já está OK.
 
-1. Menu lateral → **Generative AI** (ou **Agent settings** → tab **Generative AI**)
-2. **Mode:** selecionar `Generative (free-flowing)` — agente improvisa fora de Topics
-3. **Knowledge sources:** vamos adicionar o Foundry Agent (criado na Parte 3) como tool. Por enquanto, deixar vazio.
-4. **Save**
+**No Copilot Studio Maker (agente aberto):**
+
+### Sub-passo 2.2.1 — Confirmar modo Generative
+
+1. Header do agente → ícone **⚙️ Settings** (ou menu **...** → **Settings**)
+2. Tab **Generative AI** → seção **"Generative answers"**
+3. Verificar:
+   - ✅ **"Allow the AI to use general knowledge"** = ligado (= modo Generative free-flowing)
+   - ❌ **"Only respond when a topic matches"** = desligado (= NÃO modo Classic)
+4. Caminho alternativo: página inicial do agente → card **"Generative AI"** → **Configure**
+
+> Se ambos switches já estão como descrito acima, **não há nada a fazer aqui** — pule pra 2.2.2.
+
+### Sub-passo 2.2.2 — Confirmar Knowledge sources VAZIO
+
+Na mesma página de Generative AI (ou em **Knowledge** no menu lateral, depende da versão UI):
+
+1. Localize a seção **"Knowledge sources"**
+2. **Deixe TODOS os toggles desligados / lista vazia.**
+
+> **Por que vazio?** O conhecimento técnico do HelpSphere virá via **Foundry Agent como Tool/Plugin** (Parte 3 + Parte 4 MCP) — não como knowledge source nativo do Copilot Studio. Misturar os 2 mecanismos confunde o routing do agente.
+
+### Sub-passo 2.2.3 — Persistência (não há "Save")
+
+Mudanças em Settings / Generative AI do Copilot Studio Q2-2026 **persistem automaticamente** quando você sai da página. Não procure botão "Save" — não existe mais nessa tela (diferente de Topics, que ainda têm Save explícito).
 
 <!-- screenshot: passo-2.2-generative-ai-mode.png -->
+
+> **Surpresa Q2-2026 catalogada:** UI anterior tinha "Menu lateral → Generative AI" + botão Save explícito. Atual usa **Settings header (⚙️) → Generative AI** + auto-persist. Ver `docs/_disclaimers.md`.
 
 ## Passo 2.3 — Criar Topic estruturado para "Saudação"
 

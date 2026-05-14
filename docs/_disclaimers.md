@@ -83,10 +83,38 @@
 
 ---
 
+## SUR-CS-Q2-2026 — Copilot Studio UI Generative AI mode + Knowledge sources
+
+**Categoria:** UI / Pedagogia
+**Severidade:** MEDIUM (confunde aluno, não bloqueia execução)
+**Capítulos afetados:** `00-Lab_Final_Agente_Workflow_Guia_Portal.md` Passo 2.2 + `03-copilot-studio-setup.md` Passo 3.3
+
+**Contexto:** UI do Copilot Studio Maker mudou em Q2-2026 vs versões anteriores.
+
+**Sintomas:**
+- Aluno procura "Menu lateral → Generative AI" e não encontra (migrou pra Settings ⚙️ header ou card na home)
+- Aluno procura botão "Save" e não encontra (mudanças auto-persistem)
+- Aluno confunde Knowledge sources com onde adicionar o Foundry Agent (Foundry vai como Tool, NÃO como Knowledge source)
+
+**Causa raiz:**
+- Configurações de Generative AI migraram pra **Settings header (⚙️)** ou card "Generative AI" na home do agente
+- **Não há mais botão Save** na tela de Generative AI — mudanças persistem automaticamente (diferente de Topics, que ainda têm Save explícito)
+- **Novos agentes já nascem em modo Generative por default** — passo é mais confirmação que configuração. Tenants legacy com CoE policy podem ainda nascer em Classic
+
+**Fix adotado (Story 06.28 — 2026-05-14):**
+- Passo 2.2 (guia consolidado) reescrito em 3 sub-passos: 2.2.1 confirmar modo / 2.2.2 confirmar Knowledge vazio / 2.2.3 persistência implícita
+- Passo 3.3 (cap 03) reescrito em 4 sub-passos espelhados + Content moderation explicitado
+- Notas pedagógicas reforçando "Foundry como Tool (Parte 3+4) vs Knowledge source nativo"
+
+**Lição:** UI do Copilot Studio muda rápido — re-validar a cada ~6 meses ou no próximo bump de versão. Esta entrada cataloga estado da UI em **Q2-2026** (validado em 2026-05-14).
+
+---
+
 ## Histórico de mudanças
 
 | Data | Versão | Mudança | Origem |
 |---|---|---|---|
+| 2026-05-14 | Q2-2026 | SUR-CS-Q2-2026 catalogada: Copilot Studio UI Generative AI mode + Knowledge sources (Story 06.28) | @aiox-master sessão correção |
 | 2026-05-09 | Q2-2026 | Arquivo cravado consolidando AMB-1 a AMB-4 (drift fix sessão noturna 2026-05-09) | @aiox-master sessão close-the-day |
 
 ---

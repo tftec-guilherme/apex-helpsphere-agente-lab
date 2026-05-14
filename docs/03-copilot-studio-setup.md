@@ -143,17 +143,42 @@ Antes de tocar Copilot Studio, valide 2 coisas que matam 80% dos labs com erro "
 
 ---
 
-## Passo 3.3 — Habilitar Generative AI mode (free-flowing)
+## Passo 3.3 — Confirmar Generative mode + Knowledge sources
 
-**No Copilot Studio Maker — agente aberto no canvas:**
+> **Nota Q2-2026:** novos agentes Copilot Studio já nascem em **modo Generative por default**. Este passo é mais **confirmação** que configuração. Tenants legacy com CoE policy ainda podem nascer em Classic — daí a importância de confirmar.
 
-1. Menu lateral esquerdo → **Generative AI** (ou clique em **Settings** no header → tab **Generative AI** dependendo da versão)
-2. Localize a seção **Orchestration** ou **Mode**:
-   - **Mode:** mude de `Classic` (default em alguns tenants) para `Generative (free-flowing)`
-   - Banner amarelo aparece confirmando "Topics will be triggered by AI based on description"
-3. **Knowledge sources:** **deixe vazio** neste capítulo. Vamos popular via MCP no Capítulo 05 (a tool `search_kb` no Capítulo 04 chama RAG diretamente — Knowledge sources nativas do Copilot Studio não são usadas neste lab, é decisão arquitetural)
-4. **Content moderation:** mantenha default (`Medium` — content filter padrão)
-5. Clique **Save** (header)
+**No Copilot Studio Maker (agente aberto):**
+
+### Sub-passo 3.3.1 — Confirmar modo Generative
+
+1. Header do agente → ícone **⚙️ Settings** (canto superior direito) — ou menu **...** → **Settings**
+2. Tab **Generative AI** → seção **"Generative answers"** (ou **Orchestration**, depende da versão UI)
+3. Verificar:
+   - ✅ **"Allow the AI to use general knowledge"** = ligado (= modo Generative free-flowing)
+   - ❌ **"Only respond when a topic matches"** = desligado (= NÃO modo Classic)
+4. Caminho alternativo: página inicial do agente → card **"Generative AI"** → **Configure**
+
+> **Se ambos switches já estão como descrito acima, não há nada a fazer aqui** — pule pra 3.3.2.
+
+> **Se você abriu um tenant com agente em modo Classic** (CoE policy / tenant legacy), aparece banner amarelo `"Topics will be triggered by AI based on description"` ao trocar — esperado.
+
+### Sub-passo 3.3.2 — Confirmar Knowledge sources VAZIO
+
+Na mesma página de Generative AI (ou em **Knowledge** no menu lateral — varia conforme versão UI):
+
+1. Localize a seção **"Knowledge sources"**
+2. **Deixe TODOS os toggles desligados / lista vazia.**
+
+> **Por que vazio (decisão arquitetural deste lab):** o conhecimento técnico do HelpSphere virá via **Foundry Agent como Tool** (Capítulo 04 + MCP do Capítulo 05) — não como Knowledge source nativo do Copilot Studio. Ver nota pedagógica detalhada abaixo.
+
+### Sub-passo 3.3.3 — Content moderation
+
+1. Tab **Generative AI** (ou **Security** dependendo da versão) → **"Content moderation"**
+2. Mantenha default (`Medium`)
+
+### Sub-passo 3.3.4 — Persistência (não há "Save")
+
+Mudanças em Settings / Generative AI do Copilot Studio Q2-2026 **persistem automaticamente** quando você sai da página. Não procure botão "Save" — não existe mais nesta tela (diferente de Topics, que ainda têm Save explícito no header).
 
 <!-- screenshot: cap03-passo3.3-generative-ai-mode.png -->
 
