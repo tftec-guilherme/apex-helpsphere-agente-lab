@@ -91,7 +91,7 @@ Espelho Portal-first do guia oficial em `azure-retail/Disciplina_06_*/01_Aulas/L
 - **`PARA-O-ALUNO.md`** — entrypoint pedagógico com tom enterprise, 7 pré-requisitos detalhados (Azure PAYG, Foundry Hub, Copilot Studio Trial, GitHub, Docker, Azure CLI, stack dev), filosofia Portal-first com alternativa CLI
 - **`CHANGELOG.md`** — este arquivo
 - **`CONTRIBUTING.md`** — convenções Conventional Commits + PR workflow + branch protection + anti-padrões editoriais
-- **`SECURITY.md`** — política de segurança educacional adaptada pra contexto TFTEC
+- **`SECURITY.md`** — política de segurança educacional
 - **`LICENSE`** — MIT
 - **`.gitignore`** + **`.gitattributes`**
 - **Estrutura `docs/`** — 10 capítulos skeleton (01-pre-requisitos a 10-troubleshooting), apenas headings + outline (~30-50 linhas cada). Conteúdo Portal-step-by-step real virá em pass posterior

@@ -427,7 +427,7 @@ $response | ConvertFrom-Json | Select-Object -ExpandProperty tools | ForEach-Obj
 - **Issues:** https://github.com/tftec-guilherme/apex-helpsphere-agente-lab/issues — abra issue marcando o número do Cap onde travou + colando output do `az resource list -g rg-lab-final` para diagnóstico rápido
 - **Guia canônico Portal (mais detalhado em casos extremos):** `Lab_Final_Agente_Workflow_Guia_Portal.md` — seção Troubleshooting do guia mestre
 - **Cheat sheets relacionadas (Material Autoral):** buscar `cheat-licenciamento-power-platform.md`, `cheat-rbac-managed-identity.md`, `cheat-service-bus-tier-decision.md` no repositório de material complementar do curso
-- **Prof Guilherme Campos** — disponível via TFTEC para gaps que estão em §7 ou erros novos não catalogados
+- **Prof Guilherme Campos** (Coordenador da Disciplina) — para gaps que estão em §7 ou erros novos não catalogados
 
 ---
 

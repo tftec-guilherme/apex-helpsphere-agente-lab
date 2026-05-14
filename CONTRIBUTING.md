@@ -93,4 +93,4 @@ Evite:
 
 - **Issues:** https://github.com/tftec-guilherme/apex-helpsphere-agente-lab/issues
 - **Discussions:** abrir issue com label `discussion` se quiser tirar dúvida geral
-- **Prof Guilherme Campos** — disponível via TFTEC
+- **Prof Guilherme Campos** (Coordenador da Disciplina)

@@ -138,4 +138,4 @@ Sua missão neste Lab Final (Bloco 4-5): **construir um agente conversacional Fo
 
 - **Issues:** https://github.com/tftec-guilherme/apex-helpsphere-agente-lab/issues
 - **Discussions:** abrir issue com label `discussion` se quiser tirar dúvida geral
-- **Prof Guilherme Campos** (Coordenador da Disciplina) — disponível via TFTEC
+- **Prof Guilherme Campos** (Coordenador da Disciplina)
