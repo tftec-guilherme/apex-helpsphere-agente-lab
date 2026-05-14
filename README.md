@@ -147,7 +147,7 @@ apex-helpsphere-agente-lab/
 
 ## Versão
 
-`v0.1.0-init` · `version-anchor: Q2-2026`
+`v0.3.0-portal-azure-aligned` · `version-anchor: Q2-2026`
 
 **Política de revisão anual:**
 - Comparar Portal screenshots vs UI atual (capturar novos se >30% mudou)
