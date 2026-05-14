@@ -8,6 +8,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v0.3.0] — 2026-05-14
+
+### Changed
+
+**Sync de README + PARA-O-ALUNO com estado pós Wave 4** (Story 06.22).
+
+Após Wave 4 polish dirigido (commit `f46abec` em 2026-05-12) ter levado os 10 capítulos `docs/` ao estado production-grade, o `README.md` e o `PARA-O-ALUNO.md` continuavam congelados em `v0.1.0-init` (2026-05-07) — situação detectada por audit `@aiox-master` em 2026-05-14 via `gh api`. Esta release resolve essa falsa promessa de "skeleton em construção" e cataloga as 2 dependências cross-repo críticas que `docs/04-05` declaravam mas o entrypoint silenciava.
+
+- **`README.md`** — bump status `v0.1.0-init` → `v0.3.0-portal-azure-aligned`; remoção da frase "Conteúdo Portal step-by-step real virá em pass posterior" (F-001, F-002)
+- **`README.md` Pré-requisitos críticos** — adicionados 2 bullets CRÍTICOS no topo: stack `apex-helpsphere` SaaS em `rg-helpsphere-saas` (consumido por tools `get_ticket`/`list_similar_tickets` do MCP Server cap 05) + stack `apex-rag-lab` em `rg-lab-intermediario` (consumido por tool `search_kb` do agente Foundry cap 04) (F-005, F-006)
+- **`README.md` árvore docs/** — adicionado `_disclaimers.md` na listagem (F-009)
+- **`PARA-O-ALUNO.md`** — bump status no header (F-003); reescrita da seção "Status atual" refletindo realidade pós Wave 4 (F-004); pré-requisitos `7 → 9` itens com 2 novos itens CRÍTICOS no topo (Stack SaaS + Stack RAG) (F-007); reescrita do "Cenário em 3 linhas" clarificando que `apex-helpsphere` e `apex-rag-lab` são pré-requisitos operacionais, não narrativos (F-008)
+
+### Verification
+
+- Audit re-run via `gh api` esperado pós-push: 0 ocorrências de "v0.1.0-init" no README/PARA-O-ALUNO; 0 ocorrências de "skeleton em construção"; presença de "rg-helpsphere-saas" e "rg-lab-intermediario" como dependências; `_disclaimers.md` listado na árvore
+
+### Pedagogical impact
+
+- Aluno descobre dependências cross-repo ANTES de quebrar nos caps 04/05 (não mais "no meio do lab")
+- Narrativa "Cenário em 3 linhas" deixa explícito que os 2 stacks precedentes precisam estar deployados/concluídos, não apenas referenciados
+- README pós Wave 4 reflete realidade do repo: production-grade, não skeleton
+
+### Cross-references
+
+- Story 06.22: `azure-retail/docs/stories/06.22.companion-labs-readme-sync.md`
+- Audit fonte: `@aiox-master` via `gh api repos/tftec-guilherme/apex-helpsphere-agente-lab/readme` em 2026-05-14
+- Predecessoras técnicas: Story 06.15 (`9635ac1` PowerShell), 06.18 (`1ebb6e0` Azure alignment), 06.21+ Wave 4 (`f46abec` polish)
+- Padrão a replicar: CHANGELOG entries v0.2.0 (mesmo formato)
+
+---
+
 ## [v0.2.0] — 2026-05-10
 
 ### Changed
