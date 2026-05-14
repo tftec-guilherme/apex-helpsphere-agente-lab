@@ -10,7 +10,8 @@
 
 ## Pré-requisitos
 
-- ✅ Capítulo 02 concluído — RG `rg-lab-final` existe, ACA Environment `cae-helpsphere-final` provisionado, Managed Identity `mi-helpsphere-ia` (cross-RG em `rg-lab-intermediario`) já com role `AcrPull`
+- ✅ Capítulo 02 concluído — RG `rg-lab-final` existe e ACR `acrhelpsphere<rand>` provisionado
+- ✅ Capítulo 05 concluído — ACA Environment `cae-helpsphere-final` provisionado (Passo 5.4), Managed Identity `mi-helpsphere-ia` (cross-RG em `rg-lab-intermediario`) já com role `AcrPull` no ACR (Passo 5.5)
 - ✅ Capítulo 04 concluído — agente `helpsphere-tier1-agent` existe e tem schema da tool `escalate_ticket` registrada (mas ainda em placeholder até Cap 08)
 - ✅ Capítulo 05 concluído — MCP Server `ca-mcp-helpsphere` rodando; o workflow do n8n vai chamá-lo em alguns nodes para enriquecer dados de ticket
 - ✅ HelpSphere SQL connection string disponível (do lab SaaS pré-existente em `rg-helpsphere-saas`) — o workflow precisa consultar tickets resolvidos similares
@@ -136,7 +137,7 @@
    - **Resource group:** `rg-lab-final`
    - **Container app name:** `ca-n8n-helpsphere`
    - **Region:** `East US 2`
-   - **Container Apps Environment:** `cae-helpsphere-final` (criado no Cap 02 — é o mesmo do `ca-mcp-helpsphere`)
+   - **Container Apps Environment:** `cae-helpsphere-final` (criado no Cap 05 Passo 5.4 — é o mesmo do `ca-mcp-helpsphere`)
 4. Tab **Container**:
    - **Use quickstart image:** `Off`
    - **Image source:** `Docker Hub or other registries`

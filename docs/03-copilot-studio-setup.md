@@ -11,7 +11,7 @@
 ## Pré-requisitos
 
 - ✅ Capítulo 01 concluído — Passo 1.3 confirma Copilot Studio Trial ativo (https://copilotstudio.microsoft.com/) e environment Power Platform visível em Admin center
-- ✅ Capítulo 02 concluído — RG `rg-lab-final` + ACR `acrhelpsphere<rand>` + ACA Environment `cae-helpsphere-final` provisionados (não bloqueante, mas confirma que você está no fluxo certo)
+- ✅ Capítulo 02 concluído — RG `rg-lab-final` + ACR `acrhelpsphere<rand>` provisionados (não bloqueante, mas confirma que você está no fluxo certo). **Nota:** o ACA Environment `cae-helpsphere-final` será criado no Cap 05 Passo 5.4 (movido do Cap 02 na Story 06.27 — Portal Azure não permite criar Environment standalone).
 - ✅ Conta Microsoft 365 corporativa OU tenant developer M365 grátis (https://developer.microsoft.com/microsoft-365/dev-program) — **NÃO** funciona com `live.com` / `outlook.com` / `hotmail.com` (ver AMB-2 abaixo)
 - ✅ Browser desktop (Edge, Chrome ou Firefox) — Copilot Studio canvas **não é otimizado para mobile**
 

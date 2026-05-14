@@ -23,7 +23,7 @@
 >
 > **Custo no lab realista:** R$ 1-2 prorrated 5 dias (delete RG no Cap 09 zera). Em produção corporate, default = Basic; subir para Standard só quando feature exigir.
 >
-> **Onde aparece:** `02-resource-group-acr-aca.md` (provisioning), `05-mcp-server-deploy.md` (push imagem MCP), `09-cleanup-obrigatorio.md` (delete cascade).
+> **Onde aparece:** `02-resource-group-acr-aca.md` (provisioning ACR), `05-mcp-server-deploy.md` (ACA Env Passo 5.4 + RBAC AcrPull Passo 5.5 + push imagem MCP Passo 5.2 — Story 06.27 moveu ACA Env + RBAC do Cap 02 para Cap 05), `09-cleanup-obrigatorio.md` (delete cascade).
 >
 > **Cleanup link:** ver `09-cleanup-obrigatorio.md` Passo 9.2 — `az group delete --name rg-lab-final` zera o ACR junto.
 
@@ -94,5 +94,5 @@
 ## Próximos itens a consolidar (backlog)
 
 - Foundry Agent Service exige sub Pay-As-You-Go (Free Trial USD 200 não cobre) — atualmente em `01-pre-requisitos.md` Surpresa #1 e `10-troubleshooting.md` 3.1 A1. Promover a AMB-5 se aparecer drift entre caps.
-- Workload profile `Consumption only` (não `Consumption + Dedicated`) — atualmente em `02-resource-group-acr-aca.md` Surpresa #7 e `10-troubleshooting.md` 3.2 P5 / Top 10 #4. Promover a AMB-6 se decisão tipa permanente.
+- Workload profile `Consumption only` (não `Consumption + Dedicated`) — atualmente em `05-mcp-server-deploy.md` Surpresa (Passo 5.4) e `10-troubleshooting.md` 3.2 P5 / Top 10 #4. Promover a AMB-6 se decisão tipa permanente.
 - `n8nio/n8n:1.6` pinned (não `:latest`) — atualmente em `07-n8n-escalation.md` Surpresa #1 e `10-troubleshooting.md` 3.3 C7 / Top 10 #7. Promover a AMB-7 se versão bumpar.

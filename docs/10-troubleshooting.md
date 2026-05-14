@@ -46,7 +46,7 @@ Erro/sintoma reportado
 │
 ├─ "Container não sobe" / "ImagePullBackOff" / "Provisioning infinito"
 │   └─► §3.3 Containers + Caps 02/05/07
-│       Top causa: AcrPull RBAC ainda propagando (Cap 02 Surpresa #3)
+│       Top causa: AcrPull RBAC ainda propagando (Cap 05 Surpresa — Passo 5.5)
 │
 ├─ "401/403 ao chamar API" / "audience mismatch" / "token sem roles"
 │   └─► §3.4 Auth aplicacional + Caps 05/06/08
@@ -86,7 +86,7 @@ Erro/sintoma reportado
 | A1 | `SubscriptionNotRegistered` em Foundry agent create | Free Trial USD 200 não suporta Foundry Agent Service | Converter sub para Pay-As-You-Go no Portal (botão Upgrade) | Cap 01 |
 | A2 | `AADSTS50020: User account from identity provider 'live.com' does not exist in tenant` em `copilotstudio.microsoft.com` | Conta MSA pessoal (`live.com`/`outlook.com`/`hotmail.com`) sem licença Power Platform — Copilot Studio exige conta corporativa (work/school) | Fallback: criar tenant dev M365 trial 30d via Cap 03 **Passo 3.7** + reusar `MSAL` patterns; ver [`_disclaimers.md`](./_disclaimers.md) **AMB-2** | Caps 01, 03 |
 | A3 | `AuthorizationFailed` em `az role assignment create` | Contributor pelado sem User Access Administrator | Pedir admin tenant para `User Access Administrator` no scope da sub OU `Owner` direto | Caps 01, 02 |
-| A4 | `Insufficient privileges` em `az role assignment create --assignee <upn>` | Flag `--assignee` faz lookup Microsoft Graph (exige `Directory.Read.All`) | Trocar por `--assignee-object-id <objectId> --assignee-principal-type ServicePrincipal` (pula lookup) | Cap 02 |
+| A4 | `Insufficient privileges` em `az role assignment create --assignee <upn>` | Flag `--assignee` faz lookup Microsoft Graph (exige `Directory.Read.All`) | Trocar por `--assignee-object-id <objectId> --assignee-principal-type ServicePrincipal` (pula lookup) | Cap 05 |
 | A5 | Trial Copilot Studio expira **imediatamente** após signup remoto | Trial conta dias desde **primeiro acesso**, não signup | Confirmar dias restantes em Power Platform Admin Center → Licenses | Cap 03 |
 | A6 | Default environment sumiu o agent / outro user editou | Default compartilha permissões com TODO o tenant | Sempre criar agent em environment **Development** isolado (não Default) | Cap 03 |
 | A7 | Agent Test panel responde em inglês mesmo com Language pt-BR | Cache do Maker UI pós-mudança de Language OU Language mudada após criação | `Ctrl+Shift+R` no browser; se persiste, deletar/recriar topics em pt-BR (não dá pra reverter) | Cap 03 |
@@ -98,9 +98,10 @@ Erro/sintoma reportado
 |---|---|---|---|---|
 | P1 | `Registry name 'acrhelpsphere' is not available` | ACR name é globalmente único (DNS) + sem hífen + lowercase | Adicionar 6 hex chars aleatórios (`openssl rand -hex 3`) ao final → `acrhelpsphere8a3f2d` | Cap 02 |
 | P2 | `subscription is not registered to use namespace 'Microsoft.App'` | Resource Provider não habilitado | `az provider register --namespace Microsoft.App && az provider register --namespace Microsoft.OperationalInsights` | Cap 02 |
-| P3 | ACA Environment provisiona Log Analytics novo silenciosamente | Tab Monitoring com workspace não selecionado explicitamente | Selecionar `log-helpsphere-ia` no dropdown; se já errou, deletar ACA Env e recriar (não dá trocar workspace) | Cap 02 |
-| P4 | ACA Env stuck em `Provisioning` >10min | Quota regional esgotada (raro em East US 2) | Trocar para `eastus` ou `southcentralus` | Cap 02 |
-| P5 | Workload profile `Consumption + Dedicated` cobra R$ 250/mês reservados | Default em algumas subs corporate | Selecionar **explicitamente** `Consumption only` no Tab Workload profiles | Cap 02 |
+| P3 | ACA Environment provisiona Log Analytics novo silenciosamente | Tab Monitoring com workspace não selecionado explicitamente | Selecionar `log-helpsphere-ia` no dropdown; se já errou, deletar ACA Env e recriar (não dá trocar workspace) | Cap 05 |
+| P4 | ACA Env stuck em `Provisioning` >10min | Quota regional esgotada (raro em East US 2) | Trocar para `eastus` ou `southcentralus` | Cap 05 |
+| P5 | Workload profile `Consumption + Dedicated` cobra R$ 250/mês reservados | Default em algumas subs corporate | Selecionar **explicitamente** `Consumption only` no Tab Workload profiles | Cap 05 |
+| P3b | Portal não permite criar ACA Environment standalone (Q2-2026) | Blade Container Apps obriga criar Container App junto | 3 opções no Cap 05 Passo 5.4: (A) Marketplace link `https://portal.azure.com/#create/Microsoft.ManagedEnvironment`, (B) `az containerapp env create`, (C) inline durante criação do Container App | Cap 05 |
 | P6 | `gpt-4.1-mini` quota request leva 24-72h | Aprovação manual Microsoft em sub nova | Provisionar Hub + deployment `gpt-4.1-mini` em RG separado (`rg-lab-intermediario`) **antes** deste lab (este lab apenas reusa o deployment existente) | Cap 01 |
 | P7 | `pg-n8n-<rand>` PostgreSQL Burstable B1ms cobra parado mesmo idle | PG não tem free tier permanente; `Stop` reinicia automaticamente após 7 dias | Para zerar custo: `delete` (não `Stop`) — ver Cap 07 Passo 7.7 / Cap 09 | Caps 07, 09 |
 | P8 | Speech voice nova (`pt-BR-ThalitaNeural`) `400 Voice not supported` em eastus2 | Voices novas chegam primeiro em `eastus`/`westus3`/`francecentral` | Validar `learn.microsoft.com/azure/ai-services/speech-service/regions` antes de cravar voice | Cap 06 |
@@ -110,11 +111,11 @@ Erro/sintoma reportado
 
 | # | Sintoma | Causa | Fix | Cap fonte |
 |---|---|---|---|---|
-| C1 | `UNAUTHORIZED: authentication required` no pull do ACR | Role `AcrPull` ainda propagando (~30-60s) ou MI errado | Aguardar 60s; `az role assignment list --assignee <principalId>` confirma | Caps 02, 05 |
+| C1 | `UNAUTHORIZED: authentication required` no pull do ACR | Role `AcrPull` ainda propagando (~30-60s) ou MI errado | Aguardar 60s; `az role assignment list --assignee <principalId>` confirma | Cap 05 |
 | C2 | `denied: requested access to the resource is denied` no `docker push` | ACR Basic atingiu cap 10 GiB | `az acr repository delete --name <acr> --image <repo>:<tag>` para liberar OU upgrade Standard | Cap 02 |
 | C3 | `--admin-enabled true` cria credencial órfã | Senha master nunca expira automaticamente | `az acr update --name <acr> --admin-enabled false` + `az acr credential renew` (rotacionar) | Cap 02 |
 | C4 | `az acr build` falha `unauthorized: authentication required` em corporate | Tenant policy bloqueia Service Connection temporária do ACR Tasks | Pedir tenant-admin liberar `Microsoft.ContainerRegistry/registries/tasks/scheduledRuns/action` OU build local + `docker push` | Cap 05 |
-| C5 | Container App `Provisioning` infinito >10min | MI sem `AcrPull` propagado (Cap 02 Passo 2.4) | Aguardar 60s pós-RBAC; se passou 5min, deletar Container App + esperar 60s + recriar | Cap 05 |
+| C5 | Container App `Provisioning` infinito >10min | MI sem `AcrPull` propagado (Cap 05 Passo 5.5) | Aguardar 60s pós-RBAC; se passou 5min, deletar Container App + esperar 60s + recriar | Cap 05 |
 | C6 | Cold-start ACA scale-to-zero adiciona 3-5s na 1ª request após 5min ociosidade | Comportamento esperado do Consumption profile | Subir `min-replicas=1` (custo ~R$ 30/mês fixo) — só se latência crítica | Cap 05 |
 | C7 | `n8nio/n8n:latest` quebrou breaking change em 15/04 — workflows invisíveis | Tag `latest` migrou schema PG sem aviso | **Sempre pinar major.minor** (`n8nio/n8n:1.6`); acompanhar releases antes de bumpar | Cap 07 |
 | C8 | `WEBHOOK_URL` vazio gera URLs `0.0.0.0:5678` inacessíveis | n8n não usa FQDN ACA real automaticamente | Cravar `WEBHOOK_URL=https://<FQDN>/` (com barra final) **após** ACA criar | Cap 07 |
