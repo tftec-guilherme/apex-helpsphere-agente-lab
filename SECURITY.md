@@ -4,12 +4,12 @@
 
 ## Reporting a Vulnerability
 
-This repository is part of an educational project (TFTEC Pós-Graduação Avançada de Cloud com Azure · Disciplina 06 · Lab Final).
+This repository is part of an educational project (Pós-Graduação Avançada de Cloud com Azure · Disciplina 06 · Lab Final).
 
 If you find a security vulnerability:
 
 1. **Não abra um issue público** com detalhes do exploit
-2. Envie email pra **prof Guilherme Campos** (Coordenador da Disciplina) — disponível via TFTEC
+2. Envie email pra **prof Guilherme Campos** (Coordenador da Disciplina)
 3. Inclua: tipo do problema, paths afetados, repro steps, impacto potencial
 
 Espere resposta em até 5 dias úteis.

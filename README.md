@@ -8,7 +8,7 @@
 [![Anchor](https://img.shields.io/badge/version--anchor-Q2--2026-blue)](./docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md)
 [![Region](https://img.shields.io/badge/region-East%20US%202-orange)](#)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Disciplina D06](https://img.shields.io/badge/Pós--Graduação-TFTEC%20+%20Anhanguera-purple)](https://github.com/tftec-guilherme/azure-retail)
+[![Pós-Graduação](https://img.shields.io/badge/Pós--Graduação-Avançada%20Cloud%20Azure-purple)](#)
 
 📘 [**Guia Portal completo (70KB · 1961L · entry-point único)**](./docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md)
 
@@ -16,11 +16,11 @@
 
 ---
 
-> Companion público do **Lab Final D06** da Pós-Graduação Arquitetura Cloud Azure (TFTEC + Anhanguera). Portal-first end-to-end — agente HelpSphere que classifica tickets, busca conhecimento via MCP Server, responde com voz e escala via Service Bus + n8n.
+> Companion público do **Lab Final D06** da Pós-Graduação Avançada de Cloud com Azure. Portal-first end-to-end — agente HelpSphere que classifica tickets, busca conhecimento via MCP Server, responde com voz e escala via Service Bus + n8n.
 
 ## Contexto
 
-Este repo é o **espelho Portal-first** do Lab Final da Disciplina 06 (IA e Automação no Azure — Pós-Graduação Arquitetura Cloud Azure TFTEC + Anhanguera).
+Este repo é o **espelho Portal-first** do Lab Final da Disciplina 06 (IA e Automação no Azure — Pós-Graduação Avançada de Cloud com Azure).
 
 - **Pedagogia:** clique-clique no Portal Azure + AI Foundry portal (`ai.azure.com`) + Copilot Studio Maker portal + n8n UI
 - **Stack:** Azure Container Apps + Azure Container Registry + Foundry Agent Service + MCP Server (Docker) + AI Speech + Service Bus + n8n + Google Sheets audit
