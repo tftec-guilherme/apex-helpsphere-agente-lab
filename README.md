@@ -2,9 +2,11 @@
 
 > **Lab Final — Disciplina 06: IA e Automação no Azure (Pós-Graduação Arquitetura Cloud Azure · TFTEC + Anhanguera)**
 >
-> Companion público do Lab Final D06 — agente HelpSphere com **Foundry Agent SDK + MCP Server + Speech + n8n escalation**. Espelho **Portal-first** do guia oficial em `azure-retail/Disciplina_06_*/01_Aulas/Lab_Final_*_Guia_Portal.md`. `version-anchor: Q2-2026`
+> Companion público do Lab Final D06 — agente HelpSphere com **Foundry Agent SDK + MCP Server + Speech + n8n escalation**. **Portal-first end-to-end**. `version-anchor: Q2-2026`
 
-> **Status:** `v0.3.0-portal-azure-aligned` — production-grade pós Wave 4 (2026-05-12). 10 capítulos Portal step-by-step completos (PowerShell-first, alinhados ao Azure real), `_disclaimers.md` consolidado, MCP Server + Foundry Agent + n8n escalation cobertos end-to-end. Histórico em [CHANGELOG.md](./CHANGELOG.md).
+> **📘 Guia Portal completo (entry-point único):** [`docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md`](./docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md) — 70KB, 1961 linhas, fluxo completo de ponta a ponta. Os 10 capítulos abaixo (`01-...` a `10-...`) são as partes detalhadas referenciadas pelo guia.
+
+> **Status:** `v0.3.1-guia-portal-consolidado` — production-grade pós Wave 4 (2026-05-12). 10 capítulos Portal step-by-step + **guia consolidado** entry-point + `_disclaimers.md` (PowerShell-first, alinhados ao Azure real). MCP Server + Foundry Agent + n8n escalation cobertos end-to-end. Histórico em [CHANGELOG.md](./CHANGELOG.md).
 
 ## Contexto
 
@@ -27,7 +29,8 @@ apex-helpsphere-agente-lab/
 ├── CONTRIBUTING.md                    # convenções de commit + PR workflow
 ├── SECURITY.md                        # política de segurança educacional
 ├── LICENSE                            # MIT
-├── docs/                              # 10 capítulos Portal step-by-step + disclaimers consolidados
+├── docs/                              # guia consolidado (entry-point) + 10 capítulos + disclaimers
+│   ├── 00-Lab_Final_Agente_Workflow_Guia_Portal.md  # ⭐ GUIA COMPLETO entry-point (70KB · 1961L)
 │   ├── 01-pre-requisitos.md
 │   ├── 02-resource-group-acr-aca.md
 │   ├── 03-copilot-studio-setup.md
@@ -58,7 +61,7 @@ apex-helpsphere-agente-lab/
 
 1. Faça **fork** deste repo pra sua conta GitHub
 2. Clone localmente: `git clone https://github.com/SEU_USUARIO/apex-helpsphere-agente-lab.git`
-3. Siga `docs/01-pre-requisitos.md` → `docs/10-troubleshooting.md`
+3. Abra [`docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md`](./docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md) — **guia consolidado entry-point**. Alternativa: navegue por partes em `docs/01-pre-requisitos.md` → `docs/10-troubleshooting.md`
 4. **Lifecycle estimado:** ~9h (mínimo) considerando provisioning + setup + smoke
 
 ## Pré-requisitos críticos
