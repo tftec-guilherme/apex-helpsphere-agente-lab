@@ -160,10 +160,10 @@ flowchart TB
 
 | Parte | Duração | Atividade |
 |---|---|---|
-| Parte 1 | 30min | Provisionar fundação RG + ACR + ACA Environment |
+| Parte 1 | 15min | Provisionar fundação RG + ACR (ACA Environment foi movido para a Parte 4) |
 | Parte 2 | 1.5h | Copilot Studio — agente + topics + canal Teams |
 | Parte 3 | 2h | Foundry Agent Service — agent code-first + 4 tools |
-| Parte 4 | 1h | MCP Server HelpSphere (deploy do pré-pronto em ACA) |
+| Parte 4 | 1.5h | ACA Environment + RBAC + MCP Server HelpSphere (deploy do pré-pronto em ACA) |
 | Parte 5 | 1h | Azure AI Speech — canal de voz |
 | Parte 6 | 1.5h | n8n self-hosted em ACA + workflow de escalação |
 | Parte 7 | 1h | Service Bus + Logic App + Google Sheets connector |
@@ -240,67 +240,12 @@ flowchart TB
 > echo "ACR: $ACR_NAME"
 > ```
 
-## Passo 1.3 — Criar ACA Environment
-
-**No Portal Azure:**
-
-1. Barra superior → buscar **"Container Apps Environments"** → clicar
-2. **+ Create**
-3. Preencher tab **Basics**:
-   - **Subscription:** sua
-   - **Resource group:** `rg-lab-final`
-   - **Environment name:** `cae-helpsphere-final`
-   - **Region:** `East US 2`
-4. Tab **Monitoring**:
-   - **Logs destination:** `Azure Log Analytics`
-   - **Log Analytics workspace:** selecione `log-helpsphere-ia` do RG `rg-helpsphere-ia` (compartilhado, criado no Bloco 2)
-5. Tab **Networking**: deixe defaults (managed network, public)
-6. **Review + create** → **Create**
-7. Aguardar provisioning ~3-5min até **Succeeded**
-
-<!-- screenshot: passo-1.3-criar-aca-environment-portal.png -->
-
-> **Atenção:** o ACA Environment usa o Log Analytics Workspace do `rg-helpsphere-ia` (compartilhado, criado no Bloco 2). Se ainda não criou esse RG/workspace, faça o Bloco 2 antes.
-
-> **Alternativa via Azure CLI:**
->
-> ```bash
-> az containerapp env create \
->   --name cae-helpsphere-final \
->   --resource-group rg-lab-final \
->   --location eastus2 \
->   --logs-workspace-id $(az monitor log-analytics workspace show \
->     --resource-group rg-helpsphere-ia \
->     --workspace-name log-helpsphere-ia \
->     --query customerId -o tsv) \
->   --logs-workspace-key $(az monitor log-analytics workspace get-shared-keys \
->     --resource-group rg-helpsphere-ia \
->     --workspace-name log-helpsphere-ia \
->     --query primarySharedKey -o tsv)
-> ```
-
-## Passo 1.4 — Atribuir RBAC ao Managed Identity (do Bloco 2)
-
-```bash
-PRINCIPAL_ID=$(az identity show \
-  --name mi-helpsphere-ia \
-  --resource-group rg-helpsphere-ia \
-  --query principalId -o tsv)
-
-ACR_ID=$(az acr show --name $ACR_NAME --resource-group rg-lab-final --query id -o tsv)
-
-az role assignment create \
-  --assignee $PRINCIPAL_ID \
-  --role AcrPull \
-  --scope $ACR_ID
-```
-
 ## ✅ Checkpoint Parte 1
 
 - [ ] RG `rg-lab-final` existe
 - [ ] ACR `acrhelpsphere{rand}` existe
-- [ ] ACA Environment `cae-helpsphere-final` existe e está em estado `Succeeded`
-- [ ] Managed Identity tem role `AcrPull`
+
+> **Nota:** o **ACA Environment** (`cae-helpsphere-final`) e o **RBAC AcrPull** da Managed Identity foram movidos para o **início da Parte 4** (Passos 4.4 e 4.5), porque o Portal Azure não permite criar um Container Apps Environment standalone sem associá-lo a um Container App. Criamos os dois juntos do primeiro Container App de fato (MCP Server).
 
 ---
 
@@ -1002,7 +947,67 @@ Deve listar `mcp-helpsphere`.
 >
 > (Scopes ainda precisam ser adicionados via Portal — `az ad app` não tem comando direto para `oauth2PermissionScopes`.)
 
-## Passo 4.4 — Deploy MCP Server em Container App
+## Passo 4.4 — Criar ACA Environment
+
+> **Nota pedagógica (Q2-2026):** o Portal Azure **não permite** criar um Container Apps Environment standalone sem associar a um Container App. Por isso fazemos a criação do Environment **junto** com o primeiro Container App (Passo 4.6) ou usando o caminho específico **"Container Apps Environments"** (plural) no Marketplace.
+
+**Opção A — via Portal (caminho direto):**
+
+1. Acesse `https://portal.azure.com/#create/Microsoft.ManagedEnvironment` (link direto pro blade do Environment standalone)
+2. Preencher tab **Basics**:
+   - **Subscription:** sua
+   - **Resource group:** `rg-lab-final`
+   - **Environment name:** `cae-helpsphere-final`
+   - **Region:** `East US 2`
+3. Tab **Monitoring**:
+   - **Logs destination:** `Azure Log Analytics`
+   - **Log Analytics workspace:** selecione `log-helpsphere-ia` do RG `rg-helpsphere-ia` (compartilhado, criado no Bloco 2)
+4. Tab **Networking**: deixe defaults (managed network, public)
+5. **Review + create** → **Create**
+6. Aguardar provisioning ~3-5min até **Succeeded**
+
+<!-- screenshot: passo-4.4-criar-aca-environment-portal.png -->
+
+> **Atenção:** o ACA Environment usa o Log Analytics Workspace do `rg-helpsphere-ia` (compartilhado, criado no Bloco 2). Se ainda não criou esse RG/workspace, faça o Bloco 2 antes.
+
+**Opção B — via Azure CLI (alternativa mais rápida):**
+
+```bash
+az containerapp env create \
+  --name cae-helpsphere-final \
+  --resource-group rg-lab-final \
+  --location eastus2 \
+  --logs-workspace-id $(az monitor log-analytics workspace show \
+    --resource-group rg-helpsphere-ia \
+    --workspace-name log-helpsphere-ia \
+    --query customerId -o tsv) \
+  --logs-workspace-key $(az monitor log-analytics workspace get-shared-keys \
+    --resource-group rg-helpsphere-ia \
+    --workspace-name log-helpsphere-ia \
+    --query primarySharedKey -o tsv)
+```
+
+**Opção C — durante o Passo 4.6 (Create Container App):** ao escolher o Environment no dropdown, clicar **+ Create new** e preencher inline. Funciona, mas dá menos visibilidade do que aconteceu no Environment standalone.
+
+## Passo 4.5 — Atribuir RBAC AcrPull ao Managed Identity (do Bloco 2)
+
+A Managed Identity `mi-helpsphere-ia` (criada no Bloco 2 em `rg-helpsphere-ia`) precisa de role `AcrPull` no ACR `acrhelpsphere{rand}` (criado no Passo 1.2) para que o Container App consiga puxar a imagem privada.
+
+```bash
+PRINCIPAL_ID=$(az identity show \
+  --name mi-helpsphere-ia \
+  --resource-group rg-helpsphere-ia \
+  --query principalId -o tsv)
+
+ACR_ID=$(az acr show --name $ACR_NAME --resource-group rg-lab-final --query id -o tsv)
+
+az role assignment create \
+  --assignee $PRINCIPAL_ID \
+  --role AcrPull \
+  --scope $ACR_ID
+```
+
+## Passo 4.6 — Deploy MCP Server em Container App
 
 **No Portal Azure:**
 
@@ -1013,7 +1018,7 @@ Deve listar `mcp-helpsphere`.
    - **Resource group:** `rg-lab-final`
    - **Container app name:** `ca-mcp-helpsphere`
    - **Region:** `East US 2`
-   - **Container Apps Environment:** `cae-helpsphere-final` (criado no Passo 1.3)
+   - **Container Apps Environment:** `cae-helpsphere-final` (criado no Passo 4.4)
 4. Tab **Container**:
    - **Use quickstart image:** `Off`
    - **Image source:** `Azure Container Registry`
@@ -1081,7 +1086,7 @@ Deve listar `mcp-helpsphere`.
 > echo "MCP Server URL: https://$MCP_URL/mcp"
 > ```
 
-## Passo 4.5 — Criar App Registration cliente (para o agent autenticar)
+## Passo 4.7 — Criar App Registration cliente (para o agent autenticar)
 
 **No Portal Azure:**
 
@@ -1144,7 +1149,7 @@ Deve listar `mcp-helpsphere`.
 >
 > (API permissions + admin consent ainda precisam ser feitos via Portal — fluxo CLI é mais complexo.)
 
-## Passo 4.6 — Obter token de teste
+## Passo 4.8 — Obter token de teste
 
 ```bash
 TENANT_ID="<seu-tenant-id>"
@@ -1159,7 +1164,7 @@ TOKEN=$(curl -s -X POST "https://login.microsoftonline.com/${TENANT_ID}/oauth2/v
 echo "Token: $TOKEN"
 ```
 
-## Passo 4.7 — Testar MCP Server
+## Passo 4.9 — Testar MCP Server
 
 ```bash
 curl -X POST "https://${MCP_URL}/mcp" \
@@ -1192,7 +1197,7 @@ curl -X POST "https://${MCP_URL}/mcp" \
 
 Deve retornar dados do ticket 1 (do seed do HelpSphere).
 
-## Passo 4.8 — Atualizar Function App `func-agent-runner` com URL e token MCP
+## Passo 4.10 — Atualizar Function App `func-agent-runner` com URL e token MCP
 
 ```bash
 az functionapp config appsettings set \
@@ -1207,6 +1212,8 @@ az functionapp config appsettings set \
 
 ## ✅ Checkpoint Parte 4
 
+- [ ] **ACA Environment `cae-helpsphere-final`** existe e está em estado `Succeeded` (Passo 4.4)
+- [ ] **Managed Identity `mi-helpsphere-ia`** tem role `AcrPull` no ACR (Passo 4.5)
 - [ ] Imagem `mcp-helpsphere:v1` no ACR
 - [ ] App Registration `app-mcp-helpsphere-server` com 3 scopes
 - [ ] App Registration `app-mcp-helpsphere-client` com permissões consented
@@ -1448,7 +1455,7 @@ func azure functionapp publish $FUNC_AGENT_NAME --python
    - **Resource group:** `rg-lab-final`
    - **Container app name:** `ca-n8n-helpsphere`
    - **Region:** `East US 2`
-   - **Container Apps Environment:** `cae-helpsphere-final` (criado no Passo 1.3)
+   - **Container Apps Environment:** `cae-helpsphere-final` (criado no Passo 4.4)
 4. Tab **Container**:
    - **Use quickstart image:** `Off`
    - **Image source:** `Docker Hub or other registries`
