@@ -1,8 +1,22 @@
 # PARA-O-ALUNO — apex-helpsphere-agente-lab
 
+<div align="center">
+
+**🎯 Entrypoint pedagógico do Lab Final D06**
+
+[![Status](https://img.shields.io/badge/status-v0.3.1--guia--portal--consolidado-success)](./CHANGELOG.md)
+[![Lifecycle](https://img.shields.io/badge/lifecycle-~9h-orange)](#custos-esperados)
+[![Cost](https://img.shields.io/badge/custo-R%24%20100--180-yellow)](./README.md#-custos-esperados-lab-completo)
+
+📘 [**Guia Portal completo — entry-point único**](./docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md)
+
+</div>
+
+---
+
 > Bem-vindo. Este é o **entrypoint** do Lab Final (agente HelpSphere production-grade) da Disciplina 06. Vai te guiar pelo Portal Azure + AI Foundry portal + Copilot Studio + n8n UI passo-a-passo construindo um agente conversacional que classifica tickets, busca conhecimento (RAG) e escala via Service Bus + n8n + Google Sheets.
 >
-> `version-anchor: Q2-2026` · `status: v0.3.0-portal-azure-aligned`
+> `version-anchor: Q2-2026` · `status: v0.3.1-guia-portal-consolidado`
 
 ---
 

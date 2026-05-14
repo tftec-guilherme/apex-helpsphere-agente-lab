@@ -1,12 +1,22 @@
-# apex-helpsphere-agente-lab
+<div align="center">
 
-> **Lab Final — Disciplina 06: IA e Automação no Azure (Pós-Graduação Arquitetura Cloud Azure · TFTEC + Anhanguera)**
->
-> Companion público do Lab Final D06 — agente HelpSphere com **Foundry Agent SDK + MCP Server + Speech + n8n escalation**. **Portal-first end-to-end**. `version-anchor: Q2-2026`
+# 🎯 apex-helpsphere-agente-lab
 
-> **📘 Guia Portal completo (entry-point único):** [`docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md`](./docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md) — 70KB, 1961 linhas, fluxo completo de ponta a ponta. Os 10 capítulos abaixo (`01-...` a `10-...`) são as partes detalhadas referenciadas pelo guia.
+**Lab Final D06 — Agente conversacional production-grade com Foundry SDK + MCP + Speech + n8n**
 
-> **Status:** `v0.3.1-guia-portal-consolidado` — production-grade pós Wave 4 (2026-05-12). 10 capítulos Portal step-by-step + **guia consolidado** entry-point + `_disclaimers.md` (PowerShell-first, alinhados ao Azure real). MCP Server + Foundry Agent + n8n escalation cobertos end-to-end. Histórico em [CHANGELOG.md](./CHANGELOG.md).
+[![Status](https://img.shields.io/badge/status-v0.3.1--guia--portal--consolidado-success)](./CHANGELOG.md)
+[![Anchor](https://img.shields.io/badge/version--anchor-Q2--2026-blue)](./docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md)
+[![Region](https://img.shields.io/badge/region-East%20US%202-orange)](#)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Disciplina D06](https://img.shields.io/badge/Pós--Graduação-TFTEC%20+%20Anhanguera-purple)](https://github.com/tftec-guilherme/azure-retail)
+
+📘 [**Guia Portal completo (70KB · 1961L · entry-point único)**](./docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md)
+
+</div>
+
+---
+
+> Companion público do **Lab Final D06** da Pós-Graduação Arquitetura Cloud Azure (TFTEC + Anhanguera). Portal-first end-to-end — agente HelpSphere que classifica tickets, busca conhecimento via MCP Server, responde com voz e escala via Service Bus + n8n.
 
 ## Contexto
 
@@ -57,27 +67,50 @@ apex-helpsphere-agente-lab/
 └── images/                            # screenshots Portal Q2-2026 (capturados na execução real)
 ```
 
-## Quick start
+## 🚀 Quick start
 
-1. Faça **fork** deste repo pra sua conta GitHub
-2. Clone localmente: `git clone https://github.com/SEU_USUARIO/apex-helpsphere-agente-lab.git`
-3. Abra [`docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md`](./docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md) — **guia consolidado entry-point**. Alternativa: navegue por partes em `docs/01-pre-requisitos.md` → `docs/10-troubleshooting.md`
-4. **Lifecycle estimado:** ~9h (mínimo) considerando provisioning + setup + smoke
+```powershell
+# 1. Fork em https://github.com/tftec-guilherme/apex-helpsphere-agente-lab → seu fork
 
-## Pré-requisitos críticos
+# 2. Clone local
+git clone https://github.com/SEU_USUARIO/apex-helpsphere-agente-lab.git
+Set-Location apex-helpsphere-agente-lab
 
-- **Stack `apex-helpsphere` deployado** em `rg-helpsphere-saas` (Bloco 2 D06) — fornece SQL Database `helpsphere` com tickets seed que o MCP Server (cap 05) consulta via tools `get_ticket` e `list_similar_tickets`. Veja [`apex-helpsphere`](https://github.com/tftec-guilherme/apex-helpsphere) e provisione com `azd up` antes deste lab.
-- **Stack `apex-rag-lab` deployado** em `rg-lab-intermediario` (Lab Intermediário D06) — fornece a RAG Function App `func-helpsphere-rag-{rand}` que o agente Foundry consulta via tool `search_kb` (cap 04). Veja [`apex-rag-lab`](https://github.com/tftec-guilherme/apex-rag-lab) e complete o Lab Intermediário antes.
-- Azure subscription **Pay-As-You-Go** (Free Trial **não funciona** — Azure OpenAI exige PAYG)
-- Foundry Hub `aifhub-apex-prod` provisionado em `rg-lab-intermediario` East US 2 (Pré-aula 1 D06)
-- Conta Microsoft Power Platform com **Copilot Studio Trial** ativado
-- Conta GitHub
-- Docker Desktop (build MCP Server)
-- Azure CLI 2.60+ + Functions Core Tools 4.x + Node 18+ + Python 3.11+
+# 3. Abra o guia consolidado (entry-point único)
+code docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md
+
+# 4. OU navegue pelos 10 capítulos detalhados
+code docs/01-pre-requisitos.md
+```
+
+**Lifecycle estimado:** ~9h ponta-a-ponta (provisioning + setup + smoke + cleanup).
+
+**Linux/Mac/WSL:** troque `Set-Location` por `cd`.
+
+## Pré-requisitos
+
+> [!IMPORTANT]
+> **2 stacks cross-repo precisam estar deployados/concluídos ANTES deste lab.** Sem eles, os capítulos 04 e 05 quebram.
+
+### 🔴 Críticos cross-repo (deploy antes)
+
+| Stack | Bloco D06 | RG | Por que? |
+|---|---|---|---|
+| **[`apex-helpsphere`](https://github.com/tftec-guilherme/apex-helpsphere)** | Bloco 2 SaaS | `rg-helpsphere-saas` | SQL Database `helpsphere` consumido pelo MCP Server (cap 05) via tools `get_ticket` / `list_similar_tickets` |
+| **[`apex-rag-lab`](https://github.com/tftec-guilherme/apex-rag-lab)** | Bloco 3 Lab Inter | `rg-lab-intermediario` | RAG Function App `func-helpsphere-rag-{rand}` consultada pela tool `search_kb` do agente Foundry (cap 04) |
+
+### 🟡 Comuns
+
+| Item | Detalhe |
+|---|---|
+| Azure subscription | **Pay-As-You-Go** obrigatório (Free Trial **não funciona** — Azure OpenAI exige PAYG) |
+| Foundry Hub | `aifhub-apex-prod` em `rg-lab-intermediario` East US 2 (Pré-aula 1 D06) |
+| Power Platform | Copilot Studio Trial 30d (conta Work or School, **não** `live.com` pessoal) |
+| Stack dev local | Docker Desktop 4.30+, Python 3.11+, Node 18+, Azure CLI 2.60+, Functions Core Tools 4.x |
 
 > Detalhes completos em [`docs/01-pre-requisitos.md`](./docs/01-pre-requisitos.md).
 
-## Custos esperados (lab completo)
+## 💰 Custos esperados (lab completo)
 
 | Recurso | Tier | Custo estimado |
 |---|---|---|
@@ -89,7 +122,16 @@ apex-helpsphere-agente-lab/
 | Service Bus | Basic | Free tier suficiente |
 | **Total estimado lab único** | — | **R$ 100-180** |
 
-## Cleanup
+## 🔗 Família D06
+
+| Repo | Bloco | Estilo | Status |
+|---|---|---|---|
+| [`apex-helpsphere`](https://github.com/tftec-guilherme/apex-helpsphere) | Bloco 2 — SaaS base | Production-grade `azd up` | v2.x |
+| [`apex-rag-lab`](https://github.com/tftec-guilherme/apex-rag-lab) | Bloco 3 — Lab Inter RAG | Portal-first + fork funcional | v1.x |
+| **`apex-helpsphere-agente-lab`** (você está aqui) | Bloco 4-5 — Lab Final agente | Portal-first companion | v0.3.1 |
+| [`apex-helpsphere-prod-lab`](https://github.com/tftec-guilherme/apex-helpsphere-prod-lab) | Bloco 6 — Lab Avançado production | Bicep + CLI manual | v0.3.1 |
+
+## 🧹 Cleanup obrigatório
 
 [`docs/09-cleanup-obrigatorio.md`](./docs/09-cleanup-obrigatorio.md) crava obrigatoriedade `az group delete --name rg-lab-final --yes --no-wait` ao final.
 
