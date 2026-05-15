@@ -30,7 +30,7 @@ Lab production-grade (revisão 2026-05-12). Os **10 capítulos `docs/`** estão 
 - ✅ Custo estimado: R$ 100-180/lab único ([README.md](./README.md#custos-esperados-lab-completo))
 - ✅ Tempo realista: ~9h ponta-a-ponta (lifecycle estimado provision + setup + smoke)
 
-Roadmap futuro: screenshots Q2-2026 capturados em execução real (Story 06.6 dedicada), smoke test fim-a-fim documentado (Story 06.13 AC10 pattern).
+Roadmap futuro: screenshots Q2-2026 capturados em execução real e smoke test fim-a-fim documentado.
 
 ---
 
