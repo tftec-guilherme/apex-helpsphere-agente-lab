@@ -22,7 +22,7 @@
 
 ## Status atual
 
-Lab production-grade pós Wave 4 (2026-05-12). Os **10 capítulos `docs/`** estão completos, PowerShell-first e alinhados ao Azure real (Foundry Hub `aifhub-apex-prod` em `rg-lab-intermediario`):
+Lab production-grade (revisão 2026-05-12). Os **10 capítulos `docs/`** estão completos, PowerShell-first e alinhados ao Azure real (Foundry Hub `aifhub-apex-prod` em `rg-lab-intermediario`):
 
 - ✅ Pré-requisitos checklist (este arquivo, abaixo)
 - ✅ Quick Start em 7 passos ([README.md](./README.md#quick-start))

@@ -381,13 +381,13 @@ az ad app list --filter "startswith(displayName, 'app-mcp-helpsphere')" --query 
 
 ## §7 Gaps para follow-up do prof
 
-> Itens identificados nos smoke runs Wave 4 que precisam pass dedicado — não bloqueiam recording mas devem entrar em backlog.
+> Itens identificados em smoke runs recentes que precisam pass dedicado — não bloqueiam recording mas devem entrar em backlog.
 
 - 🔄 **`n8n-workflows/escalation-servicebus-sheets.json` desalinhado com Caps 07/08** — JSON canônico no repo usa `topic: "escalations"` + `subscription: "n8n-consumer"`, mas Caps 07/08 cravam `tickets-escalated` + `n8n-escalation-sub`. Workaround atual: editar no n8n UI (Cap 08 Passo 8.3). **Fix dedicado:** atualizar JSON do scaffold em pass próprio. (Origem: Cap 08 Surpresa S2)
 - 🔄 **Adaptive Card payload do node Microsoft Graph (Teams) é placeholder** — workflow JSON ainda não tem botões `Aceitar`/`Rejeitar`/`Reatribuir` que façam PATCH de volta no HelpSphere. (Origem: Cap 08 §Gaps)
 - 🔄 **Dead-letter alerting não cravado neste lab** — Service Bus Subscription com `dead-letter ON` mas sem alerta de DLQ depth no Application Insights. **Production-grade:** mover para o lab de produção (`apex-helpsphere-prod-lab/07` — Content Safety + App Insights). (Origem: Cap 08 §Gaps)
 - 🔄 **Smoke run real do `/api/agent/voice` (Cap 06) está gated** — endpoint que encadeia STT → agent → TTS depende de Function App `func-agent-runner` com Foundry Agent + MCP wired (Cap 08). Smoke voice playground via Copilot Studio funciona, mas pipeline programática completa precisa Cap 08 fechado. (Origem: Cap 06 checklist linha "(Opcional) Endpoint /api/agent/voice deployado")
-- 🔄 **2 surpresas RAG não estavam neste cap até polish Wave 4** (F7 tiktoken truncation + F8 VectorizedQuery) — descobertas em aula ao vivo Wave 4. Considerar cross-ref formal com cap RAG do Lab Intermediário (capítulo `09 — Function App RAG` no fork `apex-rag-lab`). (Origem: smoke run pós-recording)
+- 🔄 **2 surpresas RAG não estavam neste cap até polish recente** (F7 tiktoken truncation + F8 VectorizedQuery) — descobertas em aula ao vivo. Considerar cross-ref formal com cap RAG do Lab Intermediário (capítulo `09 — Function App RAG` no fork `apex-rag-lab`). (Origem: smoke run pós-recording)
 - ✅ **AMB-1, AMB-2, AMB-3, AMB-4 consolidados em `_disclaimers.md`** — capítulos referenciam IDs apontando para [`_disclaimers.md`](./_disclaimers.md), eliminando drift. Quando prof revisar tier/licenciamento, atualizar somente esse arquivo + bumpar `version-anchor`.
 
 ---
