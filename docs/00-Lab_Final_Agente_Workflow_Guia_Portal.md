@@ -353,17 +353,52 @@ Esse é o topic principal — ele chama o Foundry Agent (criado na Parte 3) via 
 
 **No Copilot Studio Maker — agente aberto no canvas:**
 
-1. Menu lateral → **Topics** → **+ New topic** → **Create from blank**
-2. Preencher:
-   - **Topic name:** `Resolver_ticket`
-   - **Trigger:** `Description-based` (Generative AI decide quando entrar)
-   - **Description for AI:** `Use este topic quando o usuário descreve um problema ou pergunta sobre um ticket específico do HelpSphere.`
-3. No canvas do topic, adicionar nodes:
-   - **+ Add node** → **Ask a question** → mensagem: `Qual o problema do ticket que você precisa de ajuda?` → variável de saída: `userQuery`
-   - **+ Add node** → **Call an action** → deixar placeholder (configuraremos no Passo 8.1 após Parte 3)
-4. **Save**
+### Sub-passo 2.4.1 — Criar o topic
+
+1. Menu lateral → **Topics** → **+ Add a topic** → **From blank** (em algumas UIs aparece como `+ New topic → Create from blank`)
+2. **Topic name** (canto superior esquerdo): `Resolver_ticket`
+
+### Sub-passo 2.4.2 — Configurar o trigger via Description (sem dropdown "Description-based")
+
+A UI Q2-2026 **não tem mais dropdown "Description-based"**. O orquestrador Generative AI usa o campo **Description** do node Trigger automaticamente.
+
+1. No canvas, **clique no primeiro node "Trigger"** (já existe — não precisa adicionar)
+2. Painel da direita abre com 2 campos principais:
+   - **Phrases:** deixe **VAZIO** (não adicione frases de gatilho)
+   - **Description:** cole exatamente:
+     ```
+     Use este topic quando o usuário descreve um problema ou pergunta sobre um ticket específico do HelpSphere.
+     ```
+3. Se aparecer dropdown **"Trigger by"** com opções `Phrases` / `Event` / `Activity` → mantenha `Phrases` (mesmo sem frases preenchidas). A **Description** é o que o Generative AI consulta no modo orquestrador.
+
+> **Por que isso funciona:** com o agente em modo **Generative AI** (Passo 2.2), o orquestrador faz **semantic match** da pergunta do usuário contra a `Description` de cada topic. Não precisa de phrases nem dropdown explícito.
+
+### Sub-passo 2.4.3 — Adicionar node "Ask a question"
+
+1. Abaixo do node Trigger, clique no **+** (adicionar node)
+2. No menu que abre, procure por **"Ask a question"**:
+   - Se não aparecer direto, clique **"See more"** no rodapé do menu OU digite `ask` no campo de busca
+3. Selecione **"Ask a question"** → painel direita:
+   - **Question:** `Qual o problema do ticket que você precisa de ajuda?`
+   - **Identify:** `User's entire response` (dropdown — escolhe a resposta inteira como entidade)
+   - **Save response as:** `userQuery` (cria a variável automaticamente)
+
+### Sub-passo 2.4.4 — Adicionar node "Call an action" (placeholder)
+
+1. Abaixo do node "Ask a question", clique no **+** novamente
+2. No menu, procure **"Call an action"**:
+   - Localização atual: categoria **"Advanced"** OU digite `call` no campo de busca
+   - Em algumas UIs aparece agrupado como **"Add a tool"** ou **"Call a Power Automate flow"** — selecione o que tiver `Call an action` ou `tool` no nome
+3. **Deixe como placeholder** — não configure a action agora. Será preenchido no **Passo 8.1** (após criar o Foundry Agent na Parte 3 + MCP na Parte 4)
+
+### Sub-passo 2.4.5 — Salvar
+
+1. Botão **Save** (canto superior direito do canvas do topic)
+2. Aguarde toast "Topic saved" antes de fechar
 
 <!-- screenshot: passo-2.4-topic-resolver-ticket.png -->
+
+> **Surpresa Q2-2026 catalogada:** UI anterior tinha dropdown explícito **"Trigger: Description-based"** + nodes "Ask a question" / "Call an action" visíveis no menu raiz. Atual usa **campo Description no node Trigger** (orquestrador implícito) + nodes agrupados sob categorias com **"See more"** ou busca. Ver `docs/_disclaimers.md` SUR-CS-Q2-2026-TOPICS.
 
 Volte na Parte 2 após Parte 3 (configurar a Call an action).
 

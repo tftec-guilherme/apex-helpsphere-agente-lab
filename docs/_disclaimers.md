@@ -83,6 +83,37 @@
 
 ---
 
+## SUR-CS-Q2-2026-TOPICS — Copilot Studio UI Topics (Trigger Description + nodes agrupados)
+
+**Categoria:** UI / Pedagogia
+**Severidade:** MEDIUM (confunde aluno, não bloqueia execução)
+**Capítulos afetados:** `00-Lab_Final_Agente_Workflow_Guia_Portal.md` Passo 2.4 + `03-copilot-studio-setup.md` (se houver passo equivalente de topic generative)
+
+**Contexto:** UI de Topics do Copilot Studio Maker mudou em Q2-2026 vs versões anteriores que tinham dropdown explícito "Description-based" e nodes "Ask a question" / "Call an action" no menu raiz.
+
+**Sintomas:**
+- Aluno procura **dropdown "Trigger: Description-based"** ao criar topic → não existe mais
+- Aluno procura **node "Ask a question"** no menu **+** → não aparece de cara (escondido sob "See more" ou busca)
+- Aluno procura **node "Call an action"** → também escondido, às vezes renomeado para **"Add a tool"** ou **"Call a Power Automate flow"**
+
+**Causa raiz:**
+- O orquestrador Generative AI agora consulta o campo **Description** do node **Trigger** (automático no canvas) — não há mais opção explícita "Description-based" no UI. O dropdown "Trigger by" às vezes ainda aparece mas é vestigial (mantenha `Phrases` mesmo sem preencher).
+- O menu **+ Add node** foi reorganizado em categorias colapsáveis. Nodes menos usados ficam atrás de **"See more"**. Busca textual (`ask`, `call`, `condition`) é o caminho mais rápido.
+- Nomes de nodes legacy (`Call an action`) coexistem com novos (`Add a tool` para tools de plugin, `Call a Power Automate flow` para automation) — visualmente parecidos, semanticamente equivalentes para custom action de Foundry Agent.
+
+**Fix adotado (sessão 2026-05-17):**
+- Passo 2.4 (guia consolidado) reescrito em 5 sub-passos:
+  - 2.4.1 criar topic
+  - 2.4.2 configurar trigger via campo Description (sem dropdown)
+  - 2.4.3 Ask a question com `Identify: User's entire response` + `Save response as: userQuery`
+  - 2.4.4 Call an action placeholder (com nota sobre nomes alternativos)
+  - 2.4.5 Save
+- Nota explicativa "Por que isso funciona" reforçando semantic match Generative AI vs phrases.
+
+**Lição:** UI de Topics evolui junto com features de Generative Orchestration. Re-validar a cada bump de versão Copilot Studio. Esta entrada cataloga estado da UI em **Q2-2026** (validado em 2026-05-17).
+
+---
+
 ## SUR-CS-Q2-2026 — Copilot Studio UI Generative AI mode + Knowledge sources
 
 **Categoria:** UI / Pedagogia
@@ -114,6 +145,7 @@
 
 | Data | Versão | Mudança | Origem |
 |---|---|---|---|
+| 2026-05-17 | Q2-2026 | SUR-CS-Q2-2026-TOPICS catalogada: Trigger via campo Description (sem dropdown) + nodes agrupados sob "See more" / busca | @aiox-master sessão debug Lab Final |
 | 2026-05-14 | Q2-2026 | SUR-CS-Q2-2026 catalogada: Copilot Studio UI Generative AI mode + Knowledge sources (Story 06.28) | @aiox-master sessão correção |
 | 2026-05-09 | Q2-2026 | Arquivo cravado consolidando AMB-1 a AMB-4 (drift fix sessão noturna 2026-05-09) | @aiox-master sessão close-the-day |
 
