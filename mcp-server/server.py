@@ -1,78 +1,81 @@
-"""HelpSphere MCP Server — v0.1.0-init skeleton.
+"""HelpSphere MCP Server — FastMCP + Entra OAuth + SQL backend.
 
-Cravado pela Story 06.11 Bloco B. Tool stub `search_helpsphere_kb` apenas;
-implementação real chamando AI Search (apex-rag-lab) virá em capítulo 05.
+Expõe 4 tools sobre o SQL Database `helpsphere` (stack apex-helpsphere SaaS):
+    - get_ticket(ticket_id)
+    - list_tickets(status, limit, category)
+    - add_comment(ticket_id, comment, author)
+    - update_status(ticket_id, new_status)
 
-Spec MCP: https://modelcontextprotocol.io/
++ 1 resource `helpsphere://tickets/{ticket_id}`.
+
+Auth via decorator `@require_scope` (auth.py) lendo Bearer token do contexto MCP.
 
 Uso:
-    python server.py     # listen 0.0.0.0:8080
+    pip install -r requirements.txt
+    $env:HELPSPHERE_SQL_CONNECTION = "Driver={ODBC Driver 18 for SQL Server};Server=tcp:...;Database=helpsphere;..."
+    $env:ENTRA_TENANT_ID = "<tenant>"
+    $env:EXPECTED_AUDIENCE = "api://<server-app-client-id>"
+    python server.py   # listen 0.0.0.0:8000
 """
-
 from __future__ import annotations
 
 import logging
 import os
-from typing import Any
 
-# MCP SDK imports — placeholder. Real wiring com mcp.server.lowlevel.Server
-# vai ser cravado no capítulo 05.
-try:
-    from mcp.server.lowlevel import Server
-    from mcp.server.stdio import stdio_server
-except ImportError:
-    Server = None
-    stdio_server = None
+from fastmcp import FastMCP
+
+from auth import require_scope
+from helpsphere_db import HelpSphereDB
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("mcp-helpsphere")
 
+mcp = FastMCP("helpsphere")
+db = HelpSphereDB(os.environ["HELPSPHERE_SQL_CONNECTION"])
 
-def search_helpsphere_kb(query: str, top_k: int = 3) -> dict[str, Any]:
-    """Busca conhecimento no índice AI Search do apex-rag-lab.
 
-    Implementação real (cap 05):
-        - Autenticar via DefaultAzureCredential (MI no ACA)
-        - Chamar SearchClient.search() com query + select=['content', 'source', 'page']
-        - Retornar top_k chunks com citação
+@mcp.tool()
+@require_scope("helpsphere.tickets.read")
+def get_ticket(ticket_id: int) -> dict:
+    """Recupera dados completos de um ticket pelo ID."""
+    return db.get_ticket(ticket_id)
 
-    Por enquanto, retorna placeholder.
+
+@mcp.tool()
+@require_scope("helpsphere.tickets.read")
+def list_tickets(status: str = "Open", limit: int = 10, category: str | None = None) -> list[dict]:
+    """Lista tickets filtrando por status e opcionalmente categoria."""
+    return db.list_tickets(status=status, limit=limit, category=category)
+
+
+@mcp.tool()
+@require_scope("helpsphere.tickets.write")
+def add_comment(ticket_id: int, comment: str, author: str) -> dict:
+    """Adiciona comentário a um ticket."""
+    return db.add_comment(ticket_id, comment, author)
+
+
+@mcp.tool()
+@require_scope("helpsphere.tickets.write")
+def update_status(ticket_id: int, new_status: str) -> dict:
+    """Atualiza status do ticket. Válidos: Open, InProgress, Resolved, Escalated."""
+    return db.update_status(ticket_id, new_status)
+
+
+@mcp.resource("helpsphere://tickets/{ticket_id}")
+def ticket_resource(ticket_id: int) -> str:
+    """Retorna ticket formatado como recurso MCP.
+
+    TODO(student): customize a formatação para incluir mais contexto além
+    do dict cru — sugestões:
+      - Incluir últimos N comentários (helpsphere_db.list_comments(ticket_id))
+      - Adicionar SLA metadata (deadline esperado por priority)
+      - Formatar como Markdown ao invés de str(dict)
     """
-    log.info("search_helpsphere_kb chamado: query=%r top_k=%d", query, top_k)
-    return {
-        "tool": "search_helpsphere_kb",
-        "query": query,
-        "top_k": top_k,
-        "status": "placeholder",
-        "results": [
-            {
-                "content": "Implementação real virá em docs/05-mcp-server-deploy.md",
-                "source": "TBD",
-                "page": 0,
-                "score": 0.0,
-            }
-        ],
-    }
-
-
-def main() -> None:
-    """Entrypoint MCP Server.
-
-    Skeleton: apenas log + smoke da tool. Capítulo 05 vai cravar wiring real
-    com mcp.server.lowlevel.Server + transport stdio ou SSE.
-    """
-    log.info("MCP Server HelpSphere v0.1.0-init iniciando...")
-    log.info("AI_SEARCH_ENDPOINT=%s", os.getenv("AI_SEARCH_ENDPOINT", "MISSING"))
-    log.info("AI_SEARCH_INDEX=%s", os.getenv("AI_SEARCH_INDEX", "apex-rag-lab-index"))
-
-    # Smoke da tool
-    result = search_helpsphere_kb("devolução de pedido", top_k=2)
-    log.info("Smoke search_helpsphere_kb: %s", result)
-
-    log.info("Server skeleton pronto. Implementação real: docs/05-mcp-server-deploy.md")
-    log.info("Para rodar como MCP server real, descomente o stdio_server() abaixo após cap 05.")
-    # asyncio.run(stdio_server(...))  # cravado no capítulo 05
+    ticket = db.get_ticket(ticket_id)
+    return str(ticket)
 
 
 if __name__ == "__main__":
-    main()
+    log.info("MCP Server HelpSphere iniciando em 0.0.0.0:8000")
+    mcp.run(transport="http", host="0.0.0.0", port=8000)

@@ -1,3 +1,4 @@
+azure-functions
 azure-ai-projects==1.0.0b9
 azure-identity>=1.15.0
 azure-servicebus>=7.11.0

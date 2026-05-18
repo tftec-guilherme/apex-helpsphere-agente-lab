@@ -8,6 +8,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v0.4.0-code-files-physical] — 2026-05-17
+
+### Added
+
+**Código de aplicação em pastas físicas espelhando pattern `apex-helpsphere/app/`.**
+
+Antes desta release, ~315L de código Python das Partes 3 e 4 ficavam apenas inline no guia Portal canônico; o repo continha skeletons stub (`agent-code/agent.py` 216L + `mcp-server/server.py` 78L). Aluno copiava 315L do guia, com risco de typos/indentação, e a manutenção exigia editar 2 fontes.
+
+Agora o aluno clona o repo e encontra as pastinhas com código 90% pronto + TODOs estratégicos para customizar.
+
+- **`agent-code/create_agent.py`** (novo, ~125L) — registra `helpsphere-tier1-agent` no Foundry com 4 tools + system prompt. TODO marcado no `SYSTEM_PROMPT` (custom tom/regras)
+- **`agent-code/agent_runner.py`** (novo, ~150L) — handlers das 4 tools + event loop `run_agent()`. TODO marcado no `ESCALATION_THRESHOLD` (default `0.5`)
+- **`agent-code/func-agent-runner/`** (nova pasta) — wrapper Function App HTTP para Copilot Studio: `function_app.py` + `host.json` + `requirements.txt`
+- **`agent-code/README.md`** (novo) — instruções run local + deploy Function App + troubleshooting
+- **`mcp-server/auth.py`** (novo, ~55L) — validação JWT Entra + decorator `@require_scope`
+- **`mcp-server/helpsphere_db.py`** (novo, ~90L) — wrapper SQL HelpSphere (4 ops: get/list/add_comment/update_status)
+- **`mcp-server/README.md`** (novo) — build + deploy ACA + troubleshooting
+
+### Changed
+
+- **`agent-code/requirements.txt`** — sync com o que `create_agent.py`/`agent_runner.py` usam: `azure-ai-projects==1.0.0b9`, `azure-identity`, `azure-servicebus`, `openai>=1.40.0`, `requests`
+- **`mcp-server/server.py`** — expandido de skeleton stub (78L) para FastMCP completo com 4 tools `@require_scope` + 1 resource `helpsphere://tickets/{ticket_id}`. TODO marcado em `ticket_resource()` (custom formatação)
+- **`mcp-server/requirements.txt`** — substituído por deps reais: `fastmcp`, `pyodbc`, `pyjwt[crypto]`, `requests`, `azure-identity`
+
+### Removed
+
+- **`agent-code/agent.py`** (skeleton legacy v0.1.0-init 216L) — substituído por `agent_runner.py` (handlers reais) + `create_agent.py` (registro)
+
+### Pedagogical impact
+
+- **DRY restaurada:** 1 fonte da verdade (arquivos físicos), guia Portal pode referenciar com "abra `<path>`"
+- **3 TODOs estratégicos** preservam ACTIVE learning (90% pronto + 10% customização pedagógica):
+  1. `create_agent.py:SYSTEM_PROMPT` — tom/regras do agente
+  2. `agent_runner.py:ESCALATION_THRESHOLD` — política de escalação
+  3. `mcp-server/server.py:ticket_resource` — formatação do recurso
+- **Pattern alinhado** com `apex-helpsphere/app/` (template SaaS base): código pronto em pastas semânticas
+- **Deploy continua Portal manual** — Copilot Studio + n8n + ACA via Portal (não vira `azd up`)
+
+### Out of scope nesta release
+
+- Refactor do guia Portal canônico substituindo blocos longos por callouts "abra `<path>`" + trechos curtos — entrega futura
+- Tests automatizados / observability / telemetry
+- Replicação do pattern em `apex-helpsphere-prod-lab` (Lab Avançado)
+
+---
+
 ## [v0.3.0] — 2026-05-14
 
 ### Changed
