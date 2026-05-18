@@ -8,6 +8,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [v0.4.1-foundry-v2-sdk] — 2026-05-17
+
+### Changed — Upgrade `azure-ai-projects` 1.0.0b9 (preview) → 2.1.0 GA + adoção `azure-ai-agents` v1 GA
+
+Em Q2-2026, AI Foundry mudou de **Hub-based projects (legacy)** para **Foundry Direct Projects**. O SDK preview `azure-ai-projects==1.0.0b9` que estava pinned exigia connection string formato legacy `<region>.api.azureml.ms;<sub>;<rg>;<project>`. Foundry novo (Direct Projects) só expõe **endpoint URI** no formato `https://<hub>.services.ai.azure.com/api/projects/<project>` — não há mais "Project connection string" na UI.
+
+Resultado: aluno rodando `create_agent.py` tomava `ValueError: Invalid connection string format` ao tentar passar o endpoint URI do Project novo.
+
+- **`agent-code/requirements.txt`** + **`agent-code/func-agent-runner/requirements.txt`**: `azure-ai-projects==1.0.0b9` → `azure-ai-projects>=2.1.0` + adicionado `azure-ai-agents>=1.0.0` (pacote dedicado para Agents API em GA)
+- **`agent-code/create_agent.py`**: trocado `AIProjectClient.from_connection_string(conn_str, credential)` por `AgentsClient(endpoint, credential)` direto. Env var renomeada `AI_PROJECT_CONNECTION_STRING` → `AI_PROJECT_ENDPOINT`. Chamada `client.agents.create_agent()` → `client.create_agent()` (sem prefixo `.agents.`)
+- **`agent-code/agent_runner.py`**: nova surface — `client.messages.create()`, `client.runs.create(agent_id=...)`, `client.runs.submit_tool_outputs(thread_id, run_id, tool_outputs=...)`, `client.runs.get()`, `client.messages.get_last_message_text_by_role()`. Parâmetro renomeado: `assistant_id` → `agent_id` em `runs.create`.
+- **`agent-code/func-agent-runner/function_app.py`**: `client.agents.create_thread()` → `client.threads.create()`
+- **`agent-code/README.md`**: atualizado troubleshooting com `Invalid connection string format` + instruções de como achar o `AI_PROJECT_ENDPOINT` no Portal Foundry (Direct Project) + via Azure CLI fallback
+- **`docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md`**: Passo 3.4 reescrito (env var name + onde achar o endpoint URI no Portal); Passo 3.6 App Settings + bloco Azure CLI alternativo: `AI_PROJECT_CONNECTION_STRING` → `AI_PROJECT_ENDPOINT`; Nota SDK do Passo 3.3 atualizada (era preview b9 → agora GA)
+
+### Verification
+
+- Smoke test executado no `.venv` real do lab (`C:\Aulas\apex-helpsphere-agente-lab\agent-code\.venv`) — todos os imports + API surface validados contra `azure-ai-agents>=1.0.0` instalado
+- Sintaxe + imports + chamadas dos 3 arquivos (`create_agent.py`, `agent_runner.py`, `function_app.py`) OK
+
+### Pedagogical impact
+
+- Aluno não toma mais `ValueError: Invalid connection string format` ao colar o endpoint URI do Foundry Direct Project
+- Stack alinhado com Foundry Q2-2026+ (Direct Projects são o default no portal)
+- Migração documentada como referência futura para outros forks/labs que ainda usem o preview b9
+
+### Cross-references
+
+- Bug reportado pelo prof rodando `python create_agent.py` em `C:\Aulas\apex-helpsphere-agente-lab\agent-code\` (sessão 2026-05-17)
+- Decisão de não criar Project hub-based legacy paralelo: aluno deve usar o Foundry moderno que é o default do portal hoje
+
+---
+
 ## [v0.4.0-code-files-physical] — 2026-05-17
 
 ### Added

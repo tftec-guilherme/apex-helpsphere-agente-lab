@@ -482,7 +482,7 @@ agent-code/
 
 ### O que `create_agent.py` faz
 
-Chama `client.agents.create_agent()` registrando 4 tools com schemas JSON (formato OpenAI function calling):
+Chama `client.create_agent()` (SDK `azure-ai-agents` v1 GA) registrando 4 tools com schemas JSON (formato OpenAI function calling):
 
 | Tool | O que faz | Backend |
 |------|-----------|---------|
@@ -493,9 +493,15 @@ Chama `client.agents.create_agent()` registrando 4 tools com schemas JSON (forma
 
 > **TODO pedagógico:** abra o arquivo na seção `SYSTEM_PROMPT` (próximo à linha 95). O texto baseline orienta o agent a usar `search_kb` primeiro, escalar quando `confidence < 0.5`, citar fontes e responder em pt-BR. Customize tom, regras de negócio da HelpSphere fictícia, limite de palavras, SLAs — o que fizer sentido para a turma.
 
-> **Nota SDK:** `azure-ai-projects==1.0.0b9` (preview). Pinned hard porque GA Q3-2026 vai introduzir breaking changes (e.g., `client.agents.create_message` virou `client.agents.threads.messages.create`). Quando GA sair, atualize seguindo migration guide.
+> **Nota SDK:** o Foundry mudou em Q2-2026 para **Foundry Direct Projects**. SDK GA atual: `azure-ai-agents>=1.0.0` + `azure-ai-projects>=2.1.0`. O constructor usa **endpoint URI direto** (formato `https://<hub>.services.ai.azure.com/api/projects/<project>`), NÃO mais a `connection string` legacy `<region>.api.azureml.ms;...` que o SDK preview `1.0.0b9` exigia.
 
 ## Passo 3.4 — Setup env vars e rodar
+
+Pegue o **endpoint URI do seu Project** no Portal Foundry (em **ai.azure.com → Project aberto → Project endpoint** na barra lateral). Formato:
+
+```
+https://<hub-name>.services.ai.azure.com/api/projects/<project-name>
+```
 
 ```powershell
 cd agent-code
@@ -503,8 +509,8 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 
-# Connection string do Foundry Project (em ai.azure.com → Project → Settings)
-$env:AI_PROJECT_CONNECTION_STRING = "<sua-connection-string>"
+# Endpoint URI do Foundry Direct Project
+$env:AI_PROJECT_ENDPOINT = "https://<hub-name>.services.ai.azure.com/api/projects/<project-name>"
 
 # URLs/keys do Lab Intermediário
 $env:RAG_FUNCTION_URL = "https://func-helpsphere-rag-{rand}.azurewebsites.net"
@@ -618,7 +624,7 @@ Wrapper HTTP enxuto (~25 linhas) que:
 
 1. Function App `func-helpsphere-agent-<rand>` → menu **Settings** → **Environment variables** → **App settings**
 2. **+ Add** cada variável:
-   - `AI_PROJECT_CONNECTION_STRING` = `<connection string do Foundry Project>`
+   - `AI_PROJECT_ENDPOINT` = `https://<hub>.services.ai.azure.com/api/projects/<project>`
    - `AGENT_ID` = `<asst_xxxxxxx>`
    - `RAG_FUNCTION_URL` = `<URL do Lab Intermediário>`
    - `RAG_FUNCTION_KEY` = `<key>`
@@ -654,7 +660,7 @@ func azure functionapp publish func-helpsphere-agent-<rand> --python
 >   --name $FUNC_AGENT_NAME \
 >   --resource-group rg-lab-final \
 >   --settings \
->     AI_PROJECT_CONNECTION_STRING="<...>" \
+>     AI_PROJECT_ENDPOINT="https://<hub>.services.ai.azure.com/api/projects/<project>" \
 >     AGENT_ID="<asst_id>" \
 >     RAG_FUNCTION_URL="<...>" \
 >     RAG_FUNCTION_KEY="<...>" \

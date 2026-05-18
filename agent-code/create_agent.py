@@ -1,31 +1,25 @@
-"""Cria o helpsphere-tier1-agent no Foundry Agent Service.
+"""Registra o helpsphere-tier1-agent no Foundry Agent Service (SDK v2 GA).
 
-Define system prompt + 4 tools (function calling). Roda 1x para registrar o
-agent no Foundry; depois, agent_runner.py usa o `agent.id` retornado.
+Define system prompt + 4 tools (function calling). Roda 1x para criar o agent;
+depois, `agent_runner.py` usa o `agent.id` retornado.
 
 Pré-requisitos:
     pip install -r requirements.txt
-    $env:AI_PROJECT_CONNECTION_STRING = "<connection-string-do-foundry-project>"
-    $env:RAG_FUNCTION_URL = "https://func-helpsphere-rag-{rand}.azurewebsites.net"
-    $env:RAG_FUNCTION_KEY = "<key>"
-    $env:MCP_SERVER_URL = "https://placeholder"  # placeholder ate Parte 4
+    $env:AI_PROJECT_ENDPOINT = "https://<hub>.services.ai.azure.com/api/projects/<project>"
 
 Uso:
     python create_agent.py
 """
 import os
 
-from azure.ai.projects import AIProjectClient
+from azure.ai.agents import AgentsClient
 from azure.identity import DefaultAzureCredential
 
-PROJECT_CONNECTION_STRING = os.environ["AI_PROJECT_CONNECTION_STRING"]
-RAG_FUNCTION_URL = os.environ["RAG_FUNCTION_URL"]
-RAG_FUNCTION_KEY = os.environ["RAG_FUNCTION_KEY"]
-MCP_SERVER_URL = os.environ["MCP_SERVER_URL"]
+PROJECT_ENDPOINT = os.environ["AI_PROJECT_ENDPOINT"]
 
-client = AIProjectClient.from_connection_string(
+client = AgentsClient(
+    endpoint=PROJECT_ENDPOINT,
     credential=DefaultAzureCredential(),
-    conn_str=PROJECT_CONNECTION_STRING,
 )
 
 # Tool 1: search_kb — chama RAG do Lab Intermediário
@@ -115,7 +109,7 @@ Quando recebe uma pergunta sobre ticket:
 
 NUNCA invente informação que não esteja no kb. Se não encontrar, escale."""
 
-agent = client.agents.create_agent(
+agent = client.create_agent(
     model="gpt-4.1-mini",
     name="helpsphere-tier1-agent",
     instructions=SYSTEM_PROMPT,
@@ -125,4 +119,4 @@ agent = client.agents.create_agent(
 print(f"[+] Agent criado: {agent.id}")
 print(f"    Model: {agent.model}")
 print(f"    Tools: {len(agent.tools)}")
-print("    Anote esse ID — usado no Copilot Studio (Passo 2.5) e no Function App (Passo 3.6).")
+print("    Anote esse ID — usado no Copilot Studio (Passo 2.5) e como AGENT_ID no Function App (Passo 3.6).")

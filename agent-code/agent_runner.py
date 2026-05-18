@@ -1,4 +1,4 @@
-"""Handlers das 4 tools do helpsphere-tier1-agent + event loop `run_agent`.
+"""Handlers das 4 tools + event loop `run_agent` (SDK Agents v1 GA).
 
 Função `run_agent(thread_id, user_message)` é chamada pelo wrapper HTTP em
 `func-agent-runner/function_app.py` (Passo 3.6).
@@ -7,7 +7,7 @@ Cada tool handler implementa a lógica REAL chamando:
     - search_kb     → HTTP POST RAG Function App (Lab Intermediário)
     - get_ticket    → HTTP POST MCP Server (Parte 4)
     - list_similar  → HTTP POST MCP Server
-    - escalate      → Service Bus topic (Parte 7)
+    - escalate      → Service Bus topic `escalations` (Parte 7)
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import logging
 import os
 
 import requests
-from azure.ai.projects import AIProjectClient
+from azure.ai.agents import AgentsClient
 from azure.identity import DefaultAzureCredential
 from azure.servicebus import ServiceBusClient, ServiceBusMessage
 
@@ -30,9 +30,9 @@ MCP_TOKEN = os.environ.get("MCP_TOKEN", "")
 SERVICE_BUS_CONN = os.environ.get("SERVICE_BUS_CONNECTION", "")
 AGENT_ID = os.environ["AGENT_ID"]
 
-client = AIProjectClient.from_connection_string(
+client = AgentsClient(
+    endpoint=os.environ["AI_PROJECT_ENDPOINT"],
     credential=DefaultAzureCredential(),
-    conn_str=os.environ["AI_PROJECT_CONNECTION_STRING"],
 )
 
 # TODO(student): ajuste este threshold conforme a criatividade pedagógica.
@@ -114,7 +114,7 @@ TOOL_DISPATCH = {
 
 
 def run_agent(thread_id: str, user_message: str) -> str:
-    """Roda 1 turno completo do agente Foundry.
+    """Roda 1 turno completo do agente Foundry (SDK v2 GA).
 
     1. Adiciona `user_message` no thread
     2. Cria run, polleia até completion
@@ -124,12 +124,12 @@ def run_agent(thread_id: str, user_message: str) -> str:
     """
     log.info("run_agent: thread_id=%s message=%r", thread_id, user_message[:80])
 
-    client.agents.create_message(
+    client.messages.create(
         thread_id=thread_id,
         role="user",
         content=user_message,
     )
-    run = client.agents.create_run(thread_id=thread_id, assistant_id=AGENT_ID)
+    run = client.runs.create(thread_id=thread_id, agent_id=AGENT_ID)
 
     while run.status in ("queued", "in_progress", "requires_action"):
         if run.status == "requires_action":
@@ -150,21 +150,21 @@ def run_agent(thread_id: str, user_message: str) -> str:
                     "tool_call_id": tool_call.id,
                     "output": json.dumps(output),
                 })
-            run = client.agents.submit_tool_outputs(
+            run = client.runs.submit_tool_outputs(
                 thread_id=thread_id, run_id=run.id, tool_outputs=tool_outputs,
             )
         else:
-            run = client.agents.get_run(thread_id=thread_id, run_id=run.id)
+            run = client.runs.get(thread_id=thread_id, run_id=run.id)
 
-    messages = client.agents.list_messages(thread_id=thread_id, order="desc", limit=1)
-    if messages.data:
-        return messages.data[0].content[0].text.value
+    last = client.messages.get_last_message_text_by_role(thread_id=thread_id, role="assistant")
+    if last and last.text:
+        return last.text.value
     return "(sem resposta)"
 
 
 if __name__ == "__main__":
-    # Smoke local — exige AGENT_ID em env + thread criada previamente
-    thread = client.agents.create_thread()
+    # Smoke local — exige AGENT_ID + AI_PROJECT_ENDPOINT setados
+    thread = client.threads.create()
     print(f"Thread criada: {thread.id}")
     resposta = run_agent(thread.id, "Como configuro MFA para um usuário novo?")
     print(f"Agent: {resposta}")

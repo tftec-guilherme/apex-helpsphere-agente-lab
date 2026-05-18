@@ -1,7 +1,8 @@
 """HTTP wrapper do `agent_runner` para Copilot Studio (e clientes externos) chamarem.
 
 Deploy: Function App Linux Python 3.11 Consumption. Application Settings
-precisam de TODAS as env vars que `agent_runner.py` consome.
+precisam de TODAS as env vars que `agent_runner.py` consome
+(incluindo `AI_PROJECT_ENDPOINT` no formato novo Foundry).
 """
 import json
 
@@ -19,7 +20,7 @@ def chat(req: func.HttpRequest) -> func.HttpResponse:
     thread_id = body.get("thread_id")
 
     if not thread_id:
-        thread = client.agents.create_thread()
+        thread = client.threads.create()
         thread_id = thread.id
 
     response = run_agent(thread_id, user_message)
