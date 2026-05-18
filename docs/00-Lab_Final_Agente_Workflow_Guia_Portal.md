@@ -630,6 +630,7 @@ Wrapper HTTP enxuto (~25 linhas) que:
    - `RAG_FUNCTION_KEY` = `<key>`
    - `MCP_SERVER_URL` = `<a-definir-na-Parte-4>`
    - `MCP_TOKEN` = `<a-definir-na-Parte-4>`
+   - `AzureWebJobsFeatureFlags` = `EnableWorkerIndexing` — **obrigatória em Flex Consumption** para o host descobrir o `@app.route` do `function_app.py` (programming model Python v2). Sem ela, deploy completa mas `az functionapp function list` retorna vazio.
 3. **Apply** (rolar até o topo) → **Confirm**
 4. Aguardar restart ~30s
 
@@ -665,7 +666,8 @@ func azure functionapp publish func-helpsphere-agent-<rand> --python
 >     RAG_FUNCTION_URL="<...>" \
 >     RAG_FUNCTION_KEY="<...>" \
 >     MCP_SERVER_URL="<a-definir>" \
->     MCP_TOKEN="<a-definir>"
+>     MCP_TOKEN="<a-definir>" \
+>     AzureWebJobsFeatureFlags="EnableWorkerIndexing"
 >
 > # Deploy
 > cd func-agent-runner/

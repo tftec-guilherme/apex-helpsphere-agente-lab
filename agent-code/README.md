@@ -75,6 +75,8 @@ Veja **Passo 3.6** do guia. Resumo:
 
 | Sintoma | Causa | Fix |
 |---------|-------|-----|
+| `ModuleNotFoundError: No module named 'agent_runner'` no deploy (logs do worker) | `agent_runner.py` está fora da pasta `func-agent-runner/` e o `func publish` só zipa a pasta atual | Mover o arquivo: `Move-Item agent_runner.py func-agent-runner\` (já refletido no repo) |
+| `az functionapp function list` retorna vazio depois de deploy "successful" + logs do host mostram `0 functions found (Custom)` em 1ms | Flex Consumption não descobriu programming model v2 (sem `@app.route` indexados) | Setar App Setting `AzureWebJobsFeatureFlags=EnableWorkerIndexing` + restart do Function App |
 | `ValueError: Invalid connection string format` | Você está rodando código velho (b9) com a URL nova | Rode `pip install -U azure-ai-agents azure-ai-projects` e use `AI_PROJECT_ENDPOINT` (não mais `AI_PROJECT_CONNECTION_STRING`) |
 | `KeyError: 'AGENT_ID'` | env var não configurada | Atualize App Settings após rodar `create_agent.py` |
 | `Token tenant XXX does not match resource tenant` | `DefaultAzureCredential` pegou token de tenant errado (sub default do `az account` é de outro tenant) | `az account set --subscription <sub-id-do-foundry>` antes de rodar, ou trocar para `DefaultAzureCredential(tenant_id="<tenant-do-foundry>")` no código |
