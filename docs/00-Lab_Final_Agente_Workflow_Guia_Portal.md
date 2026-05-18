@@ -35,12 +35,12 @@
 
 Esta disciplina entrega 2 componentes pré-prontos. Você **NÃO implementa** — apenas configura e usa:
 
-1. **MCP Server HelpSphere** (`03_Aplicações/mcp-helpsphere/`)
+1. **MCP Server HelpSphere** (`mcp-server/`)
    - Python + FastMCP + ACA-ready
    - Imagem Docker pública: `tftecr.azurecr.io/mcp-helpsphere:v1.0`
    - 4 tools: `get_ticket`, `list_tickets`, `add_comment`, `update_status`
 
-2. **Workflow de escalação n8n** (`03_Aplicações/n8n-workflows/escalation.json`)
+2. **Workflow de escalação n8n** (`n8n-workflows/escalation-servicebus-sheets.json`)
    - Importável no n8n após provisão
    - 7 nodes determinísticos
 
@@ -467,6 +467,8 @@ Volte na Parte 2 após Parte 3 (configurar a Call an action).
 
 ## Passo 3.3 — Criar agent via SDK Python
 
+> **Você cria estes arquivos localmente** — não vêm do repo `apex-helpsphere-agente-lab`. O `agent-code/agent.py` no repo é apenas skeleton de referência (v0.1.0-init); o código abaixo é o que você digita/cola na sua pasta de trabalho.
+
 Crie pasta local `agent-helpsphere/` com:
 
 `requirements.txt`:
@@ -623,6 +625,8 @@ Anote o `agent.id` (formato `asst_xxxxxxx`) — você vai usar no Copilot Studio
 
 ## Passo 3.5 — Implementar handler de tools
 
+> **Crie `agent_runner.py` localmente** na mesma pasta `agent-helpsphere/` do Passo 3.3 — também não está no repo.
+
 O agent definiu o **schema** das tools, mas não a implementação. O handler é um wrapper Python que executa cada tool e retorna resultado ao agent.
 
 `agent_runner.py`:
@@ -742,6 +746,8 @@ if __name__ == "__main__":
 ## Passo 3.6 — Deploy do runner como Function App
 
 Para integração com Copilot Studio, o runner precisa estar acessível por HTTP. Vamos transformar em Function App.
+
+> **Crie a estrutura `func-agent-runner/` localmente** — pasta nova ao lado de `agent-helpsphere/`, não vem do repo.
 
 Crie `func-agent-runner/`:
 
@@ -872,12 +878,12 @@ func azure functionapp publish func-helpsphere-agent-<rand> --python
 
 # Parte 4 — MCP Server HelpSphere (deploy do pré-pronto) (1h)
 
-> O código fonte do MCP está em `03_Aplicações/mcp-helpsphere/`. **Você não implementa** — apenas builda a imagem, deploya em ACA, e configura conexão no agent.
+> O código fonte do MCP está em `mcp-server/` (do repo `apex-helpsphere-agente-lab` clonado localmente). **Você não implementa** — apenas builda a imagem, deploya em ACA, e configura conexão no agent.
 
 ## Passo 4.1 — Estrutura do MCP Server pré-pronto
 
 ```
-mcp-helpsphere/
+mcp-server/
 ├── Dockerfile
 ├── requirements.txt
 ├── server.py               # FastMCP com 4 tools
@@ -885,6 +891,8 @@ mcp-helpsphere/
 ├── helpsphere_db.py        # Wrapper do SQL HelpSphere
 └── README.md
 ```
+
+> **Nota pedagógica:** o código abaixo é a **arquitetura-alvo** (FastMCP + auth + db backend). O `mcp-server/server.py` físico no repo é um **skeleton v0.1.0-init** (stub `search_helpsphere_kb()` placeholder) — para o lab, builde a imagem usando o arquivo do repo (`az acr build` na próxima seção); a implementação completa fica como exercício de expansão.
 
 `server.py` (referência):
 ```python
@@ -934,7 +942,7 @@ if __name__ == "__main__":
 ## Passo 4.2 — Build da imagem Docker
 
 ```bash
-cd 03_Aplicações/mcp-helpsphere/
+cd mcp-server/
 
 az acr build \
   --registry $ACR_NAME \
@@ -1605,11 +1613,11 @@ func azure functionapp publish $FUNC_AGENT_NAME --python
 
 ## Passo 6.4 — Importar workflow de escalação
 
-Baixe `escalation.json` (em `03_Aplicações/n8n-workflows/`).
+Baixe `escalation-servicebus-sheets.json` (em `n8n-workflows/` do repo clonado).
 
 No n8n:
 1. **Workflows** → **+ New** → menu três pontos → **Import from file**
-2. Selecionar `escalation.json`
+2. Selecionar `escalation-servicebus-sheets.json`
 3. Workflow `Ticket Escalation` aparece com 7 nodes:
    - Service Bus Trigger
    - HTTP Request (GET ticket)
@@ -1872,11 +1880,11 @@ az containerapp logs show --name ca-mcp-helpsphere --resource-group rg-lab-final
 ```
 Causas comuns: container em CrashLoopBackoff (logs mostram exception), `--target-port` errado, ou ingress não configurado como `external`.
 
-### 4. n8n não importa escalation.json
+### 4. n8n não importa escalation-servicebus-sheets.json
 
 **Sintoma:** Ao fazer **Import from file** no n8n, erro "Invalid workflow format" ou nodes aparecem como `unknown`.
 
-**Fix:** Versão n8n incompatível. Use `n8nio/n8n:1.6` (não `:latest`) na imagem do ACA — escalation.json foi exportado nessa versão. Re-deploy:
+**Fix:** Versão n8n incompatível. Use `n8nio/n8n:1.6` (não `:latest`) na imagem do ACA — escalation-servicebus-sheets.json foi exportado nessa versão. Re-deploy:
 ```bash
 az containerapp update --name ca-n8n-helpsphere --resource-group rg-lab-final --image n8nio/n8n:1.6
 ```
