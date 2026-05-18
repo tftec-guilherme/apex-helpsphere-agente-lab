@@ -465,330 +465,129 @@ Volte na Parte 2 após Parte 3 (configurar a Call an action).
 
 > **Atenção custo:** `gpt-4.1-mini` cobra por 1M tokens (input + output). Para o lab, R$ 5-8 com cap em 30K TPM.
 
-## Passo 3.3 — Criar agent via SDK Python
+## Passo 3.3 — Registrar agent no Foundry (via SDK Python)
 
-> **Você cria estes arquivos localmente** — não vêm do repo `apex-helpsphere-agente-lab`. O `agent-code/agent.py` no repo é apenas skeleton de referência (v0.1.0-init); o código abaixo é o que você digita/cola na sua pasta de trabalho.
+> **Código já está no repo.** Clone (ou `git pull`) o `apex-helpsphere-agente-lab` e abra `agent-code/create_agent.py`. O arquivo registra o agent no Foundry Agent Service com 4 tools + system prompt — você não digita 122 linhas, só configura e roda. Há **1 TODO marcado** (`SYSTEM_PROMPT`) que você customiza durante o lab.
 
-Crie pasta local `agent-helpsphere/` com:
+### Estrutura `agent-code/`
 
-`requirements.txt`:
 ```
-azure-ai-projects==1.0.0b9
-azure-identity
-openai>=1.40.0
-requests
+agent-code/
+├── create_agent.py             # ESTE PASSO — registra agent + 4 tools + SYSTEM_PROMPT (TODO)
+├── agent_runner.py             # Passo 3.5 — handlers das tools + event loop
+├── requirements.txt            # azure-ai-projects + azure-identity + azure-servicebus + openai + requests
+├── README.md
+└── func-agent-runner/          # Passo 3.6 — wrapper Function App HTTP
 ```
+
+### O que `create_agent.py` faz
+
+Chama `client.agents.create_agent()` registrando 4 tools com schemas JSON (formato OpenAI function calling):
+
+| Tool | O que faz | Backend |
+|------|-----------|---------|
+| `search_kb` | Busca no kb corporativo (manuais, FAQs, políticas) com citações + confidence | Function App RAG (Lab Intermediário) |
+| `get_ticket` | Recupera ticket completo por ID | MCP Server (Parte 4) |
+| `list_similar_tickets` | Tickets resolvidos da mesma categoria | MCP Server (Parte 4) |
+| `escalate_ticket` | Dispara workflow n8n com motivo + confidence | Service Bus topic (Parte 7) |
+
+> **TODO pedagógico:** abra o arquivo na seção `SYSTEM_PROMPT` (próximo à linha 95). O texto baseline orienta o agent a usar `search_kb` primeiro, escalar quando `confidence < 0.5`, citar fontes e responder em pt-BR. Customize tom, regras de negócio da HelpSphere fictícia, limite de palavras, SLAs — o que fizer sentido para a turma.
 
 > **Nota SDK:** `azure-ai-projects==1.0.0b9` (preview). Pinned hard porque GA Q3-2026 vai introduzir breaking changes (e.g., `client.agents.create_message` virou `client.agents.threads.messages.create`). Quando GA sair, atualize seguindo migration guide.
 
-`create_agent.py`:
-```python
-"""
-Cria o helpsphere-tier1-agent no Foundry Agent Service.
-Define system prompt + 4 tools (function calling).
-"""
-import os
-from azure.ai.projects import AIProjectClient
-from azure.identity import DefaultAzureCredential
-
-PROJECT_CONNECTION_STRING = os.environ["AI_PROJECT_CONNECTION_STRING"]
-RAG_FUNCTION_URL = os.environ["RAG_FUNCTION_URL"]
-RAG_FUNCTION_KEY = os.environ["RAG_FUNCTION_KEY"]
-MCP_SERVER_URL = os.environ["MCP_SERVER_URL"]
-
-client = AIProjectClient.from_connection_string(
-    credential=DefaultAzureCredential(),
-    conn_str=PROJECT_CONNECTION_STRING,
-)
-
-# Tool 1: search_kb (chama RAG do Lab Intermediário)
-search_kb_tool = {
-    "type": "function",
-    "function": {
-        "name": "search_kb",
-        "description": "Busca na base de conhecimento corporativa (manuais, runbooks, FAQs, políticas) sugestões de resposta para um problema descrito. Retorna sugestão com citações e score de confiança.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "Descrição do problema/pergunta a buscar"},
-                "ticket_id": {"type": "string", "description": "ID do ticket (opcional)"},
-            },
-            "required": ["query"]
-        }
-    }
-}
-
-# Tool 2: get_ticket (via MCP)
-get_ticket_tool = {
-    "type": "function",
-    "function": {
-        "name": "get_ticket",
-        "description": "Recupera dados completos de um ticket do HelpSphere pelo ID. Retorna descrição, status, categoria, prioridade, anexos, histórico.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "ticket_id": {"type": "integer", "description": "ID numérico do ticket"}
-            },
-            "required": ["ticket_id"]
-        }
-    }
-}
-
-# Tool 3: list_similar_tickets (via MCP)
-list_similar_tool = {
-    "type": "function",
-    "function": {
-        "name": "list_similar_tickets",
-        "description": "Lista tickets passados resolvidos com mesma categoria — útil para basear sugestão em casos análogos.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "category": {"type": "string"},
-                "limit": {"type": "integer", "default": 5},
-            },
-            "required": ["category"]
-        }
-    }
-}
-
-# Tool 4: escalate_ticket (dispara workflow n8n via Service Bus)
-escalate_tool = {
-    "type": "function",
-    "function": {
-        "name": "escalate_ticket",
-        "description": "Escala ticket para tier 2 (supervisora Marina). Use quando confidence < 0.5 ou quando o caso envolver complexidade alta. Dispara workflow estruturado de notificação.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "ticket_id": {"type": "integer"},
-                "reason": {"type": "string", "description": "Motivo da escalação"},
-                "confidence": {"type": "number", "description": "Confidence calculado (0-1)"},
-            },
-            "required": ["ticket_id", "reason", "confidence"]
-        }
-    }
-}
-
-# Cria agent
-agent = client.agents.create_agent(
-    model="gpt-4.1-mini",
-    name="helpsphere-tier1-agent",
-    instructions="""Você é o agente autônomo de tier 1 da Apex HelpSphere.
-
-Quando recebe uma pergunta sobre ticket:
-1. Use `search_kb` para buscar resposta na base de conhecimento corporativa
-2. Se confidence retornado < 0.5, use `escalate_ticket` em vez de tentar responder
-3. Para casos onde precisa contexto adicional, use `get_ticket` e `list_similar_tickets`
-4. Sempre cite as fontes ([Manual X, seção Y]) na resposta final
-5. Resposta em pt-BR, tom profissional, conciso (max 200 palavras)
-6. Se a pergunta envolver dados pessoais sensíveis (CPF, salário, dados médicos), responda "Esse caso requer redação humana — escalando para tier 2." e use `escalate_ticket`.
-
-NUNCA invente informação que não esteja no kb. Se não encontrar, escale.""",
-    tools=[search_kb_tool, get_ticket_tool, list_similar_tool, escalate_tool],
-)
-
-print(f"[+] Agent criado: {agent.id}")
-print(f"    Model: {agent.model}")
-print(f"    Tools: {len(agent.tools)}")
-```
-
 ## Passo 3.4 — Setup env vars e rodar
 
-```bash
-cd agent-helpsphere/
-python -m venv venv
-source venv/bin/activate
+```powershell
+cd agent-code
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 
 # Connection string do Foundry Project (em ai.azure.com → Project → Settings)
-export AI_PROJECT_CONNECTION_STRING="<sua-connection-string>"
+$env:AI_PROJECT_CONNECTION_STRING = "<sua-connection-string>"
 
 # URLs/keys do Lab Intermediário
-export RAG_FUNCTION_URL="https://func-helpsphere-rag-{rand}.azurewebsites.net"
-export RAG_FUNCTION_KEY="<key>"
+$env:RAG_FUNCTION_URL = "https://func-helpsphere-rag-{rand}.azurewebsites.net"
+$env:RAG_FUNCTION_KEY = "<key>"
 
-# MCP server URL — vamos definir depois da Parte 4
-# Por enquanto, placeholder:
-export MCP_SERVER_URL="https://placeholder"
+# MCP server URL — vamos definir depois da Parte 4. Por enquanto, placeholder:
+$env:MCP_SERVER_URL = "https://placeholder"
 
 python create_agent.py
 ```
 
 Saída:
+
 ```
 [+] Agent criado: asst_xxxxxxx
     Model: gpt-4.1-mini
     Tools: 4
+    Anote esse ID — usado no Copilot Studio (Passo 2.5) e no Function App (Passo 3.6).
 ```
 
-Anote o `agent.id` (formato `asst_xxxxxxx`) — você vai usar no Copilot Studio.
+Anote o `agent.id` (formato `asst_xxxxxxx`) — você vai usar no Copilot Studio E como env var `AGENT_ID` no Function App da próxima parte.
 
-## Passo 3.5 — Implementar handler de tools
+## Passo 3.5 — Handler de tools + event loop
 
-> **Crie `agent_runner.py` localmente** na mesma pasta `agent-helpsphere/` do Passo 3.3 — também não está no repo.
+> **Código já está no repo.** Abra `agent-code/agent_runner.py`. O arquivo implementa os 4 handlers reais + função `run_agent(thread_id, user_message)` que orquestra o loop completo (user message → tool calls → tool outputs → resposta final). Há **1 TODO marcado** (`ESCALATION_THRESHOLD`).
 
-O agent definiu o **schema** das tools, mas não a implementação. O handler é um wrapper Python que executa cada tool e retorna resultado ao agent.
+### O que `agent_runner.py` faz
 
-`agent_runner.py`:
-```python
-"""
-Loop de execução do agent — recebe user message, processa runs,
-executa tools quando agent decide chamar, retorna resposta final.
-"""
-import os, json, time, requests
-from azure.ai.projects import AIProjectClient
-from azure.identity import DefaultAzureCredential
+O Passo 3.3 registrou apenas o **schema** das 4 tools. Aqui está a **implementação** de cada uma + o event loop que o agent invoca:
 
-client = AIProjectClient.from_connection_string(
-    credential=DefaultAzureCredential(),
-    conn_str=os.environ["AI_PROJECT_CONNECTION_STRING"],
-)
+| Função | Conecta em | Lógica resumida |
+|--------|-----------|-----------------|
+| `tool_search_kb(query, ticket_id)` | RAG Function App | `POST {RAG_URL}/api/search?code={key}` com payload `{query, ticket_id}` → retorna `{suggestion, citations, confidence}` |
+| `tool_get_ticket(ticket_id)` | MCP Server | `POST {MCP_URL}/tools/get_ticket` com `Authorization: Bearer {MCP_TOKEN}` |
+| `tool_list_similar(category, limit)` | MCP Server | `POST {MCP_URL}/tools/list_tickets` filtrando `status="Resolved"` |
+| `tool_escalate(ticket_id, reason, confidence)` | Service Bus topic `escalations` | Publica mensagem JSON; n8n consome (Parte 6/7) |
+| `run_agent(thread_id, msg)` | Foundry | Loop: cria run → enquanto `requires_action` → despacha tools → submete outputs → retorna texto final |
 
-AGENT_ID = os.environ["AGENT_ID"]
-RAG_URL = os.environ["RAG_FUNCTION_URL"]
-RAG_KEY = os.environ["RAG_FUNCTION_KEY"]
-MCP_URL = os.environ["MCP_SERVER_URL"]
-MCP_TOKEN = os.environ.get("MCP_TOKEN", "")
+### TODO pedagógico — `ESCALATION_THRESHOLD`
 
-# Implementação das tools
-def tool_search_kb(args):
-    response = requests.post(
-        f"{RAG_URL}/api/tickets/agent/suggest",
-        headers={"x-functions-key": RAG_KEY, "Content-Type": "application/json"},
-        json={"description": args["query"], "attachment_urls": []},
-    )
-    data = response.json()
-    return {
-        "suggestion": data["suggested_response"],
-        "citations": data["citations"],
-        "confidence": data["confidence"],
-    }
+Procure por `ESCALATION_THRESHOLD = 0.5` (linha ~36). Esse é o limite abaixo do qual o agent escala automaticamente. Trade-offs para discutir com a turma:
 
-def tool_get_ticket(args):
-    response = requests.post(
-        f"{MCP_URL}/mcp",
-        headers={"Authorization": f"Bearer {MCP_TOKEN}", "Content-Type": "application/json"},
-        json={
-            "jsonrpc": "2.0",
-            "method": "tools/call",
-            "params": {"name": "get_ticket", "arguments": args},
-            "id": 1,
-        },
-    )
-    return response.json().get("result", {})
+- `0.3` → agente confia mais em si (escala menos, risco maior de resposta ruim)
+- `0.5` → baseline equilibrada
+- `0.7` → agente cético (escala mais, custo maior em tier 2)
 
-def tool_list_similar(args):
-    response = requests.post(
-        f"{MCP_URL}/mcp",
-        headers={"Authorization": f"Bearer {MCP_TOKEN}", "Content-Type": "application/json"},
-        json={
-            "jsonrpc": "2.0",
-            "method": "tools/call",
-            "params": {"name": "list_tickets", "arguments": {"status": "Resolved", **args}},
-            "id": 2,
-        },
-    )
-    return response.json().get("result", {})
+Qual valor faz sentido para a HelpSphere fictícia? Ajuste no arquivo + redeploy no Passo 3.6.
 
-def tool_escalate(args):
-    """Dispara mensagem em Service Bus → workflow n8n executa."""
-    from azure.servicebus import ServiceBusClient, ServiceBusMessage
-    sb_conn = os.environ["SB_CONNECTION_STRING"]
-    with ServiceBusClient.from_connection_string(sb_conn) as sb:
-        sender = sb.get_queue_sender(queue_name="ticket-escalations")
-        with sender:
-            sender.send_messages(ServiceBusMessage(json.dumps(args)))
-    return {"escalated": True, "queue": "ticket-escalations"}
+### Smoke local opcional
 
-TOOL_HANDLERS = {
-    "search_kb": tool_search_kb,
-    "get_ticket": tool_get_ticket,
-    "list_similar_tickets": tool_list_similar,
-    "escalate_ticket": tool_escalate,
-}
-
-def run_agent(thread_id: str, user_message: str) -> str:
-    # Add message
-    client.agents.create_message(thread_id=thread_id, role="user", content=user_message)
-
-    # Create run
-    run = client.agents.create_and_process_run(thread_id=thread_id, agent_id=AGENT_ID)
-
-    # Process tool calls if any
-    while run.status == "requires_action":
-        tool_outputs = []
-        for tool_call in run.required_action.submit_tool_outputs.tool_calls:
-            fn_name = tool_call.function.name
-            fn_args = json.loads(tool_call.function.arguments)
-            print(f"  [tool] {fn_name}({fn_args})")
-            result = TOOL_HANDLERS[fn_name](fn_args)
-            tool_outputs.append({
-                "tool_call_id": tool_call.id,
-                "output": json.dumps(result, ensure_ascii=False),
-            })
-        run = client.agents.submit_tool_outputs_to_run(
-            thread_id=thread_id, run_id=run.id, tool_outputs=tool_outputs
-        )
-
-    # Get final message
-    messages = client.agents.list_messages(thread_id=thread_id)
-    return messages.data[0].content[0].text.value
-
-if __name__ == "__main__":
-    thread = client.agents.create_thread()
-    print(f"Thread: {thread.id}\n")
-
-    # Teste simples
-    response = run_agent(thread.id, "Lojista relata que pedido 84512 não foi entregue há 7 dias. Como reembolsar?")
-    print(f"\n=== Response ===\n{response}")
+```powershell
+# Ainda em agent-code/ com .venv ativo + env vars setadas + AGENT_ID anotado:
+$env:AGENT_ID = "asst_xxxxxxx"
+python agent_runner.py
 ```
+
+Saída esperada: `Thread criada: thread_xxxxxx` + resposta do agent ao prompt de smoke.
 
 ## Passo 3.6 — Deploy do runner como Function App
 
-Para integração com Copilot Studio, o runner precisa estar acessível por HTTP. Vamos transformar em Function App.
+Para integração com Copilot Studio, o runner precisa estar acessível por HTTP. Vamos empacotar como Function App.
 
-> **Crie a estrutura `func-agent-runner/` localmente** — pasta nova ao lado de `agent-helpsphere/`, não vem do repo.
-
-Crie `func-agent-runner/`:
+> **Código já está no repo.** Abra `agent-code/func-agent-runner/`. A pasta contém os 3 arquivos prontos para `func azure functionapp publish`:
 
 ```
-func-agent-runner/
-├── host.json
-├── requirements.txt
-├── function_app.py  (wrapper HTTP do agent_runner)
+agent-code/func-agent-runner/
+├── function_app.py     # Wrapper HTTP minimal: POST /agent/chat → run_agent()
+├── host.json           # Bundle Functions v4 + Application Insights
+└── requirements.txt    # azure-functions + azure-ai-projects + azure-identity + azure-servicebus + openai + requests
 ```
 
-`function_app.py`:
-```python
-import azure.functions as func
-import json, os
-from agent_runner import run_agent
-from azure.ai.projects import AIProjectClient
-from azure.identity import DefaultAzureCredential
+### O que `function_app.py` faz
 
-app = func.FunctionApp()
-client = AIProjectClient.from_connection_string(
-    credential=DefaultAzureCredential(),
-    conn_str=os.environ["AI_PROJECT_CONNECTION_STRING"],
-)
+Wrapper HTTP enxuto (~25 linhas) que:
 
-@app.route(route="agent/chat", methods=["POST"])
-def chat(req: func.HttpRequest) -> func.HttpResponse:
-    body = req.get_json()
-    user_message = body.get("message", "")
-    thread_id = body.get("thread_id")
+1. Recebe `POST /api/agent/chat` com body `{message, thread_id?}`
+2. Se `thread_id` vazio, cria uma thread nova no Foundry
+3. Chama `run_agent(thread_id, message)` (importado de `agent_runner.py` da pasta pai)
+4. Retorna `{thread_id, response}` em JSON
 
-    if not thread_id:
-        thread = client.agents.create_thread()
-        thread_id = thread.id
+`http_auth_level=FUNCTION` — Copilot Studio precisa do `?code={functionKey}` na URL.
 
-    response = run_agent(thread_id, user_message)
-    return func.HttpResponse(
-        json.dumps({"thread_id": thread_id, "response": response}),
-        status_code=200,
-        mimetype="application/json",
-    )
-```
+> **Importante:** o `requirements.txt` desta pasta DEVE incluir `azure-servicebus` (o `agent_runner.tool_escalate` usa). Já vem certo no repo.
 
 **Deploy: Criar Function App via Portal Azure**
 
@@ -882,62 +681,40 @@ func azure functionapp publish func-helpsphere-agent-<rand> --python
 
 ## Passo 4.1 — Estrutura do MCP Server pré-pronto
 
+> **Código já está no repo.** Abra `mcp-server/` (do `apex-helpsphere-agente-lab` clonado). Você não implementa o MCP — apenas builda a imagem, deploya em ACA, e configura conexão no agent. Há **1 TODO marcado** (`ticket_resource`) que você pode customizar.
+
 ```
 mcp-server/
-├── Dockerfile
-├── requirements.txt
-├── server.py               # FastMCP com 4 tools
-├── auth.py                 # Validação de token Entra
-├── helpsphere_db.py        # Wrapper do SQL HelpSphere
-└── README.md
+├── server.py            # FastMCP + 4 tools com @require_scope + 1 resource (TODO em ticket_resource)
+├── auth.py              # Validação JWT Entra + decorator require_scope (~55L)
+├── helpsphere_db.py     # Wrapper SQL HelpSphere com 4 ops (~90L)
+├── Dockerfile           # Base python:3.11-slim + msodbcsql18 + WORKDIR /app + ENTRYPOINT
+├── requirements.txt     # fastmcp + pyodbc + pyjwt[crypto] + requests + azure-identity
+└── README.md            # Build + deploy ACA + troubleshooting
 ```
 
-> **Nota pedagógica:** o código abaixo é a **arquitetura-alvo** (FastMCP + auth + db backend). O `mcp-server/server.py` físico no repo é um **skeleton v0.1.0-init** (stub `search_helpsphere_kb()` placeholder) — para o lab, builde a imagem usando o arquivo do repo (`az acr build` na próxima seção); a implementação completa fica como exercício de expansão.
+### As 4 tools expostas (`server.py`)
 
-`server.py` (referência):
-```python
-"""
-MCP Server HelpSphere — FastMCP + Entra OAuth + SQL backend.
-"""
-from fastmcp import FastMCP
-from auth import require_scope
-from helpsphere_db import HelpSphereDB
-import os
+| Tool | Scope Entra requerido | Operação SQL |
+|------|----------------------|---------------|
+| `get_ticket(ticket_id)` | `helpsphere.tickets.read` | `SELECT ... FROM tickets WHERE id = ?` |
+| `list_tickets(status, limit, category?)` | `helpsphere.tickets.read` | `SELECT TOP (?) ... WHERE status = ? [AND category = ?] ORDER BY created_at DESC` |
+| `add_comment(ticket_id, comment, author)` | `helpsphere.tickets.write` | `INSERT INTO comments (...)` |
+| `update_status(ticket_id, new_status)` | `helpsphere.tickets.write` | `UPDATE tickets SET status = ?, updated_at = SYSUTCDATETIME() WHERE id = ?` |
 
-mcp = FastMCP("helpsphere")
-db = HelpSphereDB(os.environ["HELPSPHERE_SQL_CONNECTION"])
++ 1 resource `helpsphere://tickets/{ticket_id}` que retorna o ticket serializado (formato customizável via TODO).
 
-@mcp.tool()
-@require_scope("helpsphere.tickets.read")
-def get_ticket(ticket_id: int) -> dict:
-    """Recupera dados completos de um ticket."""
-    return db.get_ticket(ticket_id)
+### Como `auth.py` valida o token
 
-@mcp.tool()
-@require_scope("helpsphere.tickets.read")
-def list_tickets(status: str = "Open", limit: int = 10, category: str = None) -> list[dict]:
-    """Lista tickets filtrando por status e opcionalmente categoria."""
-    return db.list_tickets(status=status, limit=limit, category=category)
+`@require_scope("helpsphere.tickets.read")` é um decorator que envolve cada tool:
 
-@mcp.tool()
-@require_scope("helpsphere.tickets.write")
-def add_comment(ticket_id: int, comment: str, author: str) -> dict:
-    """Adiciona comentário a um ticket."""
-    return db.add_comment(ticket_id, comment, author)
+1. Lê o `bearer_token` do contexto MCP
+2. Busca a `kid` correta no JWKS endpoint do Entra ID (`login.microsoftonline.com/.../discovery/v2.0/keys`)
+3. Valida assinatura RS256 + audience (`EXPECTED_AUDIENCE` env) + issuer (tenant)
+4. Confere que `scp` (scopes) do token contém o scope requerido pela tool
+5. Se tudo passa → invoca a função real; senão → `PermissionError`
 
-@mcp.tool()
-@require_scope("helpsphere.tickets.write")
-def update_status(ticket_id: int, new_status: str) -> dict:
-    """Atualiza status do ticket. Status válidos: Open, InProgress, Resolved, Escalated."""
-    return db.update_status(ticket_id, new_status)
-
-@mcp.resource("helpsphere://tickets/{ticket_id}")
-def ticket_resource(ticket_id: int) -> str:
-    return str(db.get_ticket(ticket_id))
-
-if __name__ == "__main__":
-    mcp.run(transport="http", host="0.0.0.0", port=8000)
-```
+> **TODO pedagógico:** abra `server.py` em `ticket_resource()` (~linha 64). A implementação atual retorna `str(dict)` cru. Sugestões para expandir: incluir últimos N comentários (`helpsphere_db.list_comments`), adicionar SLA metadata por priority, formatar como Markdown.
 
 ## Passo 4.2 — Build da imagem Docker
 
