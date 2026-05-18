@@ -77,6 +77,8 @@ Veja **Passo 3.6** do guia. Resumo:
 |---------|-------|-----|
 | `ValueError: Invalid connection string format` | Você está rodando código velho (b9) com a URL nova | Rode `pip install -U azure-ai-agents azure-ai-projects` e use `AI_PROJECT_ENDPOINT` (não mais `AI_PROJECT_CONNECTION_STRING`) |
 | `KeyError: 'AGENT_ID'` | env var não configurada | Atualize App Settings após rodar `create_agent.py` |
+| `Token tenant XXX does not match resource tenant` | `DefaultAzureCredential` pegou token de tenant errado (sub default do `az account` é de outro tenant) | `az account set --subscription <sub-id-do-foundry>` antes de rodar, ou trocar para `DefaultAzureCredential(tenant_id="<tenant-do-foundry>")` no código |
 | `HttpResponseError: ... 401` | MI/credential sem permissão no Foundry Project | Atribua role **Azure AI User** ao Managed Identity (Container App ou Function App) no nível do Project |
+| `404` no `/api/tickets/.../suggest` | URL da RAG Function App errada ou function key inválida | Confirme via `az functionapp keys list -g <rg> -n func-helpsphere-rag --query functionKeys.default` |
 | `404` no MCP | URL não atualizada após Parte 4 | Atualize `MCP_SERVER_URL` no App Settings |
 | Escalation não dispara | Service Bus connection vazia | Configure `SERVICE_BUS_CONNECTION` após Parte 7 |

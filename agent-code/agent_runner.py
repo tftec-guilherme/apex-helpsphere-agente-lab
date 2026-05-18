@@ -45,13 +45,19 @@ ESCALATION_THRESHOLD = 0.5
 
 
 def tool_search_kb(query: str, ticket_id: str | None = None) -> dict:
-    """Chama Function App RAG do Lab Intermediário."""
-    log.info("tool_search_kb: query=%r ticket_id=%r", query, ticket_id)
+    """Chama Function App RAG do Lab Intermediário.
+
+    Endpoint real do `apex-rag-lab`: POST /api/tickets/{ticket_id}/suggest
+    auth via header `x-functions-key`. Body: {description, attachment_urls}.
+    Retorna {suggested_response, citations, confidence, ...}.
+    """
+    tid = ticket_id or "agent-query"
+    log.info("tool_search_kb: query=%r ticket_id=%r", query, tid)
     resp = requests.post(
-        f"{RAG_FUNCTION_URL}/api/search",
-        params={"code": RAG_FUNCTION_KEY},
-        json={"query": query, "ticket_id": ticket_id},
-        timeout=30,
+        f"{RAG_FUNCTION_URL}/api/tickets/{tid}/suggest",
+        headers={"x-functions-key": RAG_FUNCTION_KEY},
+        json={"description": query, "attachment_urls": []},
+        timeout=60,
     )
     resp.raise_for_status()
     return resp.json()
