@@ -9,7 +9,7 @@
 ## Pré-requisitos
 
 - ✅ RG `rg-lab-final` existe (capítulo anterior do Lab Final) e RG `rg-lab-intermediario` hospeda a MI cross-RG `mi-helpsphere-ia` (provisionada no Lab Intermediário)
-- ✅ Agente Foundry `helpsphere-tier1-agent` criado em `agent-code/agent_runner.py` com tools de MCP funcionais (capítulos anteriores)
+- ✅ Agente Foundry `helpsphere-tier1-agent` criado em `agent-code/func-agent-runner/agent_runner.py` com tools de MCP funcionais (capítulos anteriores)
 - ✅ Agente Copilot Studio `HelpSphere Tier 1 Agent` em tenant M365 dev (não `live.com` — ver [`_disclaimers.md`](./_disclaimers.md) **AMB-2**)
 - ✅ `az` CLI logado, `curl` + `jq` instalados, microfone funcional no laptop, player de áudio local (`.mp3` reproduzível)
 

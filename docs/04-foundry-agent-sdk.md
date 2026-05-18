@@ -369,7 +369,7 @@ AGENT_ID=asst_xxxxxxxxxxxxxxxxxxxxxxxx
 
 O agente do Passo 4.5 só **declara o schema** das tools. Agora você implementa o runner: loop que recebe mensagem do user, processa runs, executa tools quando o agente decidir chamar, retorna resposta final.
 
-**No VS Code:** abra `agent-code/agent_runner.py` (já no scaffold). Cole/confira:
+**No VS Code:** abra `agent-code/func-agent-runner/agent_runner.py` (já no scaffold). Cole/confira:
 
 ```python
 """

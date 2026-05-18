@@ -458,7 +458,7 @@ No Capítulo 04 cravamos a tool `escalate_ticket` com schema mas o handler era *
 3. Edite `agent_runner.py` — localize a função `handle_escalate_ticket(args)` (criada no Capítulo 04 com `print` placeholder) e substitua pelo handler real:
 
 ```python
-# agent-code/agent_runner.py (trecho)
+# agent-code/func-agent-runner/agent_runner.py (trecho)
 import json
 import os
 from azure.identity import DefaultAzureCredential
