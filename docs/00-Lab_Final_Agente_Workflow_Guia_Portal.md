@@ -535,7 +535,9 @@ Anote o `agent.id` (formato `asst_xxxxxxx`) — você vai usar no Copilot Studio
 
 ## Passo 3.5 — Handler de tools + event loop
 
-> **Código já está no repo.** Abra `agent-code/agent_runner.py`. O arquivo implementa os 4 handlers reais + função `run_agent(thread_id, user_message)` que orquestra o loop completo (user message → tool calls → tool outputs → resposta final). Há **1 TODO marcado** (`ESCALATION_THRESHOLD`).
+> **Código já está no repo.** Abra `agent-code/func-agent-runner/agent_runner.py`. O arquivo implementa os 4 handlers reais + função `run_agent(thread_id, user_message)` que orquestra o loop completo (user message → tool calls → tool outputs → resposta final). Há **1 TODO marcado** (`ESCALATION_THRESHOLD`).
+>
+> **Por que dentro de `func-agent-runner/`?** O `func azure functionapp publish` da Parte 3.6 zipa **apenas a pasta atual**. Como o `function_app.py` faz `from agent_runner import ...`, o helper precisa estar lado-a-lado dele. Se o arquivo ficar na pasta pai, o worker Python falha com `ModuleNotFoundError: No module named 'agent_runner'`.
 
 ### O que `agent_runner.py` faz
 

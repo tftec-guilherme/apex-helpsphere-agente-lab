@@ -9,10 +9,10 @@ referenciado pelos Passos 3.3, 3.5 e 3.6 do
 ```
 agent-code/
 ├── create_agent.py          # Passo 3.3 — registra agent + 4 tools no Foundry
-├── agent_runner.py          # Passo 3.5 — handlers das tools + event loop run_agent()
-├── requirements.txt         # deps locais (rodar create_agent.py + smoke)
-└── func-agent-runner/       # Passo 3.6 — Function App wrapper HTTP
-    ├── function_app.py
+├── requirements.txt         # deps locais (rodar create_agent.py)
+└── func-agent-runner/       # Passo 3.5 + 3.6 — handler + Function App wrapper HTTP
+    ├── agent_runner.py      # Passo 3.5 — handlers das tools + event loop run_agent()
+    ├── function_app.py      # Passo 3.6 — wrapper HTTP @app.route(/agent/chat)
     ├── host.json
     └── requirements.txt
 ```
