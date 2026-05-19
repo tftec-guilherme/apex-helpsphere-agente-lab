@@ -71,7 +71,6 @@ Esta disciplina entrega 2 componentes pré-prontos. Você **NÃO implementa** �
 | Azure Container Registry | `acrhelpsphere{rand}` | Basic | ~R$ 25 | R$ 1 |
 | Azure Database PostgreSQL | `pg-n8n-{rand}` | Burstable B1ms | ~R$ 75 | R$ 3 |
 | Service Bus | `sb-helpsphere-final` | Standard | ~R$ 55 | R$ 2 |
-| Logic Apps (notificação) | `la-supervisor-notify` | Consumption | ~R$ 1 | desprezível |
 | Application Insights (compartilhado) | `ai-helpsphere-rag` (do Lab Inter) | Workspace-based | já criado | — |
 | Entra App Registration MCP | `app-mcp-helpsphere-client` | — | gratuito | — |
 | **Total** | | | **~R$ 380/mês ligado** | **R$ 22-30 lab realista** |
@@ -772,9 +771,24 @@ Deve listar `mcp-helpsphere`.
 **Definir Application ID URI:**
 
 1. App reg `app-mcp-helpsphere-server` → menu **Expose an API**
-2. **Application ID URI** → **Add** → editar para `api://mcp-helpsphere` → **Save**
+2. **Application ID URI** → **Add** → o Portal pré-preenche `api://<APP_ID>` (GUID anotado no Passo 4.3 step 5) → **Save**
 
 <!-- screenshot: passo-4.3-app-id-uri.png -->
+
+> [!IMPORTANT] **Identifier URI policy — default vs custom**
+>
+> Tenants Entra ID corporativos (incluindo trial/MSDN) têm **default policy** que bloqueia URIs custom sem domínio verificado. Erro típico se você tentar `api://mcp-helpsphere`:
+>
+> > Failed to add identifier URI api://mcp-helpsphere. All newly added URIs must contain a tenant verified domain, tenant ID, or app ID, as per the default tenant policy of your organization.
+>
+> **3 formas aceitas pelo default policy:**
+> 1. ✅ **`api://<APP_ID>`** (recomendado — funciona em qualquer tenant, sem setup adicional)
+> 2. ✅ **`api://<TENANT_ID>/<custom>`** (ex: `api://12345.../mcp-helpsphere`)
+> 3. ✅ **`api://<verified-domain>/<custom>`** (ex: `api://apex.com.br/mcp-helpsphere`, se domínio verificado no tenant)
+>
+> **Workaround tentador (não recomendado):** setar `requestedAccessTokenVersion=2` no manifest pode relaxar a restrição em alguns tenants, mas depende de policy custom configurada pelo admin — não é portável.
+>
+> **Decisão deste lab:** usamos `api://<APP_ID>` (forma 1) porque funciona universalmente. Todas as referências `api://mcp-helpsphere` em outros Passos deste guia devem ser substituídas pelo valor `api://<MCP_SERVER_APP_ID>` que você anotou no step 5 acima. Para escopos use `api://<MCP_SERVER_APP_ID>/helpsphere.tickets.read` etc.
 
 **Adicionar scopes:**
 
@@ -796,13 +810,29 @@ Deve listar `mcp-helpsphere`.
 >
 > ```bash
 > APP_NAME="app-mcp-helpsphere-server"
+>
+> # Passo 1: criar app sem identifier-uri (vamos definir depois com api://<APP_ID>)
 > APP_OBJECT_ID=$(az ad app create \
 >   --display-name $APP_NAME \
->   --identifier-uris "api://mcp-helpsphere" \
 >   --query id -o tsv)
 >
 > APP_ID=$(az ad app show --id $APP_OBJECT_ID --query appId -o tsv)
+>
+> # Passo 2: setar identifier-uri usando o APP_ID (passa default tenant policy)
+> az ad app update --id $APP_OBJECT_ID --identifier-uris "api://$APP_ID"
+>
 > echo "MCP Server app ID: $APP_ID"
+> echo "Identifier URI:   api://$APP_ID"
+> ```
+>
+> **PowerShell equivalente:**
+> ```powershell
+> $AppName = "app-mcp-helpsphere-server"
+> $AppObjectId = az ad app create --display-name $AppName --query id -o tsv
+> $AppId = az ad app show --id $AppObjectId --query appId -o tsv
+> az ad app update --id $AppObjectId --identifier-uris "api://$AppId"
+> Write-Host "MCP Server app ID: $AppId"
+> Write-Host "Identifier URI:   api://$AppId"
 > ```
 >
 > (Scopes ainda precisam ser adicionados via Portal — `az ad app` não tem comando direto para `oauth2PermissionScopes`.)
