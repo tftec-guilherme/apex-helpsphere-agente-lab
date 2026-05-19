@@ -461,11 +461,34 @@ A Managed Identity `mi-helpsphere-ia` (no RG `rg-lab-intermediario`) precisa de 
 
 <!-- screenshot: cap05-passo5.4-application-url-anotar.png -->
 
-> **Como obter a `HELPSPHERE_SQL_CONNECTION`:**
+> [!IMPORTANT] **Como obter a `HELPSPHERE_SQL_CONNECTION` — AAD-first (sem senha)**
 >
-> Portal → `rg-helpsphere-saas` → SQL Database `helpsphere` → menu **Connection strings** → tab **ADO.NET (SQL authentication)**. Substitua `{your_password}` pela senha do `apex-helpsphere` configurada quando o stack SaaS foi provisionado.
+> O stack `apex-helpsphere` usa **AAD + Managed Identity exclusivamente** — NÃO há SQL admin com senha. `azd env get-values | Select-String SQL` revela apenas `AZURE_SQL_AAD_ADMIN_GROUP_*` + `AZURE_SQL_BACKEND_MI_NAME` + `AZURE_SQL_DATABASE`. **Nunca tem `AZURE_SQL_CONNECTION_STRING`** porque é AAD-only por design.
 >
-> ⚠️ **Em produção** use Entra Auth com MI: troque connection string para `Server=tcp:sql-helpsphere-{rand}.database.windows.net,1433;Database=helpsphere;Authentication=Active Directory Default;` e cravar role `db_datareader`+`db_datawriter` para `mi-helpsphere-ia` no banco. **No lab,** SQL auth é aceitável pelo prazo curto (24-48h) + cleanup obrigatório no capítulo de finalização.
+> **Passo 1 — Capturar FQDN do SQL Server:**
+> ```powershell
+> $SqlServerFqdn = az sql server list -g rg-helpsphere-saas --query "[0].fullyQualifiedDomainName" -o tsv
+> ```
+>
+> **Passo 2 — Montar connection string ODBC com ActiveDirectoryMsi:**
+> ```text
+> Driver={ODBC Driver 18 for SQL Server};Server=tcp:<FQDN>,1433;Database=helpsphere;Authentication=ActiveDirectoryMsi;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;
+> ```
+> Onde `<FQDN>` = output do Passo 1 (formato `sql-helpsphere-<rand>.database.windows.net`).
+>
+> **Passo 3 — Dar acesso à MI `mi-helpsphere-ia` no database `helpsphere`** (CRÍTICO — senão `pyodbc` retorna `Login failed`):
+>
+> Portal → SQL DB `helpsphere` → **Query editor (preview)** → Continue as `<seu-email>` (sua conta precisa estar no grupo `helpsphere-sql-admins-saas` — o `azd up` te adicionou se você foi quem rodou). Executar:
+> ```sql
+> CREATE USER [mi-helpsphere-ia] FROM EXTERNAL PROVIDER;
+> ALTER ROLE db_datareader ADD MEMBER [mi-helpsphere-ia];
+> ALTER ROLE db_datawriter ADD MEMBER [mi-helpsphere-ia];
+> ```
+>
+> **Anti-patterns:**
+> - ❌ Não tente `az sql server update --admin-password` — não existe admin com senha neste stack
+> - ❌ Não use tab Portal "ADO.NET (SQL authentication)" — esse template tem `{your_password}` que não se aplica aqui
+> - ❌ Mudar/criar senha agora exige reprovisionar (`azd up`) o stack apex-helpsphere — evite
 
 > **Alternativa via Azure CLI (Windows PowerShell 7):**
 >

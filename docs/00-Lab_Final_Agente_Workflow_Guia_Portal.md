@@ -928,45 +928,77 @@ az role assignment create `
      - `AZURE_TENANT_ID` = `<seu tenant ID>` (Portal → Microsoft Entra ID → Overview → Tenant ID, OU `az account show --query tenantId -o tsv`)
      - `EXPECTED_AUDIENCE` = `api://<MCP_SERVER_APP_ID>` (mesmo Application ID URI definido no Passo 4.3 — substitua `<MCP_SERVER_APP_ID>` pelo GUID do app reg)
 
-> [!IMPORTANT] **Como obter a `HELPSPHERE_SQL_CONNECTION`** (3 caminhos)
+> [!IMPORTANT] **Como obter a `HELPSPHERE_SQL_CONNECTION` — versão AAD-first (NÃO existe senha)**
 >
-> O stack SaaS `apex-helpsphere` foi provisionado via `azd up` (pré-requisito do Lab Final — ver PARA-O-ALUNO.md §1). Você tem 3 formas de capturar a connection string:
+> O stack SaaS `apex-helpsphere` foi provisionado via `azd up` (pré-requisito do Lab Final — ver PARA-O-ALUNO.md §1). **CRÍTICO:** o stack usa **autenticação Entra ID (AAD) + Managed Identity exclusivamente** — NÃO há SQL admin com senha. `azd env get-values | Select-String SQL` revela apenas:
 >
-> **Forma 1 — Via azd CLI (rápido, ~10s):** abra um terminal **na pasta do clone `apex-helpsphere`** (não esta pasta) e rode:
->
-> ```powershell
-> cd C:\caminho\para\apex-helpsphere   # navegar até a pasta onde rodou `azd up`
-> azd env get-values | Select-String "SQL"
+> ```text
+> AZURE_SQL_AAD_ADMIN_GROUP_NAME="helpsphere-sql-admins-saas"
+> AZURE_SQL_AAD_ADMIN_GROUP_OBJECT_ID="<guid-do-grupo>"
+> AZURE_SQL_BACKEND_MI_NAME="helpsphere-saas-aca-identity"
+> AZURE_SQL_DATABASE="helpsphere"
 > ```
 >
-> Você verá variáveis como `AZURE_SQL_CONNECTION_STRING="..."`. Copie o valor (entre aspas) — é a connection string completa.
+> Note que **NÃO existe `AZURE_SQL_CONNECTION_STRING` nem `AZURE_SQL_ADMIN_PASSWORD`** — o stack é AAD-only por design (least privilege).
 >
-> **Forma 2 — Via Portal Azure (visual, ~1min):**
->
-> 1. Buscar **"SQL databases"** no topo do Portal → selecionar o database `helpsphere`
->    - RG: `rg-helpsphere-saas` (provisionado pelo `azd up`, default em `westus3`)
->    - Server: `sql-helpsphere-<rand>` (nome do server gerado pelo azd)
-> 2. Menu lateral → **Connection strings** → tab **ADO.NET (SQL authentication)**
-> 3. Copiar a string completa exibida (formato `Server=tcp:...;Database=helpsphere;User ID=...;Password={your_password};Encrypt=true;...`)
-> 4. **Substituir `{your_password}` pela senha que você definiu** quando rodou `azd up` do apex-helpsphere (procure no seu password manager, ou veja `.env` local se gravou lá)
->
-> **Forma 3 — Via Azure CLI (script):**
+> ### Passo 1 — Capturar o FQDN do SQL Server
 >
 > ```powershell
-> # Capturar nome do SQL Server (gerado pelo azd)
-> $SqlServerName = az sql server list -g rg-helpsphere-saas --query "[0].name" -o tsv
->
-> # Pegar template da connection string (sem senha)
-> az sql db show-connection-string --server $SqlServerName --name helpsphere --client ado.net
+> $SqlServerFqdn = az sql server list -g rg-helpsphere-saas --query "[0].fullyQualifiedDomainName" -o tsv
+> Write-Host "FQDN: $SqlServerFqdn"
+> # Output: sql-helpsphere-<rand>.database.windows.net
 > ```
 >
-> Substitua `<username>` e `<password>` pelos valores do `azd up` (mesmo usuário/senha que você usou).
+> ### Passo 2 — Montar a connection string ODBC com ActiveDirectoryMsi
 >
-> **Senha do azd up:** o `azd` salva em `.env` local mas a senha é **ofuscada** após o primeiro `up`. Se você não anotou:
+> O MCP Server (`server.py`) consome `HELPSPHERE_SQL_CONNECTION` via `pyodbc.connect(string)`. O driver `ODBC Driver 18 for SQL Server` aceita `Authentication=ActiveDirectoryMsi` que faz o Container App autenticar usando a Managed Identity `mi-helpsphere-ia` que você anexou no Tab Identity (Passo 4.4 step 6).
+>
+> ```text
+> Driver={ODBC Driver 18 for SQL Server};Server=tcp:<FQDN>,1433;Database=helpsphere;Authentication=ActiveDirectoryMsi;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;
+> ```
+>
+> Exemplo concreto após substituir `<FQDN>`:
+> ```text
+> Driver={ODBC Driver 18 for SQL Server};Server=tcp:sql-helpsphere-abc123.database.windows.net,1433;Database=helpsphere;Authentication=ActiveDirectoryMsi;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;
+> ```
+>
+> Copie essa string completa no campo **Environment variable** `HELPSPHERE_SQL_CONNECTION` da tab Container do Passo 4.4.
+>
+> ### Passo 3 — Dar acesso à MI no database `helpsphere`
+>
+> **CRÍTICO:** sem este passo, `pyodbc.connect()` retorna `Login failed for user '<token-identified principal>'`. A MI `mi-helpsphere-ia` precisa existir como **EXTERNAL PROVIDER user** no database E ter role `db_datareader` + `db_datawriter`.
+>
+> Você tem 2 caminhos. **Recomendado: Opção B (least privilege).**
+>
+> **Opção A — Adicionar MI ao AAD admin group (rápido mas over-permissive):**
+>
 > ```powershell
-> # Resetar a senha do SQL Admin (afeta apex-helpsphere prod — use só se necessário)
-> az sql server update -g rg-helpsphere-saas -n $SqlServerName --admin-password "<NovaSenha-Strong-123!>"
+> $MiObjectId = az identity show -n mi-helpsphere-ia -g rg-helpsphere-ia --query principalId -o tsv
+> az ad group member add --group helpsphere-sql-admins-saas --member-object-id $MiObjectId
 > ```
+>
+> A MI vira admin completo do SQL Server (não só do database `helpsphere`). Acceitable para lab, anti-pattern em produção.
+>
+> **Opção B — SQL grants explícitos (least privilege, recomendado):**
+>
+> 1. **Portal Azure** → `SQL databases` → `helpsphere` → menu lateral → **Query editor (preview)**
+> 2. **Login com AAD:** clicar **Continue as <seu-email>** (sua conta precisa estar no grupo `helpsphere-sql-admins-saas`; se não, o `azd up` já te adicionou se você foi quem rodou)
+> 3. **Rodar este SQL** (substitua `mi-helpsphere-ia` se sua MI tiver nome diferente):
+>
+> ```sql
+> CREATE USER [mi-helpsphere-ia] FROM EXTERNAL PROVIDER;
+> ALTER ROLE db_datareader ADD MEMBER [mi-helpsphere-ia];
+> ALTER ROLE db_datawriter ADD MEMBER [mi-helpsphere-ia];
+> ```
+>
+> A MI agora pode `SELECT/INSERT/UPDATE/DELETE` no database `helpsphere`, mas não DDL nem outros databases.
+>
+> ### Anti-patterns recorrentes (NÃO faça)
+>
+> - ❌ **Tentar resetar senha SQL admin** (`az sql server update --admin-password`) — o stack não tem SQL admin com senha. Comando vai falhar ou criar admin paralelo que polui o setup AAD.
+> - ❌ **Usar `Authentication=SqlPassword` na connection string** — não vai funcionar mesmo se você criar um SQL user, porque o firewall + AAD policy do server bloqueiam SQL auth.
+> - ❌ **Pegar a connection string do Portal tab "ADO.NET (SQL authentication)"** — esse template tem `User ID=...;Password={your_password};` mas o stack é AAD-only. Use o tab **"ADO.NET (Active Directory password authentication)"** apenas como referência de formato — então substitua para `Authentication=ActiveDirectoryMsi` no Container App.
+> - ❌ **Mudar a senha agora vai te obrigar a refazer `azd up`** (porque o azd não tem record dessa senha — não controla credentials SQL). Mantenha AAD.
 
 5. Tab **Ingress**:
    - **Ingress:** `Enabled`
