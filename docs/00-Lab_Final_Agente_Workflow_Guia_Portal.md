@@ -192,7 +192,7 @@ flowchart TB
 
 <!-- screenshot: passo-1.1-criar-resource-group-portal.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
 >
 > ```bash
 > az login
@@ -225,7 +225,7 @@ flowchart TB
 
 > **Por que Basic?** Para o lab é suficiente. Em produção, use Standard ou Premium para geo-replication, content trust, etc.
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
 >
 > ```bash
 > RAND=$(echo $RANDOM | md5sum | head -c 6)
@@ -640,12 +640,14 @@ Wrapper HTTP enxuto (~25 linhas) que:
 
 **Deploy do código (CLI local — não tem caminho Portal puro):**
 
-```bash
-cd func-agent-runner/
+```powershell
+Set-Location func-agent-runner/
 func azure functionapp publish func-helpsphere-agent-<rand> --python
 ```
 
-> **Alternativa via Azure CLI (criação do recurso):**
+> **Linux/Mac/WSL:** troque `Set-Location` por `cd`.
+
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash, criação do recurso):**
 >
 > ```bash
 > # Criar Function App
@@ -728,19 +730,24 @@ mcp-server/
 
 ## Passo 4.2 — Build da imagem Docker
 
-```bash
-cd mcp-server/
+```powershell
+Set-Location mcp-server/
 
-az acr build \
-  --registry $ACR_NAME \
-  --image mcp-helpsphere:v1 \
-  --file Dockerfile \
+# Capturar nome do ACR criado no Passo 1.2 (era acrhelpsphere{rand})
+$AcrName = az acr list -g rg-lab-final --query "[0].name" -o tsv
+
+az acr build `
+  --registry $AcrName `
+  --image mcp-helpsphere:v1 `
+  --file Dockerfile `
   .
 ```
 
+> **Linux/Mac/WSL:** troque `Set-Location` por `cd`, `` ` `` (backtick) por `\` (backslash), e `$AcrName` por `$ACR_NAME`.
+
 Tempo: ~3-5min. Verifique:
-```bash
-az acr repository list --name $ACR_NAME --output table
+```powershell
+az acr repository list --name $AcrName --output table
 ```
 
 Deve listar `mcp-helpsphere`.
@@ -785,7 +792,7 @@ Deve listar `mcp-helpsphere`.
 
 <!-- screenshot: passo-4.3-scopes.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
 >
 > ```bash
 > APP_NAME="app-mcp-helpsphere-server"
@@ -823,22 +830,28 @@ Deve listar `mcp-helpsphere`.
 
 > **Atenção:** o ACA Environment usa o Log Analytics Workspace do `rg-helpsphere-ia` (compartilhado, criado no Bloco 2). Se ainda não criou esse RG/workspace, faça o Bloco 2 antes.
 
-**Opção B — via Azure CLI (alternativa mais rápida):**
+**Opção B — via Azure CLI (alternativa mais rápida) — PowerShell:**
 
-```bash
-az containerapp env create \
-  --name cae-helpsphere-final \
-  --resource-group rg-lab-final \
-  --location eastus2 \
-  --logs-workspace-id $(az monitor log-analytics workspace show \
-    --resource-group rg-helpsphere-ia \
-    --workspace-name log-helpsphere-ia \
-    --query customerId -o tsv) \
-  --logs-workspace-key $(az monitor log-analytics workspace get-shared-keys \
-    --resource-group rg-helpsphere-ia \
-    --workspace-name log-helpsphere-ia \
-    --query primarySharedKey -o tsv)
+```powershell
+$WorkspaceId = az monitor log-analytics workspace show `
+  --resource-group rg-helpsphere-ia `
+  --workspace-name log-helpsphere-ia `
+  --query customerId -o tsv
+
+$WorkspaceKey = az monitor log-analytics workspace get-shared-keys `
+  --resource-group rg-helpsphere-ia `
+  --workspace-name log-helpsphere-ia `
+  --query primarySharedKey -o tsv
+
+az containerapp env create `
+  --name cae-helpsphere-final `
+  --resource-group rg-lab-final `
+  --location eastus2 `
+  --logs-workspace-id $WorkspaceId `
+  --logs-workspace-key $WorkspaceKey
 ```
+
+> **Linux/Mac/WSL:** troque `$Var = az ...` por `VAR=$(az ...)`, `` ` `` (backtick) por `\` (backslash), e `$VarName` por `$VAR_NAME` em referências.
 
 **Opção C — durante o Passo 4.6 (Create Container App):** ao escolher o Environment no dropdown, clicar **+ Create new** e preencher inline. Funciona, mas dá menos visibilidade do que aconteceu no Environment standalone.
 
@@ -846,19 +859,22 @@ az containerapp env create \
 
 A Managed Identity `mi-helpsphere-ia` (criada no Bloco 2 em `rg-helpsphere-ia`) precisa de role `AcrPull` no ACR `acrhelpsphere{rand}` (criado no Passo 1.2) para que o Container App consiga puxar a imagem privada.
 
-```bash
-PRINCIPAL_ID=$(az identity show \
-  --name mi-helpsphere-ia \
-  --resource-group rg-helpsphere-ia \
-  --query principalId -o tsv)
+```powershell
+$PrincipalId = az identity show `
+  --name mi-helpsphere-ia `
+  --resource-group rg-helpsphere-ia `
+  --query principalId -o tsv
 
-ACR_ID=$(az acr show --name $ACR_NAME --resource-group rg-lab-final --query id -o tsv)
+$AcrName = az acr list -g rg-lab-final --query "[0].name" -o tsv
+$AcrId = az acr show --name $AcrName --resource-group rg-lab-final --query id -o tsv
 
-az role assignment create \
-  --assignee $PRINCIPAL_ID \
-  --role AcrPull \
-  --scope $ACR_ID
+az role assignment create `
+  --assignee $PrincipalId `
+  --role AcrPull `
+  --scope $AcrId
 ```
+
+> **Linux/Mac/WSL:** troque `$Var = az ...` por `VAR=$(az ...)` e `` ` `` por `\`.
 
 ## Passo 4.6 — Deploy MCP Server em Container App
 
@@ -907,7 +923,7 @@ az role assignment create \
 
 <!-- screenshot: passo-4.4-mcp-url-anotar.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
 >
 > ```bash
 > HELPSPHERE_SQL_CONN="<connection-string-do-HelpSphere-SQL>"
@@ -980,7 +996,7 @@ az role assignment create \
 
 <!-- screenshot: passo-4.5-api-permissions-consent.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
 >
 > ```bash
 > CLIENT_APP_NAME="app-mcp-helpsphere-client"
@@ -1004,62 +1020,79 @@ az role assignment create \
 
 ## Passo 4.8 — Obter token de teste
 
-```bash
-TENANT_ID="<seu-tenant-id>"
+```powershell
+$TenantId = "<seu-tenant-id>"
 
-TOKEN=$(curl -s -X POST "https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token" \
-  -d "grant_type=client_credentials" \
-  -d "client_id=${CLIENT_APP_ID}" \
-  -d "client_secret=${CLIENT_SECRET}" \
-  -d "scope=api://mcp-helpsphere/.default" \
-  | jq -r .access_token)
+$TokenResponse = curl.exe -s -X POST "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token" `
+  -d "grant_type=client_credentials" `
+  -d "client_id=$ClientAppId" `
+  -d "client_secret=$ClientSecret" `
+  -d "scope=api://mcp-helpsphere/.default"
 
-echo "Token: $TOKEN"
+$Token = ($TokenResponse | ConvertFrom-Json).access_token
+
+Write-Host "Token: $Token"
 ```
+
+> **Linux/Mac/WSL:** troque `curl.exe` por `curl`, `$Var = curl ...` por `TOKEN=$(curl ... | jq -r .access_token)` (atribuição inline bash + jq), e `` ` `` (backtick) por `\` (backslash).
 
 ## Passo 4.9 — Testar MCP Server
 
-```bash
-curl -X POST "https://${MCP_URL}/mcp" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/list",
-    "id": 1
-  }'
+```powershell
+$ListBody = @{
+  jsonrpc = '2.0'
+  method  = 'tools/list'
+  id      = 1
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post -Uri "https://$McpUrl/mcp" `
+  -Headers @{ Authorization = "Bearer $Token"; 'Content-Type' = 'application/json' } `
+  -Body $ListBody
 ```
+
+> **Linux/Mac/WSL:** troque o bloco PowerShell por bash + curl + heredoc:
+> ```bash
+> curl -X POST "https://${MCP_URL}/mcp" \
+>   -H "Authorization: Bearer ${TOKEN}" \
+>   -H "Content-Type: application/json" \
+>   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+> ```
 
 Saída esperada: lista das 4 tools (`get_ticket`, `list_tickets`, `add_comment`, `update_status`).
 
 Testar uma tool:
-```bash
-curl -X POST "https://${MCP_URL}/mcp" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "get_ticket",
-      "arguments": {"ticket_id": 1}
-    },
-    "id": 2
-  }'
+```powershell
+$CallBody = @{
+  jsonrpc = '2.0'
+  method  = 'tools/call'
+  params  = @{
+    name      = 'get_ticket'
+    arguments = @{ ticket_id = 1 }
+  }
+  id      = 2
+} | ConvertTo-Json -Depth 5
+
+Invoke-RestMethod -Method Post -Uri "https://$McpUrl/mcp" `
+  -Headers @{ Authorization = "Bearer $Token"; 'Content-Type' = 'application/json' } `
+  -Body $CallBody
 ```
+
+> **Linux/Mac/WSL:** equivalente bash com curl + payload JSON inline (igual ao bloco anterior, mudando `method` para `tools/call` e adicionando `params`).
 
 Deve retornar dados do ticket 1 (do seed do HelpSphere).
 
 ## Passo 4.10 — Atualizar Function App `func-agent-runner` com URL e token MCP
 
-```bash
-az functionapp config appsettings set \
-  --name $FUNC_AGENT_NAME \
-  --resource-group rg-lab-final \
-  --settings \
-    MCP_SERVER_URL="https://${MCP_URL}" \
-    MCP_TOKEN="${TOKEN}"
+```powershell
+az functionapp config appsettings set `
+  --name $FuncAgentName `
+  --resource-group rg-lab-final `
+  --settings `
+    MCP_SERVER_URL="https://$McpUrl" `
+    MCP_TOKEN="$Token"
 ```
+
+> **Linux/Mac/WSL:** troque `$FuncAgentName` por `$FUNC_AGENT_NAME`, `$McpUrl` por `${MCP_URL}`, `$Token` por `${TOKEN}`, e `` ` `` (backtick) por `\` (backslash).
 
 > **Atenção:** o token aqui é estático (válido ~1h). Em produção, o agent renova token via OAuth flow. Para o lab, ok usar token estático e renovar se expirar.
 
@@ -1108,7 +1141,7 @@ az functionapp config appsettings set \
 
 <!-- screenshot: passo-5.1-keys-endpoint.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
 >
 > ```bash
 > az cognitiveservices account create \
@@ -1122,10 +1155,12 @@ az functionapp config appsettings set \
 
 ## Passo 5.2 — Atribuir RBAC
 
-```bash
-SPCH_ID=$(az cognitiveservices account show -n spch-helpsphere -g rg-lab-final --query id -o tsv)
-az role assignment create --assignee $PRINCIPAL_ID --role "Cognitive Services User" --scope $SPCH_ID
+```powershell
+$SpchId = az cognitiveservices account show -n spch-helpsphere -g rg-lab-final --query id -o tsv
+az role assignment create --assignee $PrincipalId --role "Cognitive Services User" --scope $SpchId
 ```
+
+> **Linux/Mac/WSL:** troque `$Var = az ...` por `VAR=$(az ...)` e `$VarName` por `$VAR_NAME`.
 
 ## Passo 5.3 — Grave seu próprio áudio (5-10s pt-BR)
 
@@ -1141,29 +1176,39 @@ Em vez de baixar um WAV pré-pronto, vamos gravar o seu próprio. Por quê? Spee
 
 Para testar via CLI:
 
-```bash
-curl -X POST "https://${SPEECH_REGION}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=pt-BR" \
-  -H "Ocp-Apim-Subscription-Key: ${SPEECH_KEY}" \
-  -H "Content-Type: audio/wav" \
-  --data-binary @sample-question-pt.wav
+```powershell
+curl.exe -X POST "https://$env:SPEECH_REGION.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=pt-BR" `
+  -H "Ocp-Apim-Subscription-Key: $env:SPEECH_KEY" `
+  -H "Content-Type: audio/wav" `
+  --data-binary "@sample-question-pt.wav"
 ```
+
+> **Linux/Mac/WSL:** troque `curl.exe` por `curl`, `$env:VAR` por `${VAR}`, `` ` `` por `\`, e `"@file"` por `@file` (sem aspas — em pwsh `@` é splatting operator, precisa estar entre aspas).
 
 Saída esperada: transcrição em pt-BR.
 
 ## Passo 5.4 — Testar TTS (Text-to-Speech)
 
-```bash
-curl -X POST "https://${SPEECH_REGION}.tts.speech.microsoft.com/cognitiveservices/v1" \
-  -H "Ocp-Apim-Subscription-Key: ${SPEECH_KEY}" \
-  -H "Content-Type: application/ssml+xml" \
-  -H "X-Microsoft-OutputFormat: audio-24khz-48kbitrate-mono-mp3" \
-  -d '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="pt-BR">
-        <voice name="pt-BR-FranciscaNeural">
-          Olá, sou a assistente do HelpSphere. Como posso ajudar?
-        </voice>
-      </speak>' \
+```powershell
+$Ssml = @'
+<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="pt-BR">
+  <voice name="pt-BR-FranciscaNeural">
+    Olá, sou a assistente do HelpSphere. Como posso ajudar?
+  </voice>
+</speak>
+'@
+
+$Ssml | Set-Content -Path ssml.xml -Encoding UTF8
+
+curl.exe -X POST "https://$env:SPEECH_REGION.tts.speech.microsoft.com/cognitiveservices/v1" `
+  -H "Ocp-Apim-Subscription-Key: $env:SPEECH_KEY" `
+  -H "Content-Type: application/ssml+xml" `
+  -H "X-Microsoft-OutputFormat: audio-24khz-48kbitrate-mono-mp3" `
+  --data-binary "@ssml.xml" `
   --output greeting.mp3
 ```
+
+> **Linux/Mac/WSL:** troque o here-string PowerShell por heredoc bash (`cat <<EOF ... EOF`), `curl.exe` por `curl`, `$env:VAR` por `${VAR}`, e `` ` `` por `\`.
 
 Reproduza o `greeting.mp3` — você deve ouvir a frase.
 
@@ -1214,9 +1259,11 @@ def voice(req: func.HttpRequest) -> func.HttpResponse:
 ```
 
 Re-deploy:
-```bash
-func azure functionapp publish $FUNC_AGENT_NAME --python
+```powershell
+func azure functionapp publish $FuncAgentName --python
 ```
+
+> **Linux/Mac/WSL:** troque `$FuncAgentName` por `$FUNC_AGENT_NAME`.
 
 ## ✅ Checkpoint Parte 5
 
@@ -1269,7 +1316,7 @@ func azure functionapp publish $FUNC_AGENT_NAME --python
 - `PG_HOST` = `pg-n8n-<rand>.postgres.database.azure.com` (página Overview do server)
 - `PG_PASSWORD` = senha que você definiu
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
 >
 > ```bash
 > PG_NAME="pg-n8n-${RAND}"
@@ -1352,7 +1399,7 @@ func azure functionapp publish $FUNC_AGENT_NAME --python
 
 <!-- screenshot: passo-6.2-n8n-url-webhook.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
 >
 > ```bash
 > az containerapp create \
@@ -1515,7 +1562,7 @@ No canvas do workflow → **Active** toggle (canto superior direito) → ON
 
 <!-- screenshot: passo-7.1-connection-string.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
 >
 > ```bash
 > SB_NAME="sb-helpsphere-final"
@@ -1544,12 +1591,14 @@ No canvas do workflow → **Active** toggle (canto superior direito) → ON
 
 ## Passo 7.2 — Atualizar Function `func-agent-runner` com SB connection
 
-```bash
-az functionapp config appsettings set \
-  --name $FUNC_AGENT_NAME \
-  --resource-group rg-lab-final \
-  --settings SB_CONNECTION_STRING="$SB_CONN"
+```powershell
+az functionapp config appsettings set `
+  --name $FuncAgentName `
+  --resource-group rg-lab-final `
+  --settings SB_CONNECTION_STRING="$SbConn"
 ```
+
+> **Linux/Mac/WSL:** troque `$FuncAgentName` por `$FUNC_AGENT_NAME`, `$SbConn` por `$SB_CONN`, e `` ` `` por `\`.
 
 ## Passo 7.3 — Configurar credential Service Bus no n8n
 
@@ -1562,13 +1611,15 @@ Atualize node Service Bus Trigger do workflow para usar essa credential.
 ## Passo 7.4 — Testar disparo de escalação
 
 Manualmente publique mensagem na queue para testar:
-```bash
-az servicebus queue send-message \
-  --namespace-name $SB_NAME \
-  --resource-group rg-lab-final \
-  --queue-name ticket-escalations \
+```powershell
+az servicebus queue send-message `
+  --namespace-name $SbName `
+  --resource-group rg-lab-final `
+  --queue-name ticket-escalations `
   --body '{"ticket_id": 1, "reason": "Teste manual de escalação", "confidence": 0.3}'
 ```
+
+> **Linux/Mac/WSL:** troque `$SbName` por `$SB_NAME` e `` ` `` por `\`.
 
 Em ~5s, no n8n você deve ver execução do workflow disparada (em **Executions**).
 
@@ -1609,7 +1660,7 @@ Skip se você está OK com n8n direto.
 
 <!-- screenshot: passo-7.5-logic-app-designer.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
 >
 > ```bash
 > az logic workflow create \
@@ -1662,7 +1713,7 @@ Skip se você está OK com n8n direto.
 **Sintoma:** cURL para `https://${MCP_URL}/mcp` retorna timeout após 30s, ou `502 Bad Gateway`.
 
 **Fix:** Verificar deploy ACA com:
-```bash
+```powershell
 az containerapp logs show --name ca-mcp-helpsphere --resource-group rg-lab-final --follow
 ```
 Causas comuns: container em CrashLoopBackoff (logs mostram exception), `--target-port` errado, ou ingress não configurado como `external`.
@@ -1672,7 +1723,7 @@ Causas comuns: container em CrashLoopBackoff (logs mostram exception), `--target
 **Sintoma:** Ao fazer **Import from file** no n8n, erro "Invalid workflow format" ou nodes aparecem como `unknown`.
 
 **Fix:** Versão n8n incompatível. Use `n8nio/n8n:1.6` (não `:latest`) na imagem do ACA — escalation-servicebus-sheets.json foi exportado nessa versão. Re-deploy:
-```bash
+```powershell
 az containerapp update --name ca-n8n-helpsphere --resource-group rg-lab-final --image n8nio/n8n:1.6
 ```
 
@@ -1681,7 +1732,7 @@ az containerapp update --name ca-n8n-helpsphere --resource-group rg-lab-final --
 **Sintoma:** cURL pro endpoint STT retorna `{"DisplayText": "", "RecognitionStatus": "InitialSilenceTimeout"}` mesmo com áudio claro.
 
 **Fix:** WAV deve ser **mono 16kHz PCM 16-bit**. Voice Recorder do Windows grava estéreo 48kHz por padrão. Converter com ffmpeg:
-```bash
+```powershell
 ffmpeg -i sample-question-pt.wav -ac 1 -ar 16000 -sample_fmt s16 sample-mono16k.wav
 ```
 Use o arquivo convertido no cURL.
@@ -1773,7 +1824,7 @@ Você vai gravar (ou observar via vídeo do professor) demo de 5 tickets.
 
 <!-- screenshot: passo-8.3-delete-rg-portal.png -->
 
-> **Alternativa via Azure CLI:**
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
 >
 > ```bash
 > az group delete --name rg-lab-final --yes --no-wait

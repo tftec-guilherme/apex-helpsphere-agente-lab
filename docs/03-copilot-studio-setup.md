@@ -87,9 +87,9 @@ Antes de tocar Copilot Studio, valide 2 coisas que matam 80% dos labs com erro "
 
 <!-- screenshot: cap03-passo3.1-environment-development-selecionado.png -->
 
-> **Alternativa via CLI / PAC CLI:**
+> **Alternativa via CLI / PAC CLI (Windows PowerShell + Linux/Mac/WSL — comandos idênticos):**
 > Power Platform CLI permite listar environments — útil para confirmar que você criou o Development corretamente:
-> ```bash
+> ```powershell
 > # Instalar PAC CLI (Windows)
 > winget install Microsoft.PowerAppsCLI
 >
