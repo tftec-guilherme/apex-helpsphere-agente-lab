@@ -39,7 +39,7 @@ Veja **Parte 4** completa do guia. Resumo:
 2. RBAC `AcrPull` no Managed Identity do Container App (Passo 4.5)
 3. Container App `ca-mcp-helpsphere` com env vars:
    - `HELPSPHERE_SQL_CONNECTION` — ODBC string apontando pro SQL `helpsphere`
-   - `ENTRA_TENANT_ID` — tenant Entra da App Registration
+   - `AZURE_TENANT_ID` — tenant Entra da App Registration (`ENTRA_TENANT_ID` aceito como fallback p/ retrocompat)
    - `EXPECTED_AUDIENCE` — `api://<server-app-client-id>`
 4. Ingress external + target-port 8000
 

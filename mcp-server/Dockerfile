@@ -9,7 +9,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY server.py .
+# Bug fix 2026-05-19: COPY *.py em vez de COPY server.py — server.py faz
+# `from auth import require_scope` e `from helpsphere_db import HelpSphereDB`.
+# Versão anterior só copiava server.py e quebrava com ModuleNotFoundError no boot.
+COPY *.py ./
 
 EXPOSE 8080
 

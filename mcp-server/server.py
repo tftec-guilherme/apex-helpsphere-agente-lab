@@ -13,7 +13,7 @@ Auth via decorator `@require_scope` (auth.py) lendo Bearer token do contexto MCP
 Uso:
     pip install -r requirements.txt
     $env:HELPSPHERE_SQL_CONNECTION = "Driver={ODBC Driver 18 for SQL Server};Server=tcp:...;Database=helpsphere;..."
-    $env:ENTRA_TENANT_ID = "<tenant>"
+    $env:AZURE_TENANT_ID = "<tenant>"
     $env:EXPECTED_AUDIENCE = "api://<server-app-client-id>"
     python server.py   # listen 0.0.0.0:8000
 """

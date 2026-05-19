@@ -11,7 +11,7 @@ import requests
 
 log = logging.getLogger("mcp-auth")
 
-TENANT_ID = os.environ.get("ENTRA_TENANT_ID", "")
+TENANT_ID = os.environ.get("AZURE_TENANT_ID", os.environ.get("ENTRA_TENANT_ID", ""))
 EXPECTED_AUDIENCE = os.environ.get("EXPECTED_AUDIENCE", "")
 JWKS_URL = f"https://login.microsoftonline.com/{TENANT_ID}/discovery/v2.0/keys"
 
