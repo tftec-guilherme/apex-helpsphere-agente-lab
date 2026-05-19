@@ -41,7 +41,7 @@ Veja **Parte 4** completa do guia. Resumo:
    - `HELPSPHERE_SQL_CONNECTION` — ODBC string apontando pro SQL `helpsphere`
    - `AZURE_TENANT_ID` — tenant Entra da App Registration (`ENTRA_TENANT_ID` aceito como fallback p/ retrocompat)
    - `EXPECTED_AUDIENCE` — `api://<server-app-client-id>`
-4. Ingress external + target-port 8000
+4. Ingress external + target-port 8080
 
 ## Troubleshooting
 

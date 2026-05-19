@@ -946,7 +946,7 @@ az role assignment create `
 5. Tab **Ingress**:
    - **Ingress:** `Enabled`
    - **Ingress traffic:** `Accepting traffic from anywhere`
-   - **Target port:** `8000`
+   - **Target port:** `8080`
 6. Tab **Identity**:
    - **User-assigned managed identity:** **+ Add** → selecionar `mi-helpsphere-ia` (do RG `rg-helpsphere-ia`, criado no Bloco 2)
 7. Tab **Scaling**:
@@ -977,7 +977,7 @@ az role assignment create `
 >   --resource-group rg-lab-final \
 >   --environment cae-helpsphere-final \
 >   --image $ACR_NAME.azurecr.io/mcp-helpsphere:v1 \
->   --target-port 8000 \
+>   --target-port 8080 \
 >   --ingress external \
 >   --registry-server $ACR_NAME.azurecr.io \
 >   --registry-identity $(az identity show -n mi-helpsphere-ia -g rg-helpsphere-ia --query id -o tsv) \

@@ -15,7 +15,7 @@ Uso:
     $env:HELPSPHERE_SQL_CONNECTION = "Driver={ODBC Driver 18 for SQL Server};Server=tcp:...;Database=helpsphere;..."
     $env:AZURE_TENANT_ID = "<tenant>"
     $env:EXPECTED_AUDIENCE = "api://<server-app-client-id>"
-    python server.py   # listen 0.0.0.0:8000
+    python server.py   # listen 0.0.0.0:8080
 """
 from __future__ import annotations
 
@@ -77,5 +77,5 @@ def ticket_resource(ticket_id: int) -> str:
 
 
 if __name__ == "__main__":
-    log.info("MCP Server HelpSphere iniciando em 0.0.0.0:8000")
-    mcp.run(transport="http", host="0.0.0.0", port=8000)
+    log.info("MCP Server HelpSphere iniciando em 0.0.0.0:8080")
+    mcp.run(transport="http", host="0.0.0.0", port=8080)

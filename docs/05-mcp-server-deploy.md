@@ -33,7 +33,7 @@
 | Imagem `mcp-helpsphere:v1` no ACR | `az acr build` remoto (~3-5min) | Buildado no ACR `acrhelpsphere<rand>` | R$ 0 build (incluso no Basic) · ~50 MiB armazenamento (R$ 0,03/mês) |
 | App Reg `app-mcp-helpsphere-server` | Portal Entra → 3 OAuth scopes (`tickets.read`, `tickets.write`, `kb.read`) + Application ID URI `api://mcp-helpsphere` | Tenant Entra (sem cobrança) | R$ 0 |
 | App Reg `app-mcp-helpsphere-client` | Portal Entra → client secret 90d + admin consent das 3 permissions | Tenant Entra | R$ 0 |
-| Container App `ca-mcp-helpsphere` | Portal ACA → image=`mcp-helpsphere:v1`, MI=`mi-helpsphere-ia`, ingress=External, port=8000, scale 0→1 | ACA Env `cae-helpsphere-final` (Consumption) | R$ 0 parado · ~R$ 0,02/min ativo (0,5 vCPU + 1 GiB) |
+| Container App `ca-mcp-helpsphere` | Portal ACA → image=`mcp-helpsphere:v1`, MI=`mi-helpsphere-ia`, ingress=External, port=8080, scale 0→1 | ACA Env `cae-helpsphere-final` (Consumption) | R$ 0 parado · ~R$ 0,02/min ativo (0,5 vCPU + 1 GiB) |
 | `MCP_SERVER_URL` no `.env` do `agent-code/` | Edição manual `agent-code/.env` | Consumido pelas tools `get_ticket` + `list_similar_tickets` do agente Foundry | R$ 0 |
 
 > **Nota pedagógica — por que 2 App Registrations e não 1?** O **server app reg** define **quem é a API protegida** (Application ID URI + scopes que ela exporta). O **client app reg** define **quem está chamando** (identidade do agente Foundry, com client secret/credentials). Em OAuth 2.0 client-credentials flow, **misturar os dois numa app só** funciona em cenários triviais mas falha quando você adiciona um 2º cliente (ex.: um workflow n8n também consumindo o MCP) — a app teria que ser cliente de si mesma e a Microsoft bloqueia esse padrão como anti-pattern. **Em produção:** 1 App Reg server por API, N App Regs client por consumidor. **No lab:** consumidor único (Foundry agent), mas mantemos a separação para suportar 2º cliente sem refactor (workflow n8n é o caso clássico).
@@ -95,7 +95,7 @@ def update_status(ticket_id: int, new_status: str) -> dict:
     return db.update_status(ticket_id, new_status)
 
 if __name__ == "__main__":
-    mcp.run(transport="http", host="0.0.0.0", port=8000)
+    mcp.run(transport="http", host="0.0.0.0", port=8080)
 ```
 
 `Dockerfile` (referência):
@@ -119,7 +119,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-EXPOSE 8000
+EXPOSE 8080
 CMD ["python", "server.py"]
 ```
 
@@ -431,7 +431,7 @@ A Managed Identity `mi-helpsphere-ia` (no RG `rg-lab-intermediario`) precisa de 
    - **Ingress:** `Enabled`
    - **Ingress traffic:** `Accepting traffic from anywhere`
    - **Ingress type:** `HTTP`
-   - **Target port:** `8000` (o `server.py` escuta nessa porta)
+   - **Target port:** `8080` (o `server.py` escuta nessa porta)
    - **Transport:** `Auto` (default)
 6. Tab **Identity:**
    - **System assigned:** `Off`
@@ -456,7 +456,7 @@ A Managed Identity `mi-helpsphere-ia` (no RG `rg-lab-intermediario`) precisa de 
    ```
    (o `<rand>` é gerado pelo ACA, ex.: `politehill-1a2b3c4d`)
 3. **Copie esse valor inteiro** — é o `MCP_SERVER_URL` que vai no `.env` do `agent-code/` no Passo 5.10
-4. **Validação visual:** ainda na blade do `ca-mcp-helpsphere`, abra **Revisions and replicas** no menu lateral → você deve ver pelo menos 1 revisão com **Running state: Running** e **Replicas: 0** (scale-to-zero ocioso, sobe pra 1 quando bater request) OU **Replicas: 1** se acabou de provisionar. Abra **Log stream** (também no menu lateral) → você verá `INFO:     Uvicorn running on http://0.0.0.0:8000` confirmando o `server.py` subindo
+4. **Validação visual:** ainda na blade do `ca-mcp-helpsphere`, abra **Revisions and replicas** no menu lateral → você deve ver pelo menos 1 revisão com **Running state: Running** e **Replicas: 0** (scale-to-zero ocioso, sobe pra 1 quando bater request) OU **Replicas: 1** se acabou de provisionar. Abra **Log stream** (também no menu lateral) → você verá `INFO:     Uvicorn running on http://0.0.0.0:8080` confirmando o `server.py` subindo
 4. **Endpoint MCP completo:** `${MCP_SERVER_URL}/mcp` (path `/mcp` é onde o FastMCP HTTP transport escuta)
 
 <!-- screenshot: cap05-passo5.4-application-url-anotar.png -->
@@ -486,7 +486,7 @@ A Managed Identity `mi-helpsphere-ia` (no RG `rg-lab-intermediario`) precisa de 
 >   --resource-group rg-lab-final `
 >   --environment cae-helpsphere-final `
 >   --image "$AcrName.azurecr.io/mcp-helpsphere:v1" `
->   --target-port 8000 `
+>   --target-port 8080 `
 >   --ingress external `
 >   --transport http `
 >   --registry-server "$AcrName.azurecr.io" `

@@ -26,6 +26,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # COPY *.py — server.py + auth.py + helpsphere_db.py
 COPY *.py ./
 
-EXPOSE 8000
+EXPOSE 8080
 
 CMD ["python", "server.py"]
