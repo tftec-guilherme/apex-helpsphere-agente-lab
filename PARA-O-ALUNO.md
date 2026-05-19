@@ -22,13 +22,27 @@
 
 ## Status atual
 
-Lab production-grade (revisão 2026-05-12). Os **10 capítulos `docs/`** estão completos, PowerShell-first e alinhados ao Azure real (Foundry Hub `aifhub-apex-prod` em `rg-lab-intermediario`):
+Lab production-grade (revisão 2026-05-19). Os **10 capítulos `docs/`** canônicos estão completos, PowerShell-first e alinhados ao Azure real (Foundry Hub `aifhub-apex-prod` em `rg-lab-intermediario`):
 
 - ✅ Pré-requisitos checklist (este arquivo, abaixo)
 - ✅ Quick Start em 7 passos ([README.md](./README.md#quick-start))
 - ✅ Surpresas pedagógicas distribuídas inline nos capítulos `docs/` + consolidadas em `docs/_disclaimers.md`
 - ✅ Custo estimado: R$ 100-180/lab único ([README.md](./README.md#custos-esperados-lab-completo))
 - ✅ Tempo realista: ~9h ponta-a-ponta (lifecycle estimado provision + setup + smoke)
+
+**+1 capítulo opcional:** [`docs/11-bot-services-opcional.md`](./docs/11-bot-services-opcional.md) — Azure Bot Service como alternativa ao Copilot Studio (Cap 03) para canais multi-platform (WhatsApp / SMS / Slack / Direct Line). ~45min se executado. **Não exigido para concluir o Lab Final.**
+
+### Extensões futuras (fora do escopo deste lab)
+
+Tópicos típicos de "IA no Azure 2026" que **NÃO** entram neste Lab Final, deixados como leitura/exploração independente para o aluno curioso:
+
+- **Azure ML / Prompt Flow** — ML lifecycle (registered models, pipelines, endpoints). Foundry cobre parte da experiência, mas Prompt Flow é a ferramenta canônica para eval estruturado offline.
+- **Semantic Kernel** — concorrente Microsoft-first do LangChain. Natural para planning + memory em agentes complexos; este lab usa Foundry SDK direto.
+- **AutoGen / Multi-agent orchestration** — Microsoft Research framework para múltiplos agentes colaborando.
+- **Custom Document Intelligence** — modelos custom treinados em dataset próprio (este lab usa apenas `prebuilt-layout`).
+- **Anomaly Detector** — caso de uso natural em ITSM: anomalia em volume de tickets por categoria ou tenant.
+
+Esses tópicos podem ser cobertos em disciplinas separadas ou aprofundados por conta própria após concluir os caps 01-10 + (opcional) cap 11.
 
 Roadmap futuro: screenshots Q2-2026 capturados em execução real e smoke test fim-a-fim documentado.
 
