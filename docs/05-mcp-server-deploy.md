@@ -106,8 +106,15 @@ FROM python:3.11-slim
 
 # ODBC driver para pyodbc (SQL Server) — Debian 12 Bookworm
 # apt-key foi deprecated em Debian 12. Usar signed-by com chave em /etc/apt/keyrings/.
+# IMPORTANTE: pyodbc precisa de DUAS coisas no SO:
+#  - unixodbc (runtime libs — fornece libodbc.so.2 que pyodbc faz dlopen)
+#  - unixodbc-dev (headers — usados durante pip install do pyodbc)
+# Sem unixodbc o boot do container falha com:
+#   ImportError: libodbc.so.2: cannot open shared object file
+# libgssapi-krb5-2 e dependencia runtime do msodbcsql18 (AAD/Kerberos auth).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl gnupg2 ca-certificates apt-transport-https unixodbc-dev \
+    curl gnupg2 ca-certificates apt-transport-https \
+    unixodbc unixodbc-dev libgssapi-krb5-2 \
  && mkdir -p /etc/apt/keyrings \
  && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
     | gpg --dearmor -o /etc/apt/keyrings/microsoft-prod.gpg \

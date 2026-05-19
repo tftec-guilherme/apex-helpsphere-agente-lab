@@ -6,6 +6,12 @@
 #     libodbc.so.2 e msodbcsql18 instalados no SO; python:3.11-slim é minimal)
 #  2) COPY *.py em vez de COPY server.py (server.py importa auth +
 #     helpsphere_db — antes quebrava com ModuleNotFoundError)
+#  3) Bug #8 — Adicionado `unixodbc` (runtime libs) e `libgssapi-krb5-2`.
+#     `unixodbc-dev` sao apenas headers para compilar bindings; `libodbc.so.2`
+#     (runtime que pyodbc faz dlopen em import-time) vem de `unixodbc`. Em
+#     Debian 12 Bookworm com `--no-install-recommends`, esse runtime nao e
+#     instalado por transitividade — gerando ImportError no boot do container.
+#     `libgssapi-krb5-2` e dependencia de msodbcsql18 para AAD/Kerberos auth.
 
 FROM python:3.11-slim
 
@@ -13,7 +19,8 @@ FROM python:3.11-slim
 # Bug fix 2026-05-19: apt-key foi deprecated em Debian 12. Microsoft agora usa
 # signed-by com chave em /etc/apt/keyrings/ (approach moderno).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl gnupg2 ca-certificates apt-transport-https unixodbc-dev \
+    curl gnupg2 ca-certificates apt-transport-https \
+    unixodbc unixodbc-dev libgssapi-krb5-2 \
  && mkdir -p /etc/apt/keyrings \
  && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
     | gpg --dearmor -o /etc/apt/keyrings/microsoft-prod.gpg \
