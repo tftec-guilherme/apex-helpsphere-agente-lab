@@ -115,8 +115,7 @@ flowchart TB
 
     subgraph Workflow["Automação de negócio"]
         SB[Service Bus<br/>queue: ticket-escalations]
-        N8N[ca-n8n-helpsphere<br/>n8n self-hosted<br/>workflow 7 nodes]
-        LA[Logic App<br/>la-supervisor-notify<br/>Microsoft Graph Teams]
+        N8N[ca-n8n-helpsphere<br/>n8n self-hosted<br/>workflow 7 nodes<br/>+ notificação Teams]
         SHEETS[Google Sheets<br/>auditoria]
     end
 
@@ -148,8 +147,7 @@ flowchart TB
 
     SB --> N8N
     N8N -->|GET ticket| HSAPI
-    N8N -->|notify| LA
-    LA --> TEAMS_MARINA
+    N8N -->|notify Adaptive Card| TEAMS_MARINA
     N8N -->|append| SHEETS
 ```
 
@@ -165,7 +163,7 @@ flowchart TB
 | Parte 4 | 1.5h | ACA Environment + RBAC + MCP Server HelpSphere (deploy do pré-pronto em ACA) |
 | Parte 5 | 1h | Azure AI Speech — canal de voz |
 | Parte 6 | 1.5h | n8n self-hosted em ACA + workflow de escalação |
-| Parte 7 | 1h | Service Bus + Logic App + Google Sheets connector |
+| Parte 7 | 1h | Service Bus + n8n notificação Teams + Google Sheets connector |
 | Parte 8 | 30min | Demo end-to-end com 5 tickets + cleanup |
 
 ---
@@ -926,9 +924,50 @@ az role assignment create `
    - **Image tag:** `v1`
    - **CPU and Memory:** `0.5 CPU / 1 Gi memory`
    - **Environment variables:**
-     - `HELPSPHERE_SQL_CONNECTION` = `<connection string do HelpSphere SQL>`
-     - `AZURE_TENANT_ID` = `<seu tenant ID>`
-     - `EXPECTED_AUDIENCE` = `api://mcp-helpsphere`
+     - `HELPSPHERE_SQL_CONNECTION` = `<connection string do HelpSphere SQL>` — **veja a nota abaixo para obter este valor**
+     - `AZURE_TENANT_ID` = `<seu tenant ID>` (Portal → Microsoft Entra ID → Overview → Tenant ID, OU `az account show --query tenantId -o tsv`)
+     - `EXPECTED_AUDIENCE` = `api://<MCP_SERVER_APP_ID>` (mesmo Application ID URI definido no Passo 4.3 — substitua `<MCP_SERVER_APP_ID>` pelo GUID do app reg)
+
+> [!IMPORTANT] **Como obter a `HELPSPHERE_SQL_CONNECTION`** (3 caminhos)
+>
+> O stack SaaS `apex-helpsphere` foi provisionado via `azd up` (pré-requisito do Lab Final — ver PARA-O-ALUNO.md §1). Você tem 3 formas de capturar a connection string:
+>
+> **Forma 1 — Via azd CLI (rápido, ~10s):** abra um terminal **na pasta do clone `apex-helpsphere`** (não esta pasta) e rode:
+>
+> ```powershell
+> cd C:\caminho\para\apex-helpsphere   # navegar até a pasta onde rodou `azd up`
+> azd env get-values | Select-String "SQL"
+> ```
+>
+> Você verá variáveis como `AZURE_SQL_CONNECTION_STRING="..."`. Copie o valor (entre aspas) — é a connection string completa.
+>
+> **Forma 2 — Via Portal Azure (visual, ~1min):**
+>
+> 1. Buscar **"SQL databases"** no topo do Portal → selecionar o database `helpsphere`
+>    - RG: `rg-helpsphere-saas` (provisionado pelo `azd up`, default em `westus3`)
+>    - Server: `sql-helpsphere-<rand>` (nome do server gerado pelo azd)
+> 2. Menu lateral → **Connection strings** → tab **ADO.NET (SQL authentication)**
+> 3. Copiar a string completa exibida (formato `Server=tcp:...;Database=helpsphere;User ID=...;Password={your_password};Encrypt=true;...`)
+> 4. **Substituir `{your_password}` pela senha que você definiu** quando rodou `azd up` do apex-helpsphere (procure no seu password manager, ou veja `.env` local se gravou lá)
+>
+> **Forma 3 — Via Azure CLI (script):**
+>
+> ```powershell
+> # Capturar nome do SQL Server (gerado pelo azd)
+> $SqlServerName = az sql server list -g rg-helpsphere-saas --query "[0].name" -o tsv
+>
+> # Pegar template da connection string (sem senha)
+> az sql db show-connection-string --server $SqlServerName --name helpsphere --client ado.net
+> ```
+>
+> Substitua `<username>` e `<password>` pelos valores do `azd up` (mesmo usuário/senha que você usou).
+>
+> **Senha do azd up:** o `azd` salva em `.env` local mas a senha é **ofuscada** após o primeiro `up`. Se você não anotou:
+> ```powershell
+> # Resetar a senha do SQL Admin (afeta apex-helpsphere prod — use só se necessário)
+> az sql server update -g rg-helpsphere-saas -n $SqlServerName --admin-password "<NovaSenha-Strong-123!>"
+> ```
+
 5. Tab **Ingress**:
    - **Ingress:** `Enabled`
    - **Ingress traffic:** `Accepting traffic from anywhere`
@@ -1550,7 +1589,7 @@ No canvas do workflow → **Active** toggle (canto superior direito) → ON
 
 ---
 
-# Parte 7 — Service Bus + Logic App + Sheets (1h)
+# Parte 7 — Service Bus + n8n notificação + Sheets (1h)
 
 ## Passo 7.1 — Criar Service Bus namespace
 
@@ -1653,56 +1692,7 @@ az servicebus queue send-message `
 
 Em ~5s, no n8n você deve ver execução do workflow disparada (em **Executions**).
 
-## Passo 7.5 — Logic App de notificação (alternativa)
-
-> Para o lab, n8n já cobre notificação Teams via Microsoft Graph node. Logic App é mostrado como alternativa que algumas empresas preferem.
-
-Skip se você está OK com n8n direto.
-
-**Para implementar — No Portal Azure:**
-
-1. Barra superior → buscar **"Logic apps"** → clicar
-2. **+ Add** → escolher **Consumption** plan type
-3. Preencher tab **Basics**:
-   - **Subscription:** sua
-   - **Resource group:** `rg-lab-final`
-   - **Logic App name:** `la-supervisor-notify`
-   - **Region:** `East US 2`
-   - **Enable log analytics:** `No`
-4. **Review + create** → **Create**
-5. Aguardar provisioning ~1min até **Succeeded**
-
-<!-- screenshot: passo-7.5-criar-logic-app-portal.png -->
-
-> **Atenção custo:** Logic Apps Consumption cobra por execução (~R$ 0,000025/action). Praticamente gratuito no lab.
-
-**Configurar workflow:**
-
-1. Logic App `la-supervisor-notify` → menu **Development Tools** → **Logic app designer**
-2. **Trigger:** **Service Bus** → `When a message is received in a queue (auto-complete)`
-   - Queue: `ticket-escalations-priority` (criar nova queue antes se quiser separar de `ticket-escalations`)
-   - Connection: criar via Connection String do `SB_CONN`
-3. **+ New step** → **Microsoft Teams** → `Post adaptive card and wait for a response`
-   - Conectar com sua conta Teams
-   - Team/Channel: selecionar
-   - Card payload: adaptive card JSON com `{ticket_id}`, `{reason}`, `{confidence}` referenciando outputs do trigger
-4. **Save**
-
-<!-- screenshot: passo-7.5-logic-app-designer.png -->
-
-> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
->
-> ```bash
-> az logic workflow create \
->   --resource-group rg-lab-final \
->   --location eastus2 \
->   --name la-supervisor-notify \
->   --definition @workflow-definition.json
-> ```
->
-> (Designer visual no Portal é muito mais prático para Logic Apps Consumption.)
-
-## Passo 7.6 — Google Sheets connector
+## Passo 7.5 — Google Sheets connector
 
 1. Criar uma planilha Google Sheets vazia: `Apex IA - Auditoria de Escalações`
 2. Compartilhar com email da service account Google (ver Apêndice F)
@@ -1712,6 +1702,8 @@ Skip se você está OK com n8n direto.
    - Sheet name: `Sheet1`
    - Operation: Append
    - Columns: timestamp, ticket_id, supervisor, reason, confidence
+
+> **Por que n8n para notificação Teams + Sheets em vez de Logic Apps?** n8n já é o orquestrador deste lab (cap 06) e cobre Microsoft Graph Teams + Google Sheets nativamente em um único workflow visual. Logic Apps Consumption seria viável mas duplicaria infra para ganho zero: 2 plataformas + 2 sets de credenciais + custos adicionais (Consumption fee + storage account). Lab Final fica n8n-first para coerência arquitetural e menor superfície de manutenção.
 
 ## ✅ Checkpoint Parte 7
 

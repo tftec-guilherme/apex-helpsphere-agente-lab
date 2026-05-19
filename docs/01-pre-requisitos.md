@@ -43,7 +43,7 @@
 > [!IMPORTANT] **Tier / Licenciamento**
 > Decisões de tier e licenciamento consolidadas em [`_disclaimers.md`](./_disclaimers.md). Veja **AMB-1** (ACR Basic) e **AMB-4** (Service Bus Standard).
 
-> **Nota pedagógica — por que validar TUDO antes em vez de tropeçar etapa a etapa?** O lab tem ~9h de duração e dependências cross-recurso (Foundry → MCP → Speech → Service Bus → n8n → Logic App). Cada falha de pré-requisito descoberta no meio custa 30-60min de retrabalho. **Front-load a validação aqui** e o resto do lab flui.
+> **Nota pedagógica — por que validar TUDO antes em vez de tropeçar etapa a etapa?** O lab tem ~9h de duração e dependências cross-recurso (Foundry → MCP → Speech → Service Bus → n8n → Microsoft Graph Teams). Cada falha de pré-requisito descoberta no meio custa 30-60min de retrabalho. **Front-load a validação aqui** e o resto do lab flui.
 
 ---
 
