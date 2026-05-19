@@ -4,9 +4,10 @@
 
 **🎯 Entrypoint pedagógico do Lab Final D06**
 
-[![Status](https://img.shields.io/badge/status-v0.4.1--foundry--v2--sdk-success)](./CHANGELOG.md)
+[![Status](https://img.shields.io/badge/status-v0.4.2--n8n--first--cap11--opcional-success)](./CHANGELOG.md)
 [![Lifecycle](https://img.shields.io/badge/lifecycle-~9h-orange)](#custos-esperados)
 [![Cost](https://img.shields.io/badge/custo-R%24%20100--180-yellow)](./README.md#-custos-esperados-lab-completo)
+[![Optional Cap](https://img.shields.io/badge/opcional-cap%2011%20Bot%20Services-blue)](./docs/11-bot-services-opcional.md)
 
 📘 [**Guia Portal completo — entry-point único**](./docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md)
 
@@ -16,7 +17,7 @@
 
 > Bem-vindo. Este é o **entrypoint** do Lab Final (agente HelpSphere production-grade) da Disciplina 06. Vai te guiar pelo Portal Azure + AI Foundry portal + Copilot Studio + n8n UI passo-a-passo construindo um agente conversacional que classifica tickets, busca conhecimento (RAG) e escala via Service Bus + n8n + Google Sheets.
 >
-> `version-anchor: Q2-2026` · `status: v0.4.1-foundry-v2-sdk`
+> `version-anchor: Q2-2026` · `status: v0.4.2-n8n-first-cap11-opcional`
 
 ---
 
@@ -113,6 +114,38 @@ Roadmap futuro: screenshots Q2-2026 capturados em execução real e smoke test f
 
 ---
 
+## Como começar — roteiro de execução
+
+Depois de validar os 9 pré-requisitos acima, **siga os capítulos `docs/` em ordem numérica**. Cada cap encerra com um ✅ Checkpoint — só passe ao próximo quando todos os itens estiverem marcados.
+
+| Cap | Tempo | Objetivo macro | Recursos Azure provisionados |
+|---|---|---|---|
+| [00 — Guia Portal completo](./docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md) | (índice) | Visão única do lab + estimativas + diagrama Mermaid | — |
+| [01 — Pré-requisitos](./docs/01-pre-requisitos.md) | ~30min | Validar tudo da lista acima (checklist executável) | nenhum (só validações) |
+| [02 — RG + ACR + ACA Env](./docs/02-resource-group-acr-aca.md) | ~45min | Fundação: Resource Group + Container Registry + Container Apps Environment | RG `rg-lab-final` + ACR Basic + ACA Env |
+| [03 — Copilot Studio setup](./docs/03-copilot-studio-setup.md) | ~1h | Criar agente conversacional low-code no Power Platform | Copilot Studio Development environment |
+| [04 — Foundry Agent SDK](./docs/04-foundry-agent-sdk.md) | ~1.5h | Code-first agent Python com 4 tools (RAG + MCP + tickets + escalation) | Foundry agent + AGENT_ID |
+| [05 — MCP Server deploy](./docs/05-mcp-server-deploy.md) | ~1.5h | Build Docker + deploy ACA + Entra two-app + tools `get_ticket`/`list_similar`/etc | ACA Container App `ca-mcp-helpsphere` + 2 App Registrations |
+| [06 — Speech STT/TTS](./docs/06-speech-stt-tts.md) | ~45min | Voz pt-BR via Azure AI Speech (transcrição + síntese) | Cognitive Service `spch-helpsphere` |
+| [07 — n8n escalation](./docs/07-n8n-escalation.md) | ~1.5h | n8n self-hosted em ACA + workflow 7 nodes (Service Bus trigger → Teams + Sheets) | PostgreSQL B1ms + ACA Container App `ca-n8n-helpsphere` |
+| [08 — Service Bus + Sheets](./docs/08-service-bus-google-sheets.md) | ~1h | Service Bus Standard com Topic + 2 Subscriptions (fan-out n8n + Sheets) + Google Sheets connector | Service Bus Standard `sb-helpsphere-final` + Google Sheet |
+| [09 — Cleanup obrigatório](./docs/09-cleanup-obrigatorio.md) | ~15min | **CRÍTICO** — deletar tudo do `rg-lab-final` antes de fechar o lab (PostgreSQL B1ms cobra R$ ~60/mês parado) | nenhum (deleção) |
+| [10 — Troubleshooting](./docs/10-troubleshooting.md) | consulta | Cheat sheet com 75+ surpresas catalogadas + decision tree + comandos diagnósticos | — |
+| [11 — Bot Services (OPCIONAL)](./docs/11-bot-services-opcional.md) | ~45min | Alternativa multi-canal ao Copilot Studio (WhatsApp/SMS/Slack/Direct Line) | Azure Bot `bot-helpsphere-final` Free F0 |
+
+**Ordem de execução cravada** (não pule capítulos — dependências existem):
+
+```
+01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → smoke E2E → 09 (cleanup)
+                                            └─ opcional → 11
+```
+
+> **Dica:** cap 10 é cheat sheet sob demanda — não precisa ler do início ao fim. Use Ctrl+F com a mensagem exata do erro quando algo travar.
+
+> **Atalho de tempo:** se você concluiu Lab Intermediário (`apex-rag-lab`) no mesmo dia, capítulos 01-02 ficam mais rápidos (~30min em vez de 1h15min) porque parte da fundação Entra/CLI já está validada.
+
+---
+
 ## Filosofia "Portal-first com Alternativa CLI"
 
 Este lab segue a mesma filosofia do `apex-rag-lab`:
@@ -142,7 +175,7 @@ A **Apex Group** (holding varejo brasileira fictícia) já tem **2 stacks deploy
 1. **[`apex-helpsphere`](https://github.com/tftec-guilherme/apex-helpsphere)** — SaaS HelpSphere em produção (Container Apps + .NET 10 Tickets API + Azure SQL com 50 tickets seed pt-BR). Provisionado no **Bloco 2** desta disciplina. **REQUER deploy completo** antes deste lab — o MCP Server (cap 05) consulta o SQL Database via tools `get_ticket` / `list_similar_tickets`.
 2. **[`apex-rag-lab`](https://github.com/tftec-guilherme/apex-rag-lab)** — Pipeline RAG production-grade sobre 8 PDFs corporativos da Apex (Document Intelligence + AI Search Standard S1 vector hybrid + Function App orquestrador). Construído no **Lab Intermediário (Bloco 3)**. **REQUER conclusão** antes deste lab — o agente Foundry (cap 04) consulta a Function App via tool `search_kb`.
 
-Sua missão neste Lab Final (Bloco 4-5): **construir um agente conversacional Foundry** que classifica tickets em pt-BR, consulta o índice RAG via MCP Server, responde com voz (Speech STT/TTS), e escala tickets críticos via Service Bus → n8n → Google Sheets audit + Slack/Email notifications. Personas seed: Diego (ops), Marina (financeiro), Lia (atendimento).
+Sua missão neste Lab Final (Bloco 4-5): **construir um agente conversacional Foundry** que classifica tickets em pt-BR, consulta o índice RAG via MCP Server, responde com voz (Speech STT/TTS), e escala tickets críticos via Service Bus → n8n → Google Sheets audit + Microsoft Teams (Adaptive Card via Microsoft Graph node). Personas seed: Diego (ops), Marina (financeiro), Lia (atendimento).
 
 > **Sem os 2 stacks acima rodando, este lab quebra nos capítulos 04 e 05.** Não pule a fundação — ela existe por design.
 
