@@ -1138,18 +1138,6 @@ Invoke-RestMethod -Method Post -Uri "https://$McpUrl/mcp" `
 
 Deve retornar dados do ticket 1 (do seed do HelpSphere).
 
-> **Nota arquitetural — Auth JWT no MCP:** este lab usa MCP Server SEM validação
-> JWT no nível das tools (decorator `@require_scope` desabilitado). Razão:
-> simplificação pedagógica + integração FastMCP v2 Context para validação JWT
-> granular é tech debt para Lab Avançado (Bloco 5/6 — APIM gateway com
-> JWT validation centralizado, política de scopes via OAuth2 introspection).
-> Em produção real, JWT validation acontece em camada antes do MCP (APIM,
-> Front Door, ou Container Apps Auth) — não no app code. O token Bearer ainda
-> é exigido na rota `/mcp` (transport layer), mas as 4 tools (`get_ticket`,
-> `list_tickets`, `add_comment`, `update_status`) não verificam scopes no
-> claim `roles`/`scp` do JWT. Para o lab, isso é suficiente: o foco é
-> demonstrar integração MCP + Agent + RAG + Speech + Service Bus + n8n.
-
 ## Passo 4.10 — Atualizar Function App `func-agent-runner` com URL e token MCP
 
 ```powershell
