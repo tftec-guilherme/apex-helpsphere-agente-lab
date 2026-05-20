@@ -67,26 +67,39 @@ class HelpSphereDB:
             attrs_before={_SQL_COPT_SS_ACCESS_TOKEN: token_struct},
         )
 
+    # -------------------------------------------------------------------------
+    # Multi-tenant nota: o schema apex-helpsphere SaaS é multi-tenant
+    # (tbl_tickets.tenant_id FK -> tbl_tenants). Este MCP server é uma DEMO
+    # simples para o Lab Final — não há resolução de tenant via JWT/claims.
+    # As queries abaixo NÃO filtram por tenant_id por simplicidade pedagógica.
+    # Em produção, todas as queries deveriam receber tenant_id como parâmetro
+    # e adicionar WHERE tenant_id = ? para isolamento de dados.
+    # -------------------------------------------------------------------------
+
     def get_ticket(self, ticket_id: int) -> dict:
         """Retorna ticket por ID com colunas básicas."""
         with self._conn() as cnx:
             cur = cnx.cursor()
             cur.execute(
-                "SELECT id, title, status, category, priority, description, created_at "
-                "FROM tickets WHERE id = ?",
+                "SELECT ticket_id, subject, status, category, priority, description, "
+                "language, confidence_score, created_at, updated_at "
+                "FROM tbl_tickets WHERE ticket_id = ?",
                 ticket_id,
             )
             row = cur.fetchone()
             if not row:
                 return {"error": "not_found", "ticket_id": ticket_id}
             return {
-                "id": row[0],
-                "title": row[1],
+                "ticket_id": row[0],
+                "subject": row[1],
                 "status": row[2],
                 "category": row[3],
                 "priority": row[4],
                 "description": row[5],
-                "created_at": str(row[6]),
+                "language": row[6],
+                "confidence_score": float(row[7]) if row[7] is not None else None,
+                "created_at": str(row[8]),
+                "updated_at": str(row[9]),
             }
 
     def list_tickets(
@@ -97,8 +110,8 @@ class HelpSphereDB:
     ) -> list[dict]:
         """Lista tickets filtrando por status (e opcionalmente categoria)."""
         query = (
-            "SELECT TOP (?) id, title, status, category, priority, created_at "
-            "FROM tickets WHERE status = ?"
+            "SELECT TOP (?) ticket_id, subject, status, category, priority, created_at "
+            "FROM tbl_tickets WHERE status = ?"
         )
         params: list = [limit, status]
         if category:
@@ -110,8 +123,8 @@ class HelpSphereDB:
             cur.execute(query, *params)
             return [
                 {
-                    "id": r[0],
-                    "title": r[1],
+                    "ticket_id": r[0],
+                    "subject": r[1],
                     "status": r[2],
                     "category": r[3],
                     "priority": r[4],
@@ -125,7 +138,7 @@ class HelpSphereDB:
         with self._conn() as cnx:
             cur = cnx.cursor()
             cur.execute(
-                "INSERT INTO comments (ticket_id, author, content, created_at) "
+                "INSERT INTO tbl_comments (ticket_id, author, content, created_at) "
                 "VALUES (?, ?, ?, SYSUTCDATETIME())",
                 ticket_id, author, comment,
             )
@@ -134,15 +147,19 @@ class HelpSphereDB:
             return {"ok": True, "ticket_id": ticket_id}
 
     def update_status(self, ticket_id: int, new_status: str) -> dict:
-        """Atualiza status. Status válidos: Open, InProgress, Resolved, Escalated."""
+        """Atualiza status. Status válidos: Open, InProgress, Resolved, Escalated.
+
+        Nota: updated_at é mantido automaticamente pelo trigger
+        dbo.trg_tickets_set_updated_at (AFTER UPDATE em tbl_tickets), portanto
+        não precisa ser setado explicitamente aqui.
+        """
         valid = {"Open", "InProgress", "Resolved", "Escalated"}
         if new_status not in valid:
             return {"error": f"invalid_status: {new_status}", "valid": list(valid)}
         with self._conn() as cnx:
             cur = cnx.cursor()
             cur.execute(
-                "UPDATE tickets SET status = ?, updated_at = SYSUTCDATETIME() "
-                "WHERE id = ?",
+                "UPDATE tbl_tickets SET status = ? WHERE ticket_id = ?",
                 new_status, ticket_id,
             )
             cnx.commit()
