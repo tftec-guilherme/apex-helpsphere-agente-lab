@@ -30,8 +30,11 @@ from helpsphere_db import HelpSphereDB
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("mcp-helpsphere")
 
-# stateless_http=True: lab usa ACA com `min-replicas=0` (scale-to-zero), e session in-memory do FastMCP morre entre requests, causando "Session not found".
-mcp = FastMCP("helpsphere", stateless_http=True)
+# Stateless HTTP via env var FASTMCP_STATELESS_HTTP=true (setada no Container App).
+# Necessário porque ACA usa min-replicas=0 (scale-to-zero) e session in-memory do
+# FastMCP morre entre requests. FastMCP atual (v2+) removeu o kwarg stateless_http
+# do construtor — agora vive em env var OU em run_http_async()/http_app().
+mcp = FastMCP("helpsphere")
 db = HelpSphereDB(os.environ["HELPSPHERE_SQL_CONNECTION"])
 
 
