@@ -1102,6 +1102,8 @@ Invoke-RestMethod -Method Post -Uri "https://$McpUrl/mcp" `
 
 > **Atenção — header `Accept` obrigatório:** o MCP **Streamable HTTP transport** (FastMCP) exige `Accept: application/json, text/event-stream` em todo request. Sem isso o servidor retorna **`406 Not Acceptable`** com `{"error":{"code":-32600,"message":"Client must accept both application/json and text/event-stream"}}`. O protocolo permite ao server escolher entre devolver JSON imediato (tool simples) ou stream SSE (tool longa) — daí o duplo Accept.
 
+> **Nota pedagógica — modo stateless (`stateless_http=True`):** o `server.py` cria o FastMCP com `stateless_http=True`. Isso significa **1 request = 1 response**, sem session ID, sem `initialize` handshake prévio, sem `notifications/initialized`. O cliente chama `tools/list` ou `tools/call` direto e pronto. Por que? O Container App roda com `min-replicas=0` (scale-to-zero p/ economizar), e a session in-memory do FastMCP morre quando o replica é desligado — daí o erro `Session not found` em smoke tests intermitentes. **Em produção real**, o Foundry SDK (Parte 6) cuida do session management automaticamente quando aplicável; o lab usa stateless por simplicidade e robustez no cold-start. **Trade-off:** stateless inviabiliza tools long-running com progresso incremental ou *sampling* (server pedindo LLM no client) — para o lab, OK.
+
 > **Linux/Mac/WSL:** troque o bloco PowerShell por bash + curl + heredoc:
 > ```bash
 > curl -X POST "https://${MCP_URL}/mcp" \

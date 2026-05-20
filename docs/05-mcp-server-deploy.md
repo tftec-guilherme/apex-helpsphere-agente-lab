@@ -658,6 +658,8 @@ $Response = curl.exe -sS -X POST "$McpServerUrl/mcp" `
 
 > **Atenção — header `Accept` obrigatório:** MCP **Streamable HTTP transport** (FastMCP) exige `Accept: application/json, text/event-stream` em todo request. Sem isso o server devolve **`406 Not Acceptable`** com mensagem `Client must accept both application/json and text/event-stream`. O duplo Accept permite ao server escolher entre JSON imediato (tool simples) ou stream SSE (tool longa).
 
+> **Nota pedagógica — modo stateless (`stateless_http=True`):** o `server.py` instancia `FastMCP("helpsphere", stateless_http=True)`. Isso significa **1 request = 1 response**, sem session ID, sem `initialize` handshake, sem `notifications/initialized` — o smoke `tools/list` é uma única chamada HTTP POST e pronto. Por que? Container Apps com `min-replicas=0` (scale-to-zero) desligam o container entre requests; a session in-memory do FastMCP some junto, causando `Session not found` na próxima chamada. Stateless é robusto ao cold-start. **Trade-off:** sem progresso incremental em tools longas e sem *sampling* (server pedindo LLM no client) — para o lab, OK.
+
 > **Nota:** `jq` requer instalação no Windows. Instale via `winget install jqlang.jq` ou use o fallback PowerShell nativo `ConvertFrom-Json` (aplicado acima).
 
 Saída esperada:

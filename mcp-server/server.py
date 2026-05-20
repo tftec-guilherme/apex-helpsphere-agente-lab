@@ -30,7 +30,8 @@ from helpsphere_db import HelpSphereDB
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("mcp-helpsphere")
 
-mcp = FastMCP("helpsphere")
+# stateless_http=True: lab usa ACA com `min-replicas=0` (scale-to-zero), e session in-memory do FastMCP morre entre requests, causando "Session not found".
+mcp = FastMCP("helpsphere", stateless_http=True)
 db = HelpSphereDB(os.environ["HELPSPHERE_SQL_CONNECTION"])
 
 
