@@ -1083,6 +1083,12 @@ Write-Host "Token: $Token"
 ## Passo 4.9 — Testar MCP Server
 
 ```powershell
+$Headers = @{
+  Authorization  = "Bearer $Token"
+  'Content-Type' = 'application/json'
+  Accept         = 'application/json, text/event-stream'
+}
+
 $ListBody = @{
   jsonrpc = '2.0'
   method  = 'tools/list'
@@ -1090,21 +1096,24 @@ $ListBody = @{
 } | ConvertTo-Json
 
 Invoke-RestMethod -Method Post -Uri "https://$McpUrl/mcp" `
-  -Headers @{ Authorization = "Bearer $Token"; 'Content-Type' = 'application/json' } `
+  -Headers $Headers `
   -Body $ListBody
 ```
+
+> **Atenção — header `Accept` obrigatório:** o MCP **Streamable HTTP transport** (FastMCP) exige `Accept: application/json, text/event-stream` em todo request. Sem isso o servidor retorna **`406 Not Acceptable`** com `{"error":{"code":-32600,"message":"Client must accept both application/json and text/event-stream"}}`. O protocolo permite ao server escolher entre devolver JSON imediato (tool simples) ou stream SSE (tool longa) — daí o duplo Accept.
 
 > **Linux/Mac/WSL:** troque o bloco PowerShell por bash + curl + heredoc:
 > ```bash
 > curl -X POST "https://${MCP_URL}/mcp" \
 >   -H "Authorization: Bearer ${TOKEN}" \
 >   -H "Content-Type: application/json" \
+>   -H "Accept: application/json, text/event-stream" \
 >   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 > ```
 
 Saída esperada: lista das 4 tools (`get_ticket`, `list_tickets`, `add_comment`, `update_status`).
 
-Testar uma tool:
+Testar uma tool (reaproveita `$Headers` do bloco anterior):
 ```powershell
 $CallBody = @{
   jsonrpc = '2.0'
@@ -1117,11 +1126,11 @@ $CallBody = @{
 } | ConvertTo-Json -Depth 5
 
 Invoke-RestMethod -Method Post -Uri "https://$McpUrl/mcp" `
-  -Headers @{ Authorization = "Bearer $Token"; 'Content-Type' = 'application/json' } `
+  -Headers $Headers `
   -Body $CallBody
 ```
 
-> **Linux/Mac/WSL:** equivalente bash com curl + payload JSON inline (igual ao bloco anterior, mudando `method` para `tools/call` e adicionando `params`).
+> **Linux/Mac/WSL:** equivalente bash com curl + payload JSON inline (igual ao bloco anterior, mudando `method` para `tools/call` e adicionando `params` — manter o header `Accept: application/json, text/event-stream`).
 
 Deve retornar dados do ticket 1 (do seed do HelpSphere).
 

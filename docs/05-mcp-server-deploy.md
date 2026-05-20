@@ -646,6 +646,7 @@ $Body = @{
 $Response = curl.exe -sS -X POST "$McpServerUrl/mcp" `
   -H "Authorization: Bearer $Token" `
   -H "Content-Type: application/json" `
+  -H "Accept: application/json, text/event-stream" `
   -d $Body
 
 # Parse via PowerShell nativo (sem dependência de jq):
@@ -654,6 +655,8 @@ $Response = curl.exe -sS -X POST "$McpServerUrl/mcp" `
 # Alternativa com jq (se instalado via `winget install jqlang.jq`):
 # $Response | jq '.result.tools[].name'
 ```
+
+> **Atenção — header `Accept` obrigatório:** MCP **Streamable HTTP transport** (FastMCP) exige `Accept: application/json, text/event-stream` em todo request. Sem isso o server devolve **`406 Not Acceptable`** com mensagem `Client must accept both application/json and text/event-stream`. O duplo Accept permite ao server escolher entre JSON imediato (tool simples) ou stream SSE (tool longa).
 
 > **Nota:** `jq` requer instalação no Windows. Instale via `winget install jqlang.jq` ou use o fallback PowerShell nativo `ConvertFrom-Json` (aplicado acima).
 
@@ -682,6 +685,7 @@ $CallBody = @{
 $CallResponse = curl.exe -sS -X POST "$McpServerUrl/mcp" `
   -H "Authorization: Bearer $Token" `
   -H "Content-Type: application/json" `
+  -H "Accept: application/json, text/event-stream" `
   -d $CallBody
 
 ($CallResponse | ConvertFrom-Json).result
@@ -705,6 +709,7 @@ Saída esperada (depende do seed do HelpSphere SQL):
 ```powershell
 $HttpCode = curl.exe -sS -w "%{http_code}" -o $null -X POST "$McpServerUrl/mcp" `
   -H "Content-Type: application/json" `
+  -H "Accept: application/json, text/event-stream" `
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 Write-Host $HttpCode
 # Esperado: 401
@@ -782,13 +787,15 @@ az containerapp show --name ca-mcp-helpsphere --resource-group rg-lab-final `
 
 # 3. Health do MCP via curl (sem auth — espera 401, confirma que auth ativa)
 curl.exe -sS -w "%{http_code}" -o $null "https://$MCP_FQDN/mcp" `
-  -X POST -H "Content-Type: application/json" -d '{}'
+  -X POST -H "Content-Type: application/json" `
+  -H "Accept: application/json, text/event-stream" -d '{}'
 # Esperado: 401
 
 # 4. tools/list autenticado
 $ValidationResp = curl.exe -sS -X POST "https://$MCP_FQDN/mcp" `
   -H "Authorization: Bearer $Token" `
   -H "Content-Type: application/json" `
+  -H "Accept: application/json, text/event-stream" `
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 ($ValidationResp | ConvertFrom-Json).result.tools.Count
 # Esperado: 4
