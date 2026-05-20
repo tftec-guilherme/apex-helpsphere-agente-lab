@@ -1066,6 +1066,32 @@ az role assignment create `
 
 ## Passo 4.8 — Obter token de teste
 
+**Antes de testar: ajustar env var stateless no Container App**
+
+O `server.py` que subimos foi atualizado pós-Cap 04 e agora opera em **modo stateless** — ajuste necessário para o smoke funcionar com nosso setup atual (`ca-mcp-helpsphere` com `min-replicas=0`). FastMCP é stateful por default, mantendo a session em memória; quando o ACA desliga o replica (scale-to-zero), a session morre e o próximo request vira `Session not found`. A env var `FASTMCP_STATELESS_HTTP=true` força 1 request = 1 response (sem session), que combina com o cold-start.
+
+**Portal:**
+
+1. Portal → **`ca-mcp-helpsphere`** → menu lateral **Containers** → **Edit and deploy**
+2. Selecione o container na lista → aba **Environment variables**
+3. Clique **+ Add** → preencha:
+   - **Name:** `FASTMCP_STATELESS_HTTP`
+   - **Source:** `Manual entry`
+   - **Value:** `true`
+4. **Save** (cria nova revisão automaticamente)
+5. Aguardar **~30s** até a nova revisão ficar **Healthy** (menu **Revisions and replicas** → status verde) antes de seguir
+
+> **Linux/Mac/WSL (bash) — alternativa via Azure CLI:**
+> ```bash
+> az containerapp update \
+>   --name ca-mcp-helpsphere \
+>   --resource-group rg-lab-final \
+>   --set-env-vars FASTMCP_STATELESS_HTTP=true
+> ```
+> Aguardar nova revisão Healthy: `az containerapp revision list --name ca-mcp-helpsphere --resource-group rg-lab-final --query "[?properties.active].{name:name, healthy:properties.healthState}" -o table`.
+
+Com a nova revisão Healthy, prosseguir com a captura do token:
+
 ```powershell
 $TenantId = "<seu-tenant-id>"
 
