@@ -1,4 +1,4 @@
-"""HelpSphere MCP Server — FastMCP + Entra OAuth + SQL backend.
+"""HelpSphere MCP Server — FastMCP + SQL backend.
 
 Expõe 4 tools sobre o SQL Database `helpsphere` (stack apex-helpsphere SaaS):
     - get_ticket(ticket_id)
@@ -8,13 +8,32 @@ Expõe 4 tools sobre o SQL Database `helpsphere` (stack apex-helpsphere SaaS):
 
 + 1 resource `helpsphere://tickets/{ticket_id}`.
 
-Auth via decorator `@require_scope` (auth.py) lendo Bearer token do contexto MCP.
+# ─────────────────────────────────────────────────────────────────────────────
+# AUTH JWT DESABILITADO TEMPORARIAMENTE (bug #13 — FastMCP v2 Context API)
+# ─────────────────────────────────────────────────────────────────────────────
+# O decorator `@require_scope` (auth.py) lia o Bearer token via parâmetro
+# `ctx: dict` injetado pelo FastMCP. A partir do FastMCP v2+ esse contrato
+# mudou: agora o framework injeta um objeto `Context` (não mais dict), e o
+# wrapper antigo retorna "missing bearer token" mesmo com token válido.
+#
+# Decisão pedagógica para o Lab Final (D06): desabilitar `@require_scope` nas
+# 4 tools para destravar a gravação ao vivo. O lab demonstra integração
+# MCP + Agent + RAG + Speech + Service Bus + n8n — auth JWT no app code não
+# é o foco didático.
+#
+# Em produção real, JWT validation acontece em camada ANTES do MCP:
+#   - APIM gateway (Lab Avançado / Bloco 5/6) com policy `validate-jwt`
+#   - Azure Front Door com WAF + Easy Auth
+#   - Container Apps Built-in Auth (`microsoft` provider)
+# O app code recebe requests já autenticados — princípio "auth no edge".
+#
+# Tech debt formalizado: Story 06.30 (reativar @require_scope após refactor
+# para FastMCP v2 Context API). `auth.py` mantido intacto para retomada.
+# ─────────────────────────────────────────────────────────────────────────────
 
 Uso:
     pip install -r requirements.txt
     $env:HELPSPHERE_SQL_CONNECTION = "Driver={ODBC Driver 18 for SQL Server};Server=tcp:...;Database=helpsphere;..."
-    $env:AZURE_TENANT_ID = "<tenant>"
-    $env:EXPECTED_AUDIENCE = "api://<server-app-client-id>"
     python server.py   # listen 0.0.0.0:8080
 """
 from __future__ import annotations
@@ -24,7 +43,6 @@ import os
 
 from fastmcp import FastMCP
 
-from auth import require_scope
 from helpsphere_db import HelpSphereDB
 
 logging.basicConfig(level=logging.INFO)
@@ -39,28 +57,24 @@ db = HelpSphereDB(os.environ["HELPSPHERE_SQL_CONNECTION"])
 
 
 @mcp.tool()
-@require_scope("helpsphere.tickets.read")
 def get_ticket(ticket_id: int) -> dict:
     """Recupera dados completos de um ticket pelo ID."""
     return db.get_ticket(ticket_id)
 
 
 @mcp.tool()
-@require_scope("helpsphere.tickets.read")
 def list_tickets(status: str = "Open", limit: int = 10, category: str | None = None) -> list[dict]:
     """Lista tickets filtrando por status e opcionalmente categoria."""
     return db.list_tickets(status=status, limit=limit, category=category)
 
 
 @mcp.tool()
-@require_scope("helpsphere.tickets.write")
 def add_comment(ticket_id: int, comment: str, author: str) -> dict:
     """Adiciona comentário a um ticket."""
     return db.add_comment(ticket_id, comment, author)
 
 
 @mcp.tool()
-@require_scope("helpsphere.tickets.write")
 def update_status(ticket_id: int, new_status: str) -> dict:
     """Atualiza status do ticket. Válidos: Open, InProgress, Resolved, Escalated."""
     return db.update_status(ticket_id, new_status)

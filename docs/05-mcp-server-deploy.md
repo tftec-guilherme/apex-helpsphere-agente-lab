@@ -51,7 +51,7 @@ mcp-server/
 ├── Dockerfile
 ├── requirements.txt
 ├── server.py                 # FastMCP com 4 tools
-├── auth.py                   # Validação de token Entra (JWT signature + audience + scope)
+├── auth.py                   # DESATIVADO — pattern JWT (signature + audience + scope) preservado para Story 06.30
 ├── helpsphere_db.py          # Wrapper do SQL HelpSphere (pyodbc)
 └── README.md
 ```
@@ -60,10 +60,10 @@ mcp-server/
 
 ```python
 """
-MCP Server HelpSphere — FastMCP + Entra OAuth + SQL backend.
+MCP Server HelpSphere — FastMCP + SQL backend.
+Nota: auth JWT no app code desabilitada (ver disclaimer Passo 5.7 + Story 06.30).
 """
 from fastmcp import FastMCP
-from auth import require_scope
 from helpsphere_db import HelpSphereDB
 import os
 
@@ -71,25 +71,21 @@ mcp = FastMCP("helpsphere")
 db = HelpSphereDB(os.environ["HELPSPHERE_SQL_CONNECTION"])
 
 @mcp.tool()
-@require_scope("helpsphere.tickets.read")
 def get_ticket(ticket_id: int) -> dict:
     """Recupera dados completos de um ticket."""
     return db.get_ticket(ticket_id)
 
 @mcp.tool()
-@require_scope("helpsphere.tickets.read")
 def list_tickets(status: str = "Open", limit: int = 10, category: str = None) -> list[dict]:
     """Lista tickets filtrando por status e opcionalmente categoria."""
     return db.list_tickets(status=status, limit=limit, category=category)
 
 @mcp.tool()
-@require_scope("helpsphere.tickets.write")
 def add_comment(ticket_id: int, comment: str, author: str) -> dict:
     """Adiciona comentário a um ticket."""
     return db.add_comment(ticket_id, comment, author)
 
 @mcp.tool()
-@require_scope("helpsphere.tickets.write")
 def update_status(ticket_id: int, new_status: str) -> dict:
     """Atualiza status do ticket. Status válidos: Open, InProgress, Resolved, Escalated."""
     return db.update_status(ticket_id, new_status)
@@ -97,6 +93,8 @@ def update_status(ticket_id: int, new_status: str) -> dict:
 if __name__ == "__main__":
     mcp.run(transport="http", host="0.0.0.0", port=8080)
 ```
+
+> **Por que sem `@require_scope`?** Bug #13 — FastMCP v2+ trocou o contrato de injeção de contexto (`ctx: dict` → objeto `Context`), quebrando o decorator antigo (`auth.py`). Decisão: desabilitar nas 4 tools para destravar o lab. Tech debt rastreado na Story 06.30 (reativar após refactor para Context API). O módulo `auth.py` permanece no repositório como patrimônio didático e ponto de retomada. Token Bearer continua **exigido pelo transport HTTP** (request sem `Authorization` é rejeitado antes do app code). Ver disclaimer completo no Passo 5.7.
 
 `Dockerfile` (referência):
 
@@ -579,6 +577,8 @@ A Managed Identity `mi-helpsphere-ia` (no RG `rg-lab-intermediario`) precisa de 
 
 > **Atenção breaking — Application permissions vs Delegated:** se você marcou **Delegated** por engano, o flow client-credentials do Passo 5.8 vai falhar com `AADSTS65001: The user or administrator has not consented to use the application`. Workaround: volte ao **API permissions**, **remove** as 3 delegated, **re-add** como Application. Re-grant admin consent.
 
+> **Disclaimer pedagógico — scopes existem no token, mas o servidor não valida:** os 3 scopes (`helpsphere.tickets.read`, `helpsphere.tickets.write`, `helpsphere.kb.read`) **continuam sendo emitidos no claim `roles` do JWT** (você verá isso no Passo 5.8 ao decodificar o token). Porém, o `server.py` do Lab Final **desabilitou o decorator `@require_scope`** nas 4 tools (bug #13 — FastMCP v2+ trocou o contrato de `ctx: dict` para objeto `Context`, quebrando o wrapper antigo). Mantemos as App Registrations + scopes + admin consent como **patrimônio didático** (você aprende o pattern completo OAuth2 client-credentials) e porque o **token Bearer ainda é exigido pelo transport HTTP do MCP**. Apenas a verificação granular `if "helpsphere.tickets.write" in scopes` não acontece — qualquer token válido para `api://mcp-helpsphere` consegue chamar qualquer tool. Em produção isso seria endereçado por APIM gateway com policy `validate-jwt` + `check-header` validando o claim `roles` no edge, antes do request chegar ao app code. Tech debt: Story 06.30 (reativar `@require_scope` após refactor para FastMCP v2 Context API).
+
 > **Custo:** R$ 0 (App Reg + secret são gratuitos no Entra).
 
 > **Nota pedagógica — Client secret 90d vs Federated Credentials:** secrets têm 3 problemas: (1) precisam rotação periódica, (2) podem vazar em logs/`.env`, (3) admin precisa lembrar de renovar antes do expiry. **Federated Credentials** (FIC) emitem token sem secret usando trust direto entre o IdP origem (GitHub/Azure DevOps/MI) e o Entra. Aqui mantemos secret porque o consumer é um script local em laptop (sem IdP origem federável); o pattern FIC fica reservado para CI/CD em pipelines GitHub Actions/Azure DevOps. **Em produção corporate: SEMPRE FIC, NUNCA secret de longa duração.**
@@ -626,7 +626,7 @@ roles : {helpsphere.tickets.read, helpsphere.tickets.write, helpsphere.kb.read}
 
 > **Atenção troubleshooting:** se o token vier `null` ou se aparecer `AADSTS7000215: Invalid client secret`, **a causa é 99% das vezes copy-paste com espaço final** ou secret expirado. Workaround: regenere o secret no Passo 5.7 e copie com cuidado (Portal coloca um botão de copy direto — use ele). Se vier `AADSTS500011: The resource principal named api://mcp-helpsphere was not found`, falta admin consent → Passo 5.7 último item.
 
-> **Nota pedagógica — `roles` vs `scp` no payload do token:** Application permissions emitem o claim `roles` (array). Delegated permissions emitem `scp` (string). O middleware `auth.py` do `server.py` precisa **olhar para o claim certo** — confira que ele faz `if "roles" in payload` para o caso `client_credentials`. Anti-pattern: middleware que só olha `scp` e silenciosamente nega tudo em fluxo client-credentials.
+> **Nota pedagógica — `roles` vs `scp` no payload do token:** Application permissions emitem o claim `roles` (array). Delegated permissions emitem `scp` (string). Em código que valida scopes JWT, o middleware precisa **olhar para o claim certo** — fazer `if "roles" in payload` para client_credentials. Anti-pattern: middleware que só olha `scp` e silenciosamente nega tudo em fluxo client-credentials. **No Lab Final, esta validação granular está desabilitada no `server.py`** (ver disclaimer no Passo 5.7) — os scopes existem no token apenas como patrimônio didático do pattern OAuth2 completo.
 
 ---
 

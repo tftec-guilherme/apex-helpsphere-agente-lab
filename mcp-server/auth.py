@@ -1,4 +1,22 @@
-"""Validação de tokens Entra ID + decorator `@require_scope` para tools MCP."""
+"""Validação de tokens Entra ID + decorator `@require_scope` para tools MCP.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MÓDULO DESATIVADO — ver server.py + Story 06.30
+# ─────────────────────────────────────────────────────────────────────────────
+# Este módulo NÃO está em uso no Lab Final (D06). O `server.py` removeu o
+# `from auth import require_scope` e o decorator `@require_scope("...")` das 4
+# tools porque o contrato do FastMCP v2+ mudou (Context object em vez de dict
+# `ctx`), provocando bug #13 ("missing bearer token" mesmo com token válido).
+#
+# Mantido no repositório para:
+#   1. Story 06.30 (reativar após refactor para FastMCP v2 Context API)
+#   2. Referência didática do pattern JWT validation (JWKS + audience + scope)
+#   3. Lab Avançado (Bloco 5/6) pode reusar `validate_token` em handlers próprios
+#
+# NÃO importar este módulo em código ativo enquanto Story 06.30 não for
+# concluída — o decorator vai falhar silenciosamente com a nova API.
+# ─────────────────────────────────────────────────────────────────────────────
+"""
 from __future__ import annotations
 
 import functools
