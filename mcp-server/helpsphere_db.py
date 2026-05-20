@@ -2,14 +2,43 @@
 
 Lê `HELPSPHERE_SQL_CONNECTION` do env (ODBC connection string apontando para
 o SQL Database `helpsphere` do stack apex-helpsphere SaaS).
+
+Autenticação Azure SQL via Managed Identity
+-------------------------------------------
+Connection string **NÃO usa mais** `Authentication=ActiveDirectoryMsi` nem
+`UID=`. Em vez disso, o token AAD é obtido via `azure-identity`
+(`ManagedIdentityCredential`) e injetado no pyodbc via `attrs_before` usando
+o atributo `SQL_COPT_SS_ACCESS_TOKEN` (1256).
+
+**Por quê:** o ODBC Driver 18 com `Authentication=ActiveDirectoryMsi` chama
+o endpoint IMDS de VM (`169.254.169.254`) hardcoded — esse endpoint **não
+existe em Azure Container Apps**, que expõe MI via `IDENTITY_ENDPOINT` /
+`IDENTITY_HEADER`. `ActiveDirectoryDefault` também não é aceito pelo driver
+("Invalid value"). Este é o **pattern oficial Microsoft** para Container
+Apps + Azure SQL + Managed Identity.
+
+**Env var `AZURE_CLIENT_ID`** (opcional): só necessária quando o Container
+App tem System-assigned + User-assigned MI simultaneamente, ou múltiplas
+User-assigned MIs. Especifica qual MI usar para obter o token. Quando ausente,
+o `ManagedIdentityCredential` usa a única identity disponível.
+
+Connection string esperada (sem `Authentication=` nem `UID=`):
+    Driver={ODBC Driver 18 for SQL Server};Server=tcp:<srv>.database.windows.net,1433;Database=helpsphere;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;
 """
 from __future__ import annotations
 
 import logging
+import os
+import struct
 
 import pyodbc
+from azure.identity import ManagedIdentityCredential
 
 log = logging.getLogger("helpsphere-db")
+
+# Atributo pyodbc para injetar access token AAD (SQL_COPT_SS_ACCESS_TOKEN)
+_SQL_COPT_SS_ACCESS_TOKEN = 1256
+_AZURE_SQL_SCOPE = "https://database.windows.net/.default"
 
 
 class HelpSphereDB:
@@ -17,9 +46,26 @@ class HelpSphereDB:
 
     def __init__(self, connection_string: str):
         self.connection_string = connection_string
+        # Cache do credential — evita recriar a cada conexão. O próprio
+        # ManagedIdentityCredential cacheia tokens internamente e renova
+        # automaticamente quando próximos do vencimento.
+        client_id = os.environ.get("AZURE_CLIENT_ID")
+        if client_id:
+            self._credential = ManagedIdentityCredential(client_id=client_id)
+        else:
+            self._credential = ManagedIdentityCredential()
 
     def _conn(self):
-        return pyodbc.connect(self.connection_string)
+        """Abre conexão pyodbc autenticada via access token AAD (MI)."""
+        token = self._credential.get_token(_AZURE_SQL_SCOPE).token
+        # Token precisa ser UTF-16-LE com prefix de length (formato exigido
+        # pelo driver ODBC para SQL_COPT_SS_ACCESS_TOKEN).
+        token_bytes = token.encode("utf-16-le")
+        token_struct = struct.pack(f"<I{len(token_bytes)}s", len(token_bytes), token_bytes)
+        return pyodbc.connect(
+            self.connection_string,
+            attrs_before={_SQL_COPT_SS_ACCESS_TOKEN: token_struct},
+        )
 
     def get_ticket(self, ticket_id: int) -> dict:
         """Retorna ticket por ID com colunas básicas."""
