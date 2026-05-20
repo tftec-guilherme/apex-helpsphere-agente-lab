@@ -1358,30 +1358,81 @@ Reproduza o `greeting.mp3` — você deve ouvir a frase.
 
 ## Passo 5.5 — Integração com Copilot Studio (canal voz)
 
-Em produção, integraria com Azure Communication Services para receber chamadas. Para o lab demonstramos via API direta.
+Em produção, integraria com Azure Communication Services para receber chamadas. Para o lab demonstramos via API direta — o Copilot Studio chamará a Function no Passo 8.2 (Ticket 4 — caso de voz).
 
-Crie endpoint na Function `func-agent-runner` que aceita áudio:
+**Você vai executar 5 ações em sequência:**
 
-`function_app.py` (adicionar):
+### Ação 1 — Configurar `SPEECH_KEY` e `SPEECH_REGION` como App Settings da Function
+
+```powershell
+# 🔑 Capture as variáveis Speech + Function (sessão nova? rode este bloco)
+$env:SPEECH_REGION = az cognitiveservices account show -n spch-helpsphere -g rg-lab-final --query location -o tsv
+$env:SPEECH_KEY    = az cognitiveservices account keys list -n spch-helpsphere -g rg-lab-final --query key1 -o tsv
+$FuncAgentName     = az functionapp list -g rg-lab-final --query "[?starts_with(name, 'func-agent-runner')].name | [0]" -o tsv
+
+Write-Host "FuncAgentName: $FuncAgentName"
+Write-Host "SPEECH_REGION: $env:SPEECH_REGION"
+
+# Configurar App Settings da Function (a rota voice vai ler via os.environ)
+az functionapp config appsettings set `
+  --name $FuncAgentName `
+  --resource-group rg-lab-final `
+  --settings SPEECH_REGION="$env:SPEECH_REGION" SPEECH_KEY="$env:SPEECH_KEY"
+```
+
+> **Linux/Mac/WSL:**
+> ```bash
+> export SPEECH_REGION=$(az cognitiveservices account show -n spch-helpsphere -g rg-lab-final --query location -o tsv)
+> export SPEECH_KEY=$(az cognitiveservices account keys list -n spch-helpsphere -g rg-lab-final --query key1 -o tsv)
+> FUNC_AGENT_NAME=$(az functionapp list -g rg-lab-final --query "[?starts_with(name, 'func-agent-runner')].name | [0]" -o tsv)
+> az functionapp config appsettings set --name $FUNC_AGENT_NAME -g rg-lab-final --settings SPEECH_REGION="$SPEECH_REGION" SPEECH_KEY="$SPEECH_KEY"
+> ```
+
+### Ação 2 — Abrir `agent-code/func-agent-runner/function_app.py` no editor
+
+Abra o arquivo no Cursor / VS Code / editor de sua preferência. Você vai fazer duas edições (Ações 3 e 4) no mesmo arquivo.
+
+### Ação 3 — Adicionar `import os` e `import requests` no topo do arquivo
+
+No topo de `function_app.py`, após `import json`, adicione as 2 linhas marcadas (`os` é stdlib, `requests` já está no `requirements.txt`):
+
+```python
+import json
+import os                  # ← adicionar
+import requests            # ← adicionar
+import azure.functions as func
+```
+
+Salve o arquivo.
+
+### Ação 4 — Adicionar a rota `/api/agent/voice` ao final do arquivo
+
+Adicione o bloco abaixo **ao final** de `function_app.py` (depois da rota `chat()` existente):
+
 ```python
 @app.route(route="agent/voice", methods=["POST"])
 def voice(req: func.HttpRequest) -> func.HttpResponse:
     """Recebe áudio WAV → STT → agent → TTS → áudio MP3."""
+    from agent_runner import client, run_agent
+
     audio_bytes = req.get_body()
 
-    # STT
+    # 1) STT — transcrever WAV para texto pt-BR
     stt_response = requests.post(
         f"https://{os.environ['SPEECH_REGION']}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=pt-BR",
-        headers={"Ocp-Apim-Subscription-Key": os.environ["SPEECH_KEY"], "Content-Type": "audio/wav"},
+        headers={
+            "Ocp-Apim-Subscription-Key": os.environ["SPEECH_KEY"],
+            "Content-Type": "audio/wav",
+        },
         data=audio_bytes,
     )
     transcription = stt_response.json().get("DisplayText", "")
 
-    # Agent
-    thread = client.agents.create_thread()
+    # 2) Agent — pega resposta do agent runner
+    thread = client.threads.create()
     response_text = run_agent(thread.id, transcription)
 
-    # TTS
+    # 3) TTS — sintetizar resposta como MP3 pt-BR
     ssml = f"""<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="pt-BR">
         <voice name="pt-BR-FranciscaNeural">{response_text}</voice>
     </speak>"""
@@ -1402,16 +1453,29 @@ def voice(req: func.HttpRequest) -> func.HttpResponse:
     )
 ```
 
-Re-deploy:
+Salve o arquivo.
+
+> **Por que `from agent_runner import client, run_agent` dentro da função?**
+> Mesma razão do lazy import na rota `chat()` (topo do arquivo): em **Flex Consumption** o indexing inicial roda em modo "placeholder" onde as App Settings ainda não estão expostas. Se `agent_runner` for importado no top-level, o host registra `0 functions found` silenciosamente. Mover `from agent_runner import ...` para dentro do handler garante que o indexing só lê os decorators `@app.route(...)`.
+
+> **Por que `client.threads.create()` (e não a API legada de threads via `client.agents`)?**
+> O projeto usa SDK v2 (`azure-ai-agents>=1.0.0` + `azure-ai-projects>=2.1.0`), onde `client.threads.create()` é a API correta. A forma antiga (`create_thread` em `client.agents`) era válida em `azure-ai-projects<1.0.0` (deprecated). Veja a rota `chat()` existente para o pattern.
+
+### Ação 5 — Re-deployar a Function
+
 ```powershell
-# 🔑 Capture as variáveis (sessão nova? rode este bloco)
-$FuncAgentName = az functionapp list -g rg-lab-final --query "[?starts_with(name, 'func-agent-runner')].name | [0]" -o tsv
-Write-Host "FuncAgentName: $FuncAgentName"
+# Re-usa $FuncAgentName capturado na Ação 1 (se mesma sessão).
+# Se sessão nova, recapture com:
+# $FuncAgentName = az functionapp list -g rg-lab-final --query "[?starts_with(name, 'func-agent-runner')].name | [0]" -o tsv
 
 func azure functionapp publish $FuncAgentName --python
 ```
 
 > **Linux/Mac/WSL:** troque `$FuncAgentName` por `$FUNC_AGENT_NAME`. Capture: `FUNC_AGENT_NAME=$(az functionapp list -g rg-lab-final --query "[?starts_with(name, 'func-agent-runner')].name | [0]" -o tsv)`.
+
+Output esperado: `Deployment completed successfully` ao final do publish.
+
+> **Validação:** este passo apenas implementa o endpoint. Você vai testá-lo end-to-end no **Passo 8.2 — Ticket 4 (caso de voz)** através do Copilot Studio, que será integrado com a Function no **Passo 8.1**. Por enquanto, basta confirmar que o deploy completou sem erros (`Deployment completed successfully` no output do PowerShell).
 
 ## ✅ Checkpoint Parte 5
 
