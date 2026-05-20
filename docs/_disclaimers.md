@@ -155,4 +155,4 @@
 
 - Foundry Agent Service exige sub Pay-As-You-Go (Free Trial USD 200 não cobre) — atualmente em `01-pre-requisitos.md` Surpresa #1 e `10-troubleshooting.md` 3.1 A1. Promover a AMB-5 se aparecer drift entre caps.
 - Workload profile `Consumption only` (não `Consumption + Dedicated`) — atualmente em `05-mcp-server-deploy.md` Surpresa (Passo 5.4) e `10-troubleshooting.md` 3.2 P5 / Top 10 #4. Promover a AMB-6 se decisão tipa permanente.
-- `n8nio/n8n:1.6` pinned (não `:latest`) — atualmente em `07-n8n-escalation.md` Surpresa #1 e `10-troubleshooting.md` 3.3 C7 / Top 10 #7. Promover a AMB-7 se versão bumpar.
+- `n8nio/n8n:1.69.2` pinned (não `:latest` — tag `1.6` curta nunca existiu no Docker Hub, retornava `MANIFEST_UNKNOWN`) — atualmente em `07-n8n-escalation.md` Surpresa #1 e `10-troubleshooting.md` 3.3 C7 / Top 10 #7. Promover a AMB-7 se versão bumpar.

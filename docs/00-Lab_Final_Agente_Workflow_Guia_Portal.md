@@ -1573,7 +1573,7 @@ Output esperado: `Deployment completed successfully` ao final do publish.
    - **Image source:** `Docker Hub or other registries`
    - **Image type:** `Public`
    - **Registry login server:** `docker.io`
-   - **Image and tag:** `n8nio/n8n:1.6` (NÃO use `:latest` — ver troubleshooting #4)
+   - **Image and tag:** `n8nio/n8n:1.69.2` (NÃO use `:latest` nem tag curta `:1.6` — ver troubleshooting #4)
    - **CPU and Memory:** `0.5 CPU / 1 Gi memory`
    - **Environment variables:**
      - `DB_TYPE` = `postgresdb`
@@ -1581,7 +1581,8 @@ Output esperado: `Deployment completed successfully` ao final do publish.
      - `DB_POSTGRESDB_DATABASE` = `n8n`
      - `DB_POSTGRESDB_USER` = `n8nadmin`
      - `DB_POSTGRESDB_PASSWORD` = `<PG_PASSWORD>`
-     - `DB_POSTGRESDB_SSL_CA` = (vazio)
+     - `DB_POSTGRESDB_SSL_ENABLED` = `true` (força TLS — exigido por Azure PG Flexible Server com `require_secure_transport=on`)
+     - `DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED` = `false` (aceita cert da CA Microsoft sem pinar root CA no container Alpine — lab-only; em prod, montar cert via secret + apontar `DB_POSTGRESDB_SSL_CA`)
      - `N8N_ENCRYPTION_KEY` = `<gerar string aleatória 32 chars base64>` (use `openssl rand -base64 32` localmente)
      - `N8N_HOST` = `0.0.0.0`
      - `N8N_PROTOCOL` = `https`
@@ -1618,7 +1619,7 @@ Output esperado: `Deployment completed successfully` ao final do publish.
 >   --name ca-n8n-helpsphere \
 >   --resource-group rg-lab-final \
 >   --environment cae-helpsphere-final \
->   --image n8nio/n8n:1.6 \
+>   --image n8nio/n8n:1.69.2 \
 >   --target-port 5678 \
 >   --ingress external \
 >   --env-vars \
@@ -1627,7 +1628,8 @@ Output esperado: `Deployment completed successfully` ao final do publish.
 >     DB_POSTGRESDB_DATABASE=n8n \
 >     DB_POSTGRESDB_USER=n8nadmin \
 >     DB_POSTGRESDB_PASSWORD="$PG_PASSWORD" \
->     DB_POSTGRESDB_SSL_CA="" \
+>     DB_POSTGRESDB_SSL_ENABLED=true \
+>     DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED=false \
 >     N8N_ENCRYPTION_KEY="$(openssl rand -base64 32)" \
 >     N8N_HOST="0.0.0.0" \
 >     N8N_PROTOCOL=https \
@@ -1877,7 +1879,7 @@ Em ~5s, no n8n você deve ver execução do workflow disparada (em **Executions*
 
 ## Troubleshooting
 
-7 erros comuns ao executar este Lab Final, com sintomas e fix rápido.
+8 erros comuns ao executar este Lab Final, com sintomas e fix rápido.
 
 ### 1. Copilot Studio knowledge não atualiza após upload
 
@@ -1901,16 +1903,46 @@ az containerapp logs show --name ca-mcp-helpsphere --resource-group rg-lab-final
 ```
 Causas comuns: container em CrashLoopBackoff (logs mostram exception), `--target-port` errado, ou ingress não configurado como `external`.
 
-### 4. n8n não importa escalation-servicebus-sheets.json
+### 4. n8n não pulla imagem (`MANIFEST_UNKNOWN`) OU não importa escalation-servicebus-sheets.json
 
-**Sintoma:** Ao fazer **Import from file** no n8n, erro "Invalid workflow format" ou nodes aparecem como `unknown`.
+**Sintomas (variam conforme a tag escolhida):**
+- Sintoma 1: Container App fica em `Provisioning` infinito ou crash loop com `manifest for n8nio/n8n:1.6 not found: manifest unknown` nos logs.
+- Sintoma 2: Container sobe, mas ao fazer **Import from file** no n8n, erro "Invalid workflow format" ou nodes aparecem como `unknown`.
 
-**Fix:** Versão n8n incompatível. Use `n8nio/n8n:1.6` (não `:latest`) na imagem do ACA — escalation-servicebus-sheets.json foi exportado nessa versão. Re-deploy:
+**Causa:** n8n publica no Docker Hub apenas tags `major.minor.patch` (ex.: `1.69.2`, `1.70.0`) — tags curtas estilo `1.6` **nunca existiram**. Usar `:latest` quebra com breaking changes silently.
+
+**Fix:** Pinar tag patch completa publicada. `escalation-servicebus-sheets.json` foi exportado de `n8nio/n8n:1.69.2`. Re-deploy:
 ```powershell
-az containerapp update --name ca-n8n-helpsphere --resource-group rg-lab-final --image n8nio/n8n:1.6
+az containerapp update --name ca-n8n-helpsphere --resource-group rg-lab-final --image n8nio/n8n:1.69.2
 ```
 
-### 5. Speech STT retorna texto vazio
+### 5. n8n não inicia com erro `self-signed certificate` ou `no pg_hba.conf entry / no encryption`
+
+**Sintomas (aparecem em série, conforme você corrige o anterior):**
+- Sintoma 1: `Error: self-signed certificate in certificate chain` no boot do container.
+- Sintoma 2 (após relaxar verificação de cert): `error: no pg_hba.conf entry for host "<ip>", user "n8nadmin", database "n8n", no encryption`.
+
+**Causa:** Azure Database for PostgreSQL Flexible Server tem `require_secure_transport=on` por padrão (exige TLS) e entrega cert assinado por CA Microsoft, que não está no truststore Alpine da imagem `n8nio/n8n`. O n8n precisa de **duas** envs para conectar com sucesso:
+
+| Env | Valor | Função |
+|-----|-------|--------|
+| `DB_POSTGRESDB_SSL_ENABLED` | `true` | Força driver `pg` a abrir conexão TLS (sem isso, manda plain TCP e Postgres recusa com "no encryption") |
+| `DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED` | `false` | Aceita cert Azure PG sem pinar root CA Microsoft (lab-only) |
+
+**Fix retroativo (caso já tenha deployado sem essas envs):**
+
+```bash
+az containerapp update \
+  --name ca-n8n-helpsphere \
+  --resource-group rg-lab-final \
+  --set-env-vars DB_POSTGRESDB_SSL_ENABLED=true DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED=false
+```
+
+Após restart (~30s), abra `https://<N8N_URL>/setup` — deve aparecer tela "Set up owner account".
+
+**Em produção real:** monte o root CA Microsoft via Container Apps Secrets, aponte `DB_POSTGRESDB_SSL_CA=/path/to/ca.pem` e remova `DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED=false`.
+
+### 6. Speech STT retorna texto vazio
 
 **Sintoma:** cURL pro endpoint STT retorna `{"DisplayText": "", "RecognitionStatus": "InitialSilenceTimeout"}` mesmo com áudio claro.
 
@@ -1920,13 +1952,13 @@ ffmpeg -i sample-question-pt.wav -ac 1 -ar 16000 -sample_fmt s16 sample-mono16k.
 ```
 Use o arquivo convertido no cURL.
 
-### 6. Teams Webhook 401
+### 7. Teams Webhook 401
 
 **Sintoma:** Node n8n "Microsoft Graph Teams" retorna `401 Unauthorized` ao postar mensagem.
 
 **Fix:** OAuth token expirado ou permissions faltando. No n8n → **Credentials** → editar credential OAuth2 → **Reconnect** (refresh do token). Validar que App Registration tem permissions `ChatMessage.Send` (delegated) e admin consent foi concedido.
 
-### 7. Confidence score sempre 1.0
+### 8. Confidence score sempre 1.0
 
 **Sintoma:** Tool `search_kb` retorna `confidence: 1.0` em 100% das queries, mesmo quando RAG não encontra contexto bom.
 

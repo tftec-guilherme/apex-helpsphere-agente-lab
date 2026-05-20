@@ -117,7 +117,7 @@ Erro/sintoma reportado
 | C4 | `az acr build` falha `unauthorized: authentication required` em corporate | Tenant policy bloqueia Service Connection temporária do ACR Tasks | Pedir tenant-admin liberar `Microsoft.ContainerRegistry/registries/tasks/scheduledRuns/action` OU build local + `docker push` | Cap 05 |
 | C5 | Container App `Provisioning` infinito >10min | MI sem `AcrPull` propagado (Cap 05 Passo 5.5) | Aguardar 60s pós-RBAC; se passou 5min, deletar Container App + esperar 60s + recriar | Cap 05 |
 | C6 | Cold-start ACA scale-to-zero adiciona 3-5s na 1ª request após 5min ociosidade | Comportamento esperado do Consumption profile | Subir `min-replicas=1` (custo ~R$ 30/mês fixo) — só se latência crítica | Cap 05 |
-| C7 | `n8nio/n8n:latest` quebrou breaking change em 15/04 — workflows invisíveis | Tag `latest` migrou schema PG sem aviso | **Sempre pinar major.minor** (`n8nio/n8n:1.6`); acompanhar releases antes de bumpar | Cap 07 |
+| C7 | `n8nio/n8n:latest` quebrou breaking change em 15/04 — workflows invisíveis OR `MANIFEST_UNKNOWN` ao pullar tag curta `n8nio/n8n:1.6` | Tag `latest` migrou schema PG sem aviso; tag `1.6` (formato `major.minor`) nunca foi publicada no Docker Hub — n8n publica `major.minor.patch` (`1.69.2`) | **Sempre pinar tag patch completa publicada** (`n8nio/n8n:1.69.2`); acompanhar releases antes de bumpar | Cap 07 |
 | C8 | `WEBHOOK_URL` vazio gera URLs `0.0.0.0:5678` inacessíveis | n8n não usa FQDN ACA real automaticamente | Cravar `WEBHOOK_URL=https://<FQDN>/` (com barra final) **após** ACA criar | Cap 07 |
 
 ### §3.4 Auth aplicacional (OAuth + Bearer + tokens)
@@ -158,6 +158,7 @@ Erro/sintoma reportado
 | N6 | PostgreSQL `Stop` reinicia automaticamente após 7 dias cobrando | Feature Microsoft anti server-órfão | Configurar **Azure Cost Anomaly Alert** (R$ 0) threshold R$ 50 OR delete (não Stop) ao fim da disciplina | Caps 07, 09 |
 | N7 | n8n Service Bus Trigger ainda não suporta MI (issue #7821 desde 2024-06) | Limitação upstream | Dual-stack: Connection String ativa + RBAC paralelo cravado (quando PR merge, troca sem mexer mais) | Cap 07 |
 | N8 | n8n credentials confusas: alguns nodes aceitam MI Azure, outros só Service Principal, outros só Connection String | n8n é **ferramenta transversal multi-lab** (não-Azure-native) — cada node mantém seu próprio padrão auth conforme upstream community | Documentar matriz auth-por-node no início do lab; padronizar **Service Principal scope-bounded** quando MI não rolar (evita Connection String full-access) | Cap 07 |
+| N9 | n8n não inicia — boot loop com `self-signed certificate in certificate chain` (sintoma 1) que, após relaxar verificação, cascateia para `no pg_hba.conf entry for host "<ip>", user "n8nadmin", database "n8n", no encryption` (sintoma 2) | Azure PG Flexible Server tem `require_secure_transport=on` por padrão (exige TLS) e entrega cert assinado por **CA Microsoft** que não está no truststore Alpine do `n8nio/n8n` | Cravar **duas** envs no Container App: `DB_POSTGRESDB_SSL_ENABLED=true` (força TLS — sem isso, n8n manda plain TCP e PG recusa) + `DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED=false` (aceita cert sem pinar root CA — lab-only). Prod: montar CA Microsoft via Secret + `DB_POSTGRESDB_SSL_CA=/path/ca.pem` | Cap 07 |
 
 ### §3.7 Service Bus + Google Sheets (Cap 08)
 
@@ -219,7 +220,7 @@ Erro/sintoma reportado
 6. **Workload profile `Consumption + Dedicated` cobra parado** (P5) — R$ 250/mês silently. Fix: explicitamente `Consumption only`.
 7. **`EXPECTED_AUDIENCE` byte-a-byte com `aud` do token** (O2, O3) — trailing slash mata smokes inteiros. Fix: `jq '.aud'` (ou `ConvertFrom-Json` pwsh) vs Container App env var.
 8. **PostgreSQL Burstable cobra parado + auto-restart 7d** (P7, N6, K4) — R$ 60/mês esquecido. Fix: delete (não Stop) ao fim + Cost Anomaly Alert R$ 50.
-9. **`n8nio/n8n:latest` quebra breaking change** (C7) — tag `latest` migrou schema sem aviso. Fix: pinar `n8nio/n8n:1.6`. n8n é **ferramenta transversal multi-lab** — versionar manualmente.
+9. **`n8nio/n8n:latest` quebra breaking change + tag curta `1.6` retorna `MANIFEST_UNKNOWN`** (C7) — `latest` migra schema sem aviso; n8n só publica tags `major.minor.patch`. Fix: pinar `n8nio/n8n:1.69.2`. n8n é **ferramenta transversal multi-lab** — versionar manualmente.
 10. **`min-replicas 0` no n8n perde Service Bus messages** (N2) — long-polling para quando dorme. Fix: `min-replicas 1` no lab.
 11. **WAV não é PCM 16kHz mono no STT** (V1) — Voice Recorder Windows grava `.m4a` 48kHz estéreo. Fix: ffmpeg conversão. **Confidence "vai funcionar primeira vez" = 0**.
 12. **Cleanup parcial deixa Foundry Project (soft-delete 30d) + 3 App Regs + Log Analytics órfãos** (K1, K3, K9, K12) — `az group delete` não cascata + Foundry/KV têm soft-delete forçado. Fix: 6 passos separados Cap 09.
@@ -442,7 +443,7 @@ $response | ConvertFrom-Json | Select-Object -ExpandProperty tools | ForEach-Obj
 | 04 | Foundry Agent SDK | 8 | F1-F8 (inclui tiktoken F7 + VectorizedQuery F8) |
 | 05 | MCP Server Deploy | 8 | C1, C5, O1-O6 |
 | 06 | Speech (STT/TTS) | 11 | V1-V11 (inclui F0 cap + Neural latência + Cog Services role) |
-| 07 | n8n Escalation | 9 | C7, C8, N1-N8 (inclui n8n transversal multi-lab) |
+| 07 | n8n Escalation | 10 | C7, C8, N1-N9 (inclui n8n transversal multi-lab + TLS PG Flexible Server) |
 | 08 | Service Bus + Sheets | 7 | S1-S2, S7 (Topic vs Queue + Google Sheets external) |
 | 09 | Cleanup | 13 | K1-K13 (inclui Foundry soft-delete 30d, billing async 24h, Copilot topics órfãs, Log Analytics linked, SB connection strings órfãs) |
 | **Total** | — | **~78+** | **12 críticos + 60+ catalogados** |

@@ -1,6 +1,6 @@
 # Capítulo 07 — n8n Escalation
 
-> **Objetivo:** provisionar **PostgreSQL Flexible Server Burstable B1ms** (backend de metadata do n8n) no RG `rg-lab-final`, deployar **n8n** como Container App `ca-n8n-helpsphere` no `cae-helpsphere-final` (imagem `n8nio/n8n:1.6` pinada — não `:latest`), atribuir **Azure Service Bus Data Receiver** à Managed Identity `mi-helpsphere-ia` referenciando o Topic `tickets-escalated` que o **Capítulo 08** vai criar, completar o **owner setup wizard** do n8n, importar o workflow `escalation-servicebus-sheets.json` deste repo, deixar credentials parcialmente configuradas (PostgreSQL HelpSphere + HTTP Header Auth — o resto fica para o Cap 08) e **pausar o ambiente** ao fim para zerar custo recorrente.
+> **Objetivo:** provisionar **PostgreSQL Flexible Server Burstable B1ms** (backend de metadata do n8n) no RG `rg-lab-final`, deployar **n8n** como Container App `ca-n8n-helpsphere` no `cae-helpsphere-final` (imagem `n8nio/n8n:1.69.2` pinada — não `:latest`), atribuir **Azure Service Bus Data Receiver** à Managed Identity `mi-helpsphere-ia` referenciando o Topic `tickets-escalated` que o **Capítulo 08** vai criar, completar o **owner setup wizard** do n8n, importar o workflow `escalation-servicebus-sheets.json` deste repo, deixar credentials parcialmente configuradas (PostgreSQL HelpSphere + HTTP Header Auth — o resto fica para o Cap 08) e **pausar o ambiente** ao fim para zerar custo recorrente.
 >
 > **Tempo:** 60-90 min (45-60 min se PostgreSQL Burstable já provisionado de uma sessão anterior — caminho normal "retomei o lab no dia seguinte")
 >
@@ -32,7 +32,7 @@
 | Artefato | Implementação | Backend / Identidade | Custo (R$/mês ligado) |
 |---|---|---|---|
 | PostgreSQL Flexible Server `pg-n8n-<rand>` | Portal Azure → DB for PostgreSQL flexible servers · **Burstable B1ms** · 32 GiB · PG auth only | Database `n8n` consumido pelo container n8n via env vars | **R$ 60 fixo ligado 24×7** · R$ 0 se `Stop` |
-| Container App `ca-n8n-helpsphere` | Portal ACA → image=`n8nio/n8n:1.6` (pinned), env vars apontando ao PG, ingress=External, port=5678, scale 1→1 | ACA Env `cae-helpsphere-final` (Consumption) | R$ 0 parado · ~R$ 0,02/min ativo (0,5 vCPU + 1 GiB) — **mas `min-replicas 1` mantém ativo** |
+| Container App `ca-n8n-helpsphere` | Portal ACA → image=`n8nio/n8n:1.69.2` (pinned), env vars apontando ao PG, ingress=External, port=5678, scale 1→1 | ACA Env `cae-helpsphere-final` (Consumption) | R$ 0 parado · ~R$ 0,02/min ativo (0,5 vCPU + 1 GiB) — **mas `min-replicas 1` mantém ativo** |
 | Role `Azure Service Bus Data Receiver` em `mi-helpsphere-ia` | Portal Service Bus (Cap 08) → IAM → Add role assignment · escopo: namespace `sb-helpsphere-final` | Managed Identity já existente em `rg-lab-intermediario` | R$ 0 (RBAC gratuito) |
 | Workflow `Ticket Escalation` importado no n8n | n8n UI → Workflows → Import from file → `n8n-workflows/escalation-servicebus-sheets.json` deste repo | Stored em PostgreSQL `n8n` database | R$ 0 (incluso PG) |
 | `N8N_URL` capturada e webhook configurado | Portal ACA Overview + Application → Containers → Environment variables (`WEBHOOK_URL`) | FQDN ACA público `*.azurecontainerapps.io` | R$ 0 |
@@ -143,7 +143,7 @@
    - **Image source:** `Docker Hub or other registries`
    - **Image type:** `Public`
    - **Registry login server:** `docker.io`
-   - **Image and tag:** `n8nio/n8n:1.6` ⚠️ **NÃO use `:latest`** (ver Surpresa pedagógica abaixo + ver Cap 10 troubleshooting #4)
+   - **Image and tag:** `n8nio/n8n:1.69.2` ⚠️ **NÃO use `:latest`** (ver Surpresa pedagógica abaixo + ver Cap 10 troubleshooting #4)
    - **CPU and Memory:** `0.5 CPU / 1 Gi memory`
    - Seção **Environment variables** → clique **+ Add** para cada uma:
      - `DB_TYPE` = `postgresdb`
@@ -151,7 +151,8 @@
      - `DB_POSTGRESDB_DATABASE` = `n8n`
      - `DB_POSTGRESDB_USER` = `n8nadmin`
      - `DB_POSTGRESDB_PASSWORD` = `<PG_PASSWORD>` ⚠️ **marque como Secret reference** (não plain text — clique no link "Secret reference" e crie secret `pg-password`)
-     - `DB_POSTGRESDB_SSL_CA` = (deixe vazio — PG Flexible Server usa CA pública confiável pelo container)
+     - `DB_POSTGRESDB_SSL_ENABLED` = `true` (força TLS — exigido por Azure PG Flexible Server com `require_secure_transport=on`)
+     - `DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED` = `false` (aceita cert da CA Microsoft sem pinar root CA no container Alpine — lab-only; em prod, montar cert via secret + apontar `DB_POSTGRESDB_SSL_CA`)
      - `N8N_ENCRYPTION_KEY` = gere localmente: PowerShell `[Convert]::ToBase64String((1..32 | ForEach-Object {[byte](Get-Random -Maximum 256)}))` (ou `openssl rand -base64 32` em Git Bash/WSL/Linux/macOS) → cole o resultado ⚠️ **marque como Secret reference** `n8n-encryption-key`
      - `N8N_HOST` = `0.0.0.0`
      - `N8N_PROTOCOL` = `https`
@@ -190,7 +191,7 @@
 >   --name ca-n8n-helpsphere `
 >   --resource-group rg-lab-final `
 >   --environment cae-helpsphere-final `
->   --image n8nio/n8n:1.6 `
+>   --image n8nio/n8n:1.69.2 `
 >   --target-port 5678 `
 >   --ingress external `
 >   --secrets "pg-password=$PgPassword" "n8n-encryption-key=$EncKey" `
@@ -200,7 +201,8 @@
 >     DB_POSTGRESDB_DATABASE=n8n `
 >     DB_POSTGRESDB_USER=n8nadmin `
 >     DB_POSTGRESDB_PASSWORD=secretref:pg-password `
->     DB_POSTGRESDB_SSL_CA="" `
+>     DB_POSTGRESDB_SSL_ENABLED=true `
+>     DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED=false `
 >     N8N_ENCRYPTION_KEY=secretref:n8n-encryption-key `
 >     N8N_HOST=0.0.0.0 `
 >     N8N_PROTOCOL=https `
@@ -487,7 +489,7 @@ az containerapp show `
   --name ca-n8n-helpsphere `
   --resource-group rg-lab-final `
   --query "{fqdn:properties.configuration.ingress.fqdn, replicas:properties.template.scale, image:properties.template.containers[0].image}" -o json
-# Esperado: fqdn=ca-n8n-helpsphere.<rand>.eastus2.azurecontainerapps.io, image=n8nio/n8n:1.6, scale.minReplicas=1
+# Esperado: fqdn=ca-n8n-helpsphere.<rand>.eastus2.azurecontainerapps.io, image=n8nio/n8n:1.69.2, scale.minReplicas=1
 
 # 4. n8n responde HTTP 200 na rota /healthz
 curl.exe -i "https://$N8nFqdn/healthz"
@@ -515,7 +517,7 @@ az role assignment list `
 [ ] PostgreSQL pg-n8n-<rand> Burstable B1ms criado e em estado Ready
 [ ] Database n8n existe dentro do server
 [ ] Allow public access from any Azure service: Yes (firewall PG)
-[ ] Container App ca-n8n-helpsphere rodando com image n8nio/n8n:1.6 (NÃO :latest)
+[ ] Container App ca-n8n-helpsphere rodando com image n8nio/n8n:1.69.2 (NÃO :latest)
 [ ] N8N_ENCRYPTION_KEY armazenada como ACA Secret (não plain env var)
 [ ] DB_POSTGRESDB_PASSWORD armazenada como ACA Secret
 [ ] WEBHOOK_URL atualizado com FQDN ACA real (https://...azurecontainerapps.io/)
