@@ -1093,24 +1093,44 @@ O `server.py` que subimos foi atualizado pós-Cap 04 e agora opera em **modo sta
 Com a nova revisão Healthy, prosseguir com a captura do token:
 
 ```powershell
-$TenantId = "<seu-tenant-id>"
+# 🔑 Capture as variáveis (sessão nova? rode este bloco)
+# Cole aqui os 3 GUIDs anotados nos Passos 4.3 e 4.7:
+$TenantId        = "<paste TENANT_ID anotado no Passo 4.3>"
+$McpServerAppId  = "<paste MCP_SERVER_APP_ID anotado no Passo 4.3>"
+$ClientAppId     = "<paste CLIENT_APP_ID anotado no Passo 4.7>"
+$ClientSecret    = "<paste CLIENT_SECRET anotado no Passo 4.7>"
+
+# (Opcional) capturar TenantId via CLI em vez de paste manual:
+# $TenantId = az account show --query tenantId -o tsv
 
 $TokenResponse = curl.exe -s -X POST "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token" `
   -d "grant_type=client_credentials" `
   -d "client_id=$ClientAppId" `
   -d "client_secret=$ClientSecret" `
-  -d "scope=api://mcp-helpsphere/.default"
+  -d "scope=api://$McpServerAppId/.default"
 
 $Token = ($TokenResponse | ConvertFrom-Json).access_token
 
-Write-Host "Token: $Token"
+Write-Host "Token (primeiros 40 chars): $($Token.Substring(0,40))..."
 ```
 
-> **Linux/Mac/WSL:** troque `curl.exe` por `curl`, `$Var = curl ...` por `TOKEN=$(curl ... | jq -r .access_token)` (atribuição inline bash + jq), e `` ` `` (backtick) por `\` (backslash).
+> **⚠️ Atenção scope:** o scope no Passo 4.3 ficou `api://<MCP_SERVER_APP_ID>` (forma 1 do default policy). Por isso aqui usamos `api://$McpServerAppId/.default` — NÃO `api://mcp-helpsphere/.default` (esse valor nem foi aceito pelo Entra; ver nota Identifier URI policy no Passo 4.3).
+
+> **Linux/Mac/WSL:** troque `curl.exe` por `curl`, `$Var = curl ...` por `TOKEN=$(curl ... | jq -r .access_token)` (atribuição inline bash + jq), e `` ` `` (backtick) por `\` (backslash). Variáveis equivalentes: `TENANT_ID`, `MCP_SERVER_APP_ID`, `CLIENT_APP_ID`, `CLIENT_SECRET`.
 
 ## Passo 4.9 — Testar MCP Server
 
 ```powershell
+# 🔑 Capture as variáveis (sessão nova? rode este bloco)
+$McpUrl = az containerapp show `
+  --name ca-mcp-helpsphere `
+  --resource-group rg-lab-final `
+  --query "properties.configuration.ingress.fqdn" -o tsv
+
+# Se $Token foi perdido (sessão nova após o Passo 4.8), refaça a captura do bloco anterior antes de continuar.
+Write-Host "McpUrl: https://$McpUrl/mcp"
+if (-not $Token) { Write-Warning "Token vazio — volte ao Passo 4.8 e recapture." }
+
 $Headers = @{
   Authorization  = "Bearer $Token"
   'Content-Type' = 'application/json'
@@ -1167,6 +1187,16 @@ Deve retornar dados do ticket 1 (do seed do HelpSphere).
 ## Passo 4.10 — Atualizar Function App `func-agent-runner` com URL e token MCP
 
 ```powershell
+# 🔑 Capture as variáveis (sessão nova? rode este bloco)
+$FuncAgentName = az functionapp list -g rg-lab-final --query "[?starts_with(name, 'func-agent-runner')].name | [0]" -o tsv
+$McpUrl        = az containerapp show --name ca-mcp-helpsphere -g rg-lab-final --query "properties.configuration.ingress.fqdn" -o tsv
+
+# $Token vem do Passo 4.8 — se sessão nova, refaça aquele bloco antes.
+if (-not $Token) { Write-Warning "Token vazio — volte ao Passo 4.8 e recapture antes de seguir." }
+
+Write-Host "FuncAgentName: $FuncAgentName"
+Write-Host "McpUrl:        $McpUrl"
+
 az functionapp config appsettings set `
   --name $FuncAgentName `
   --resource-group rg-lab-final `
@@ -1238,8 +1268,21 @@ az functionapp config appsettings set `
 
 ## Passo 5.2 — Atribuir RBAC
 
+Atribui à Managed Identity `mi-helpsphere-ia` (do Bloco 2) o role `Cognitive Services User` no Speech Service, para que a Function `func-agent-runner` consiga chamar STT/TTS via MI sem precisar de key.
+
 ```powershell
+# 🔑 Capture as variáveis (sessão nova? rode este bloco)
+$PrincipalId = az identity show `
+  --name mi-helpsphere-ia `
+  --resource-group rg-helpsphere-ia `
+  --query principalId -o tsv
+
 $SpchId = az cognitiveservices account show -n spch-helpsphere -g rg-lab-final --query id -o tsv
+
+Write-Host "PrincipalId: $PrincipalId"
+Write-Host "SpchId:      $SpchId"
+
+# Atribui RBAC
 az role assignment create --assignee $PrincipalId --role "Cognitive Services User" --scope $SpchId
 ```
 
@@ -1260,19 +1303,37 @@ Em vez de baixar um WAV pré-pronto, vamos gravar o seu próprio. Por quê? Spee
 Para testar via CLI:
 
 ```powershell
+# 🔑 Capture as variáveis Speech (sessão nova? rode este bloco)
+$env:SPEECH_REGION = az cognitiveservices account show -n spch-helpsphere -g rg-lab-final --query location -o tsv
+$env:SPEECH_KEY    = az cognitiveservices account keys list -n spch-helpsphere -g rg-lab-final --query key1 -o tsv
+
+Write-Host "SPEECH_REGION: $env:SPEECH_REGION"
+Write-Host "SPEECH_KEY:    $($env:SPEECH_KEY.Substring(0,8))..."   # mascarado
+
 curl.exe -X POST "https://$env:SPEECH_REGION.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=pt-BR" `
   -H "Ocp-Apim-Subscription-Key: $env:SPEECH_KEY" `
   -H "Content-Type: audio/wav" `
   --data-binary "@sample-question-pt.wav"
 ```
 
-> **Linux/Mac/WSL:** troque `curl.exe` por `curl`, `$env:VAR` por `${VAR}`, `` ` `` por `\`, e `"@file"` por `@file` (sem aspas — em pwsh `@` é splatting operator, precisa estar entre aspas).
+> **Linux/Mac/WSL:** troque `curl.exe` por `curl`, `$env:VAR` por `${VAR}`, `` ` `` por `\`, e `"@file"` por `@file` (sem aspas — em pwsh `@` é splatting operator, precisa estar entre aspas). Capture equivalente em bash:
+> ```bash
+> export SPEECH_REGION=$(az cognitiveservices account show -n spch-helpsphere -g rg-lab-final --query location -o tsv)
+> export SPEECH_KEY=$(az cognitiveservices account keys list -n spch-helpsphere -g rg-lab-final --query key1 -o tsv)
+> ```
 
 Saída esperada: transcrição em pt-BR.
 
 ## Passo 5.4 — Testar TTS (Text-to-Speech)
 
 ```powershell
+# 🔑 Capture as variáveis Speech (sessão nova? rode este bloco — se já rodou no 5.3 na mesma sessão, pode pular)
+if (-not $env:SPEECH_REGION) {
+  $env:SPEECH_REGION = az cognitiveservices account show -n spch-helpsphere -g rg-lab-final --query location -o tsv
+  $env:SPEECH_KEY    = az cognitiveservices account keys list -n spch-helpsphere -g rg-lab-final --query key1 -o tsv
+  Write-Host "SPEECH_REGION: $env:SPEECH_REGION"
+}
+
 $Ssml = @'
 <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="pt-BR">
   <voice name="pt-BR-FranciscaNeural">
@@ -1291,7 +1352,7 @@ curl.exe -X POST "https://$env:SPEECH_REGION.tts.speech.microsoft.com/cognitives
   --output greeting.mp3
 ```
 
-> **Linux/Mac/WSL:** troque o here-string PowerShell por heredoc bash (`cat <<EOF ... EOF`), `curl.exe` por `curl`, `$env:VAR` por `${VAR}`, e `` ` `` por `\`.
+> **Linux/Mac/WSL:** troque o here-string PowerShell por heredoc bash (`cat <<EOF ... EOF`), `curl.exe` por `curl`, `$env:VAR` por `${VAR}`, e `` ` `` por `\`. Verifique `${SPEECH_REGION}` antes — se vazio, recapture com o bloco bash do Passo 5.3.
 
 Reproduza o `greeting.mp3` — você deve ouvir a frase.
 
@@ -1343,10 +1404,14 @@ def voice(req: func.HttpRequest) -> func.HttpResponse:
 
 Re-deploy:
 ```powershell
+# 🔑 Capture as variáveis (sessão nova? rode este bloco)
+$FuncAgentName = az functionapp list -g rg-lab-final --query "[?starts_with(name, 'func-agent-runner')].name | [0]" -o tsv
+Write-Host "FuncAgentName: $FuncAgentName"
+
 func azure functionapp publish $FuncAgentName --python
 ```
 
-> **Linux/Mac/WSL:** troque `$FuncAgentName` por `$FUNC_AGENT_NAME`.
+> **Linux/Mac/WSL:** troque `$FuncAgentName` por `$FUNC_AGENT_NAME`. Capture: `FUNC_AGENT_NAME=$(az functionapp list -g rg-lab-final --query "[?starts_with(name, 'func-agent-runner')].name | [0]" -o tsv)`.
 
 ## ✅ Checkpoint Parte 5
 
@@ -1675,13 +1740,28 @@ No canvas do workflow → **Active** toggle (canto superior direito) → ON
 ## Passo 7.2 — Atualizar Function `func-agent-runner` com SB connection
 
 ```powershell
+# 🔑 Capture as variáveis (sessão nova? rode este bloco)
+$FuncAgentName = az functionapp list -g rg-lab-final --query "[?starts_with(name, 'func-agent-runner')].name | [0]" -o tsv
+$SbConn = az servicebus namespace authorization-rule keys list `
+  --namespace-name sb-helpsphere-final `
+  --resource-group rg-lab-final `
+  --name RootManageSharedAccessKey `
+  --query primaryConnectionString -o tsv
+
+Write-Host "FuncAgentName: $FuncAgentName"
+Write-Host "SbConn (primeiros 60 chars): $($SbConn.Substring(0,60))..."
+
 az functionapp config appsettings set `
   --name $FuncAgentName `
   --resource-group rg-lab-final `
   --settings SB_CONNECTION_STRING="$SbConn"
 ```
 
-> **Linux/Mac/WSL:** troque `$FuncAgentName` por `$FUNC_AGENT_NAME`, `$SbConn` por `$SB_CONN`, e `` ` `` por `\`.
+> **Linux/Mac/WSL:** troque `$FuncAgentName` por `$FUNC_AGENT_NAME`, `$SbConn` por `$SB_CONN`, e `` ` `` por `\`. Capture equivalente em bash:
+> ```bash
+> FUNC_AGENT_NAME=$(az functionapp list -g rg-lab-final --query "[?starts_with(name, 'func-agent-runner')].name | [0]" -o tsv)
+> SB_CONN=$(az servicebus namespace authorization-rule keys list --namespace-name sb-helpsphere-final -g rg-lab-final --name RootManageSharedAccessKey --query primaryConnectionString -o tsv)
+> ```
 
 ## Passo 7.3 — Configurar credential Service Bus no n8n
 
@@ -1695,6 +1775,9 @@ Atualize node Service Bus Trigger do workflow para usar essa credential.
 
 Manualmente publique mensagem na queue para testar:
 ```powershell
+# 🔑 Capture as variáveis (sessão nova? rode este bloco)
+$SbName = "sb-helpsphere-final"   # nome fixo do Passo 7.1; se você mudou, ajuste
+
 az servicebus queue send-message `
   --namespace-name $SbName `
   --resource-group rg-lab-final `
@@ -1702,7 +1785,7 @@ az servicebus queue send-message `
   --body '{"ticket_id": 1, "reason": "Teste manual de escalação", "confidence": 0.3}'
 ```
 
-> **Linux/Mac/WSL:** troque `$SbName` por `$SB_NAME` e `` ` `` por `\`.
+> **Linux/Mac/WSL:** troque `$SbName` por `$SB_NAME` e `` ` `` por `\`. Capture: `SB_NAME="sb-helpsphere-final"`.
 
 Em ~5s, no n8n você deve ver execução do workflow disparada (em **Executions**).
 
