@@ -217,43 +217,50 @@
 
 ## Passo 8.3 — Capturar Connection String e ativar credential Service Bus no n8n
 
-**Capturar Connection String — No Portal Azure:**
+> **Atencao — n8n nao tem node first-party para Azure Service Bus.** O caminho oficial documentado e usar o node **AMQP Trigger** (`n8n-nodes-base.amqpTrigger`, AMQP 1.0 — protocolo que o Service Bus suporta nativamente). Ref: issue n8n-io/n8n#12959 + docs.microsoft.com/azure/service-bus-messaging/service-bus-amqp-overview. A credential a ser criada e do tipo **AMQP 1.0**, NAO "Azure Service Bus".
+
+**Capturar SAS Key e montar URI AMQP — No Portal Azure:**
 
 1. Namespace `sbns-helpsphere-final-{rand}` → menu **Settings** → **Shared access policies**
 2. Clique em **RootManageSharedAccessKey** (criada por padrão pelo Azure)
-3. Painel direito abre → clique **Show** ao lado de **Primary Connection String**
-4. **Copy** → cole em um editor seguro local (vai ser anotado no n8n e descartado)
+3. Painel direito abre → clique **Show** ao lado de **Primary Key** (NAO Connection String — para AMQP usamos so a Key, formatada em URI)
+4. **Copy** → cole em um editor seguro local (vai ser usado para montar a URI AMQP)
 
-   Formato: `Endpoint=sb://sbns-helpsphere-final-{rand}.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=<long-key>=`
+   Formato da URI AMQP que vai colar no n8n:
+   ```
+   amqps://RootManageSharedAccessKey:<urlEncodedKey>@sbns-helpsphere-final-{rand}.servicebus.windows.net:5671
+   ```
 
-<!-- screenshot: cap08-passo8.3-copiar-sb-connection-string.png -->
+   Onde `<urlEncodedKey>` = SAS Key com `=`/`+`/`/` URL-encoded (PowerShell: `[uri]::EscapeDataString($key)`).
+
+<!-- screenshot: cap08-passo8.3-copiar-sb-sas-key.png -->
 
 > **Atenção segurança — RootManageSharedAccessKey é super-usuário:** essa key dá `Manage` (criar/deletar Topics, Subscriptions, queues — não só Read/Write). Para n8n, o ideal seria criar uma **Shared access policy nova** com **só `Listen`** (só read) no escopo da subscription. Lab usa Root para simplificar — **em produção, NUNCA**.
 
-**Ativar credential no n8n:**
+**Ativar credential AMQP 1.0 no n8n:**
 
 1. Abra `https://<N8N_URL>` (Application Url do `ca-n8n-helpsphere` — capturada no capítulo anterior)
 2. Login com email + password do owner
-3. Sidebar esquerdo → **Credentials** → procure pela credential rascunho `HelpSphere Service Bus` (se não criou, **+ Add credential** → procurar `Azure Service Bus`)
-4. Clique para editar:
-   - **Credential Name:** `HelpSphere Service Bus`
-   - **Connection String:** cole a Connection String capturada acima
-5. Clique **Test connection** — esperado: ✅ **Connection successful**
-6. **Save**
+3. Sidebar esquerdo → **Credentials** → **+ Add credential** → procurar **AMQP 1.0** (NAO procure por "Azure Service Bus" — esse credential type nao existe no n8n first-party)
+4. Preencher:
+   - **Credential Name:** `HelpSphere Service Bus AMQP`
+   - **Connection URL:** cole a URI AMQP montada acima (`amqps://RootManageSharedAccessKey:<encoded>@<namespace>.servicebus.windows.net:5671`)
+5. **Save**
+6. **Test connection** — esperado: ✅ **Connection successful** (n8n executa um AMQP `OPEN` no namespace para validar)
 
-<!-- screenshot: cap08-passo8.3-credential-sb-n8n-ativada.png -->
+<!-- screenshot: cap08-passo8.3-credential-amqp-n8n-ativada.png -->
 
-**Atualizar workflow `Ticket Escalation` (node Service Bus Trigger):**
+**Atualizar workflow `Ticket Escalation` (node AMQP Trigger / "Service Bus Trigger"):**
 
 1. Sidebar esquerdo → **Workflows** → clique em **Ticket Escalation**
-2. Clique no node **Service Bus Trigger** (primeiro na esquerda do canvas)
-3. No painel direito, campo **Credential**: selecione `HelpSphere Service Bus` (recém-ativada)
+2. Clique no node **Service Bus Trigger** (primeiro na esquerda do canvas — type `n8n-nodes-base.amqpTrigger`, display name mantido para preservar refs `$('Service Bus Trigger')` em nodes downstream)
+3. No painel direito, campo **Credential**: selecione `HelpSphere Service Bus AMQP` (recém-ativada)
 4. Confirme/ajuste os campos:
-   - **Resource:** `Topic` (não Queue)
-   - **Topic:** `ticket-events`
-   - **Subscription:** `sub-n8n` ⚠️ — este workflow consome especificamente da subscription `sub-n8n` (a `sub-sheets` será consumida por workflow paralelo — Passo 8.5)
-   - **Operation:** `Receive Messages`
-   - **Lock duration:** `30` (segundos)
+   - **Sink:** `ticket-events/Subscriptions/sub-n8n` ⚠️ — formato AMQP entity path padrao Service Bus (`<topic>/Subscriptions/<subscription>`). Este workflow consome especificamente da subscription `sub-n8n` (a `sub-sheets` será consumida por workflow paralelo — Passo 8.5).
+   - **Client Options → Reconnect:** `true`
+   - **Client Options → Reconnect limit:** `10`
+   - **Options → Container ID:** `n8n-helpsphere`
+   - **Options → Auto Acknowledge:** `true` (lab) — AMQP 1.0 nao tem peek-lock nativo, auto-ack e o pattern padrao do node
 5. Ícone do node muda de vermelho para amarelo (próxima credential pendente é a do Google Sheets — Passo 8.5)
 6. Clique **Save** no canvas (canto superior direito)
 
@@ -261,7 +268,11 @@
 
 > **Custo:** R$ 0 — credential é só metadata cifrada no PG do n8n.
 
-> **Nota pedagógica — Connection String vai ser substituída por MI quando?** O node n8n `Azure Service Bus Trigger` v1.x **só aceita Connection String** (issue oficial no repo do n8n aberto há ~2 anos). Quando o n8n suportar `DefaultAzureCredential` nativamente, trocaremos pelos roles do Passo 8.4 e descartaremos a Connection String. **Por enquanto:** Connection String ativa + RBAC paralelo cravado, dual-stack.
+> **Nota pedagogica — por que AMQP Trigger e nao "Azure Service Bus Trigger" first-party?** O n8n nao tem node first-party para Azure Service Bus — o catalogo `n8n.io/integrations` nao lista; a pasta `n8n-io/n8n/packages/nodes-base/nodes/Microsoft/` no GitHub tambem nao tem `AzureServiceBus`. O caminho oficial e usar AMQP 1.0 (protocolo que o Service Bus suporta nativo). Ref: issue n8n-io/n8n#12959.
+>
+> **Tradeoff vs SDK Service Bus:** AMQP 1.0 nao expõe `lockDuration`, `maxAutoRenewDuration` ou DLQ programatica — esses sao recursos especificos do SDK Service Bus, nao do protocolo AMQP 1.0 generico. Para o pattern de escalacao do Lab Final isso e aceitavel (auto-acknowledge basta). Em prod com DLQ programatica complexa ou peek-lock obrigatorio, considere Logic Apps Service Bus connector ou Function App com SDK `azure-servicebus`.
+>
+> **MI (Managed Identity) com AMQP?** Por enquanto o n8n AMQP Trigger nao suporta `DefaultAzureCredential` — usamos SAS Key na URI. O RBAC `Azure Service Bus Data Receiver` cravado no Passo 8.4 fica como **preparacao para producao** (quando trocar a credencial por SAS gerada via REST + RBAC).
 
 ---
 
@@ -421,13 +432,11 @@
 A subscription `sub-sheets` precisa de **workflow próprio** que consume independente da `sub-n8n`. Cria um workflow novo só com 2 nodes (SB Trigger → Sheets Append):
 
 1. **Workflows** → **+ Add workflow** → nomeie `Audit Sheets`
-2. Adicione node **Azure Service Bus Trigger**:
-   - **Credential:** `HelpSphere Service Bus`
-   - **Resource:** `Topic`
-   - **Topic:** `ticket-events`
-   - **Subscription:** `sub-sheets` ⚠️ ESTA subscription (não `sub-n8n`)
-   - **Operation:** `Receive Messages`
-   - **Lock duration:** `30`
+2. Adicione node **AMQP Trigger** (display name "Service Bus Trigger" — type `n8n-nodes-base.amqpTrigger`):
+   - **Credential:** `HelpSphere Service Bus AMQP`
+   - **Sink:** `ticket-events/Subscriptions/sub-sheets` ⚠️ ESTA subscription (não `sub-n8n`) — formato AMQP entity path padrao `<topic>/Subscriptions/<subscription>`
+   - **Client Options → Reconnect:** `true`, **Reconnect limit:** `10`
+   - **Options → Container ID:** `n8n-audit-sheets`, **Auto Acknowledge:** `true`
 3. Adicione node **Google Sheets** → **Append row** (idêntico ao do workflow `Ticket Escalation`, mesmas colunas e Sheet ID)
 4. Conecte os 2 nodes
 5. Toggle **Active** (canto superior direito) → ON
@@ -642,9 +651,9 @@ az servicebus topic send `
 [ ] Subscription sub-n8n criada (consume por workflow Ticket Escalation → Teams)
 [ ] Subscription sub-sheets criada (consume por workflow Audit Sheets → Google Sheets)
 [ ] Lock duration 30s + max-delivery 3 + dead-letter ON em AMBAS subscriptions
-[ ] Connection String RootManageSharedAccessKey copiada para credential n8n
-[ ] Credential `HelpSphere Service Bus` ativa no n8n (Test connection OK)
-[ ] Workflow Ticket Escalation node Service Bus Trigger configurado (Topic ticket-events + Subscription sub-n8n)
+[ ] SAS Key RootManageSharedAccessKey capturada e URL-encoded para URI AMQP
+[ ] Credential `HelpSphere Service Bus AMQP` (tipo AMQP 1.0) ativa no n8n (Test connection OK)
+[ ] Workflow Ticket Escalation node AMQP Trigger ("Service Bus Trigger", `n8n-nodes-base.amqpTrigger`) configurado (Sink `ticket-events/Subscriptions/sub-n8n`)
 [ ] Role Azure Service Bus Data Receiver atribuída a mi-helpsphere-ia (TODO do capítulo anterior fechado)
 [ ] Role Azure Service Bus Data Sender atribuída a mi-helpsphere-ia (para agente Foundry)
 [ ] Google Cloud Project apex-helpsphere-lab criado, Sheets API + Drive API habilitadas
@@ -668,7 +677,7 @@ az servicebus topic send `
 - ⚠️ **Service Bus Standard cobra R$ 50/mês FIXO enquanto ligado — NÃO por mensagem** — diferente de Storage Queues (R$ 0,15 por milhão de operações), Standard é flat-rate. Ligado parado custa o mesmo que ligado processando 1M msg/dia. Em lab típico (cleanup 4-8h por sessão), custo real é **~R$ 5-8 total**. Esquecer o namespace ligado 1 mês inteiro = R$ 50. Pause via Opção A do Passo 8.7 (`namespace delete` + recreate em 3min) zera o custo.
 - ⚠️ **Topic + 2 Subscriptions fazem fan-out automático — não precisa código duplicado no agente** — o agente publica 1 vez no `ticket-events`, o Service Bus duplica para `sub-n8n` E `sub-sheets`. Cada subscription tem cursor próprio. Falha em uma não bloqueia a outra. Adicionar `sub-bi` amanhã para uma Function App = 1 comando az CLI, zero código novo no agente.
 - ⚠️ **`lock-duration < 30s` causa duplicação silent** — se o n8n trigger leva 25s para processar (HelpSphere API + MCP + Teams API encadeados), e a subscription tem lock 15s, o Service Bus reenvia a msg **antes** do n8n confirmar `complete`, e a escalação dispara duas vezes (linha duplicada no Sheet, Adaptive Card duplicado no Teams). **Workaround:** sempre `lock-duration ≥ 30s` no lab. Em produção: medir P99 do workflow e setar 5x.
-- ⚠️ **n8n `Azure Service Bus Trigger` ainda NÃO suporta Managed Identity** — issue oficial no repo do n8n aberto há ~2 anos. Por isso usamos **Connection String** mesmo tendo MI com role correta. **Workaround:** dual-stack — Connection String ativa + RBAC paralelo cravado. Quando o PR draft de MI no n8n der merge, trocamos sem mexer em mais nada (RBAC já está lá).
+- ⚠️ **n8n nao tem node first-party para Azure Service Bus** — o catalogo `n8n.io/integrations` nao lista; a pasta `n8n-io/n8n/packages/nodes-base/nodes/Microsoft/` no GitHub tambem nao tem `AzureServiceBus`. Workflows que tentam usar `n8n-nodes-base.azureServiceBusTrigger` falham no import com banner "This node is not currently installed". **Workaround oficial (n8n-io/n8n#12959):** usar `n8n-nodes-base.amqpTrigger` (AMQP 1.0, first-party, suportado nativo pelo Service Bus). Configurar com URI `amqps://RootManageSharedAccessKey:<urlEncodedKey>@<namespace>.servicebus.windows.net:5671` + sink `<topic>/Subscriptions/<subscription>`. Tradeoff: AMQP 1.0 nao expõe peek-lock ou DLQ programatica (recursos do SDK Service Bus). Para escalation lab basta auto-acknowledge.
 - ⚠️ **Google Service Account NÃO recebe email de share — checkbox padrão é confuso** — quando você compartilha a planilha e deixa **`Notify people`** marcado (default), o Google tenta mandar email para `n8n-helpsphere-sheets@apex-helpsphere-lab.iam.gserviceaccount.com` e dá bounce. Não bloqueia o share, mas polui a inbox do owner com NDR (non-delivery report). **Workaround:** sempre **uncheck Notify** ao compartilhar com Service Account.
 - ⚠️ **`private_key` do JSON da Service Account quebra ao colar no n8n se editor remove `\n`** — alguns editores (VSCode com extensão JSON formatadora ativa) quebram a string `\n` literal em quebra de linha real ao colar. n8n esperando `-----BEGIN PRIVATE KEY-----\nAAAA...\n-----END...` falha com `Error: PEM_read_bio_PrivateKey`. **Workaround:** copie o valor da chave **direto do arquivo JSON cru** (Notepad), não passe por VSCode. Ou use o campo dedicado `Service Account JSON file upload` do n8n (se disponível na sua versão).
 - ⚠️ **`DefaultAzureCredential` em `agent_runner.py` local falha sem `az login` recente** — `AzureCliCredential` herda token do `az login`, mas se a sessão expirou (>1h), `DefaultAzureCredential` cai em `InteractiveBrowserCredential` e abre o browser do nada no meio do `python agent_runner.py`. Pior: se você rodou `az logout` por engano, falha com `CredentialUnavailableError` cifrado. **Workaround:** rode `az account get-access-token --resource https://servicebus.azure.net` antes do smoke para confirmar token válido.

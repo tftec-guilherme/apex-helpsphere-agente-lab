@@ -1667,13 +1667,15 @@ No n8n:
 1. **Workflows** → **+ New** → menu três pontos → **Import from file**
 2. Selecionar `escalation-servicebus-sheets.json`
 3. Workflow `Ticket Escalation` aparece com 7 nodes:
-   - Service Bus Trigger
+   - AMQP Trigger (display name "Service Bus Trigger")
    - HTTP Request (GET ticket)
    - PostgreSQL (SELECT similar)
    - Switch (categoria → supervisor)
    - HTTP Request (Microsoft Graph — post Teams)
    - HTTP Request (PATCH HelpSphere status)
    - Google Sheets (append row)
+
+> **Por que AMQP Trigger e nao "Azure Service Bus Trigger"?** O n8n nao tem node first-party para Azure Service Bus — o caminho oficial documentado e usar **AMQP Trigger** (AMQP 1.0, suportado nativamente pelo Service Bus). Ref: issue n8n-io/n8n#12959 + docs.microsoft.com/azure/service-bus-messaging/service-bus-amqp-overview. O display name no canvas continua "Service Bus Trigger" para manter narrativa pedagogica e preservar refs `$('Service Bus Trigger')` em nodes downstream.
 
 ## Passo 6.5 — Configurar credentials no n8n
 
@@ -1704,9 +1706,10 @@ Para cada node, configurar credentials. Cada credential é um secret armazenado 
 
 Cada node tem placeholders que você precisa substituir pelos valores reais. Detalhamento dos nodes principais:
 
-**Node 1 — Service Bus Trigger:**
-- Queue: `ticket-escalations`
-- Credential: a do passo 6.5
+**Node 1 — AMQP Trigger (display name "Service Bus Trigger"):**
+- Tipo do node: `n8n-nodes-base.amqpTrigger` (NAO `azureServiceBusTrigger` — esse node nao existe no n8n first-party)
+- Sink: `ticket-escalations` (Queue) ou `<topic>/Subscriptions/<sub>` (Topic+Subscription)
+- Credential: AMQP 1.0 (configurada no Passo 7.3)
 
 **Node 5 — HTTP Request (Microsoft Graph para Teams):**
 - Method: POST
@@ -1829,13 +1832,35 @@ az functionapp config appsettings set `
 > SB_CONN=$(az servicebus namespace authorization-rule keys list --namespace-name sb-helpsphere-final -g rg-lab-final --name RootManageSharedAccessKey --query primaryConnectionString -o tsv)
 > ```
 
-## Passo 7.3 — Configurar credential Service Bus no n8n
+## Passo 7.3 — Configurar credential AMQP 1.0 no n8n
 
-No n8n, settings → Credentials → New → Microsoft Azure Service Bus
-- Connection String: `$SB_CONN`
-- Save
+> **Atencao — qual credential criar?** O n8n nao tem credential type "Azure Service Bus" first-party. O caminho oficial e **AMQP 1.0** (Service Bus suporta AMQP nativo). Ref: issue n8n-io/n8n#12959.
 
-Atualize node Service Bus Trigger do workflow para usar essa credential.
+**Capturar SAS Key e montar URI AMQP (PowerShell):**
+
+```powershell
+# 🔑 Capture as variaveis (sessao nova? rode este bloco)
+$SbName = "sb-helpsphere-final"
+$SbKey = az servicebus namespace authorization-rule keys list `
+  --resource-group rg-lab-final `
+  --namespace-name $SbName `
+  --name RootManageSharedAccessKey `
+  --query primaryKey -o tsv
+$SbKeyEncoded = [uri]::EscapeDataString($SbKey)
+$AmqpUri = "amqps://RootManageSharedAccessKey:$SbKeyEncoded@$SbName.servicebus.windows.net:5671"
+Write-Host "URI AMQP capturada (cole no campo Connection URL do n8n): $AmqpUri"
+```
+
+> **Diferenca vs SB Connection String comum:** o `RootManageSharedAccessKey` aceito pela credential AMQP usa o **mesmo SAS Key** mas o **formato e diferente**: AMQP usa URI `amqps://user:pass@host:5671` (porta 5671 = AMQPS, TLS); a Connection String classica e `Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...`. Service Bus aceita os dois protocolos no mesmo namespace.
+
+**No n8n:**
+
+1. Settings → Credentials → New → procurar **AMQP 1.0**
+2. **Name:** `HelpSphere Service Bus AMQP`
+3. **Connection URL:** cole o `$AmqpUri` capturado acima
+4. **Save**
+
+Atualize o Node 1 (display name "Service Bus Trigger" / type `n8n-nodes-base.amqpTrigger`) do workflow para usar essa credential.
 
 ## Passo 7.4 — Testar disparo de escalação
 
