@@ -2019,32 +2019,296 @@ No agente `HelpSphere Tier 1 Agent`:
    - Selecionar tools liberadas: get_ticket, list_tickets, add_comment, update_status
    - Save
 
-## Passo 8.2 — Demo dos 5 tickets
+## Passo 8.2 — Como tudo se conecta (mapa mental antes da demo)
 
-Você vai gravar (ou observar via vídeo do professor) demo de 5 tickets.
+Antes de rodar os 5 tickets, **entenda visualmente** quais peças do que você construiu nos Blocos 1-7 são acionadas em cada caso. Cada ticket "acende" uma rota diferente do diagrama abaixo.
 
-**Ticket 1 — Caso simples auto-resolvido (tier 1):**
-- User no Teams: "Qual horário de atendimento do suporte?"
-- Agent: chama search_kb → confidence 0.85 → responde direto com cita em `faq_horario_atendimento.pdf`
+```mermaid
+flowchart LR
+  subgraph Canais["🎤 Entrada do usuário"]
+    TEAMS[Teams chat]
+    WEB[Web chat]
+    VOZ[Áudio]
+  end
+  subgraph CS["🤖 Copilot Studio (HelpSphere Tier 1 Agent)"]
+    TOPIC[Topic Resolver_ticket]
+    HTTP[HTTP Action]
+    MCPDIR[MCP connector]
+  end
+  subgraph Speech["🗣️ Speech"]
+    STT[STT]
+    TTS[TTS]
+  end
+  subgraph Func["⚡ Function func-helpsphere-agent"]
+    PROXY["/api/agent/chat"]
+  end
+  subgraph Foundry["🧠 Foundry Agent (GPT-4.1-mini)"]
+    AGENT[Agent + 4 tools]
+  end
+  subgraph MCP["🔌 MCP Server (ACA)"]
+    MCPSRV[mcp-helpsphere OAuth]
+  end
+  subgraph Apex["🏢 apex-helpsphere"]
+    API[Tickets-Service .NET]
+    DB[(SQL tbl_tickets)]
+  end
+  subgraph RAG["📚 RAG (Lab Inter)"]
+    SEARCH[AI Search 8 PDFs]
+  end
+  subgraph Async["📨 Escalação assíncrona"]
+    SB[(Service Bus queue<br/>ticket-escalations)]
+    N8N[n8n workflow 7 nodes]
+    GRAPH[Teams via MS Graph]
+    SHEETS[Google Sheets]
+  end
+  TEAMS --> CS
+  WEB --> CS
+  VOZ --> STT --> CS
+  CS --> TTS --> VOZ
+  TOPIC --> HTTP --> PROXY --> AGENT
+  MCPDIR -.OAuth.-> MCPSRV
+  AGENT -- search_kb --> SEARCH
+  AGENT -- get_ticket --> MCPSRV --> API --> DB
+  AGENT -- escalate --> SB --> N8N --> GRAPH
+  N8N --> SHEETS
+```
 
-**Ticket 2 — Caso usando MCP HelpSphere:**
-- User: "Status do ticket 4521?"
-- Agent: chama get_ticket(4521) via MCP → responde com dados reais
+**Como ler o diagrama:**
 
-**Ticket 3 — Caso multilíngue:**
-- User em es: "Hola, no puedo acceder al sistema POS de la tienda."
-- Agent: detecta es → traduz → search_kb → responde em es com cita
+- **Copilot Studio** é a **porta** — toda interação começa aqui
+- **Foundry Agent** é o **cérebro** — recebe a pergunta e decide qual das 4 tools usar (`search_kb`, `get_ticket`, `translate`, `escalate_ticket`)
+- **Service Bus** é o **único caminho assíncrono** — separa "responder ao usuário agora" de "humano resolver depois"
 
-**Ticket 4 — Caso de voz:**
-- User envia áudio (ou liga simulado) → STT → agent → TTS → áudio resposta
+### Matriz: qual ticket exercita qual peça
 
-**Ticket 5 — Caso escalado para tier 2:**
-- User: "Lojista pediu reembolso de R$ 50.000 que não está claro nas políticas. Pode aprovar?"
-- Agent: search_kb → confidence 0.3 → escalate_ticket → Service Bus → n8n → Teams notifica Marina + Sheets append
+| Componente | T1 FAQ | T2 MCP | T3 Multilíngue | T4 Voz | T5 Escalação |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Copilot Studio | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Speech STT/TTS | — | — | — | ✅ | — |
+| Function `func-helpsphere-agent` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Foundry Agent (LLM) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Tool `search_kb` (AI Search) | ✅ | — | ✅ | parcial | ✅ tenta antes |
+| Tool `get_ticket` (MCP) | — | ✅ | — | — | — |
+| MCP Server | — | ✅ | — | — | — |
+| apex-helpsphere SQL | — | ✅ leitura | — | — | — |
+| Tool `escalate_ticket` | — | — | — | — | ✅ |
+| Service Bus queue | — | — | — | — | ✅ |
+| n8n workflow | — | — | — | — | ✅ |
+| MS Graph → Teams | — | — | — | — | ✅ |
+| Google Sheets | — | — | — | — | ✅ |
+| App Insights audit | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-> Vídeo do professor demonstra todos os 5 com screen recording.
+> **Propriedade pedagógica:** cada ticket adiciona **uma e somente uma** camada nova. Se você entender T1 (RAG), T2 já é incremental (substitui search_kb por MCP), e assim por diante.
 
-## Passo 8.3 — Cleanup
+## Passo 8.3 — Demo dos 5 tickets (com "onde olhar")
+
+Para cada ticket abaixo, abra **3 abas no navegador**:
+
+1. **Copilot Studio Test pane** (`https://copilotstudio.microsoft.com` → seu agente → **Test**)
+2. **Portal Azure** (`https://portal.azure.com`)
+3. **Foundry portal** (`https://ai.azure.com` → seu project → Agents → seu agent → Threads)
+
+### Ticket 1 — FAQ simples auto-resolvido
+
+**Pergunta:** copie e cole no Copilot Studio Test pane:
+
+> Qual horário de atendimento do suporte?
+
+**Resposta esperada (em ~2s):** texto citando `faq_horario_atendimento.pdf`, ex: *"O suporte HelpSphere atende de segunda a sexta das 8h às 18h, conforme [faq_horario_atendimento.pdf]."*
+
+**Recursos exercitados nesta jogada:**
+
+- Copilot Studio → Function → Foundry Agent → Tool `search_kb` → AI Search
+
+**Onde ver o caminho ao vivo:**
+
+1. **Foundry portal** → seu agent → **Threads** → última conversa → expandir o turn → seção **Tool calls** mostra `search_kb({"query":"horario atendimento"})` e o resultado retornado
+2. **Portal Azure** → resource `appi-helpsphere-final` → blade **Logs** → execute:
+
+   ```kql
+   requests
+   | where name == "agent/chat"
+   | top 1 by timestamp desc
+   | project timestamp, duration, customDimensions
+   ```
+
+   A linha mostra `duration ≈ 1500ms`, `customDimensions.tool_called = "search_kb"`
+
+3. **Portal Azure** → resource `srch-helpsphere` (Lab Inter) → **Search explorer** → query `"horário atendimento"` → mostra o chunk vindo do PDF (campo `content`)
+
+> **Observação:** estamos **reusando o índice do Lab Inter**. RAG não foi recriado — é tijolo emprestado da Parte 10 do Lab Anterior.
+
+### Ticket 2 — Consulta dados HelpSphere via MCP
+
+**Pergunta:**
+
+> Status do ticket 4521?
+
+**Resposta esperada:** dados reais do banco, ex: *"Ticket #4521 — Status: Em análise · Lojista: Marília Tech · Aberto há 2 dias · Categoria: Devolução."*
+
+**Recursos exercitados:**
+
+- Copilot Studio → Function → Foundry Agent → Tool `get_ticket` → MCP Server (OAuth Entra) → apex-helpsphere Tickets-Service .NET → SQL `tbl_tickets`
+
+**Onde ver o caminho ao vivo:**
+
+1. **Foundry portal** → agent → Threads → último turn → Tool calls → `get_ticket({"id":4521})` com payload de retorno
+2. **Portal Azure** → Container App `aca-mcp-helpsphere` → blade **Log stream** → linha aparece em real-time:
+
+   ```
+   [tool] name=get_ticket id=4521 tenant=marilia user=alex@apexretail.com
+   ```
+
+3. **Portal Azure** → SQL Database `sql-helpsphere-saas` → **Query editor** → executar:
+
+   ```sql
+   SELECT id, subject, status, tenant_id FROM tbl_tickets WHERE id = 4521;
+   ```
+
+   Resultado bate com a resposta do agent — é o **mesmo banco**.
+
+> **Diferença chave RAG vs MCP:** RAG (`search_kb`) lê **documento estático** (PDF indexado). MCP (`get_ticket`) lê **sistema vivo** (banco transacional). Mesmo agent, ferramentas com naturezas diferentes.
+
+### Ticket 3 — Caso multilíngue (espanhol)
+
+**Pergunta (em espanhol):**
+
+> Hola, no puedo acceder al sistema POS de la tienda.
+
+**Resposta esperada:** texto em espanhol, citando troubleshooting POS do KB, ex: *"Hola. Para problemas de acceso al POS, intenta los siguientes pasos según [troubleshooting_pos.pdf]: ..."*
+
+**Recursos exercitados:**
+
+- Mesmo caminho do T1, com tool `translate` adicional na saída
+
+**Onde ver o caminho ao vivo:**
+
+1. **Foundry portal** → System prompt do agent (blade **Instructions**) → procure as linhas:
+
+   ```
+   - Detect input language and respond in the SAME language
+   - Tool search_kb returns Portuguese chunks; translate to user language before responding
+   ```
+
+2. **Portal Azure** → App Insights → blade **Logs** → query:
+
+   ```kql
+   customEvents
+   | where name == "agent_invocation"
+   | extend lang = tostring(customDimensions.detected_language)
+   | top 5 by timestamp desc
+   ```
+
+   Linha do T3 mostra `lang=es`
+
+> **Insight:** multilíngue **não é feature técnica nova** — é instrução pro LLM. Não criamos código novo entre T1 e T3.
+
+### Ticket 4 — Canal de voz (STT + TTS)
+
+**Pré-requisito:** abra `https://speech.microsoft.com` → resource `speech-helpsphere` → **Speech-to-text** test pane.
+
+**Demo passo a passo:**
+
+1. **Speech Studio** → tab **Speech-to-text** → clique no microfone → fale:
+
+   > Qual o procedimento de devolução pra cliente?
+
+2. Texto transcrito aparece em <2s. Copie.
+3. **Copilot Studio Test pane** → cole o texto transcrito → envie → resposta em texto chega.
+4. Copie a resposta.
+5. **Speech Studio** → tab **Text-to-speech** → cole a resposta → selecione voz `pt-BR-FranciscaNeural` → **Play** → áudio toca.
+
+**Recursos exercitados:**
+
+- Speech STT (entrada) → Copilot Studio → Function → Foundry Agent → Tool `search_kb` → resposta texto → Speech TTS (saída)
+
+**Onde ver o caminho ao vivo:**
+
+- **Portal Azure** → `speech-helpsphere` → blade **Metrics** → métrica `Audio Seconds Transcribed` (sobe na hora da demo)
+
+> **Pergunta reflexiva:** se você tirar o Speech daqui, o que muda no agent? **Nada**. O agent recebe texto e devolve texto. Speech é só **decoração de borda** — em produção viria de Teams Voice, IVR ou app móvel.
+
+### Ticket 5 — Escalação assíncrona (o ticket mais rico)
+
+**Pergunta:**
+
+> Lojista pediu reembolso de R$ 50.000 que não está claro nas políticas. Pode aprovar?
+
+**Resposta esperada (em ~2s):** *"Esse caso requer aprovação especial. Vou escalar para a Marina (líder de suporte tier 2), você terá retorno em até 1 hora. ID da escalação: #esc-N."*
+
+> **Importante:** repare que o agent **respondeu na hora** ao usuário. Em paralelo, uma cascata assíncrona começa.
+
+**Setup ANTES do envio (abra 4 abas):**
+
+1. **Copilot Studio Test pane** (já aberta)
+2. **Portal Azure** → Service Bus namespace `sb-helpsphere` → queue `ticket-escalations` → **Service Bus Explorer** → modo **Peek**
+3. **n8n UI** (`https://ca-n8n-azirion.<random>.azurecontainerapps.io`) → workflow `Escalation` → tab **Executions**
+4. **Microsoft Teams** → canal `HelpSphere Escalations` (onde Marina recebe)
+
+**Demo (sequência cronometrada, ~30s de show):**
+
+| Tempo | Onde olhar | O que ver |
+|-------|-----------|-----------|
+| **0s** | Copilot | Envia a pergunta |
+| **2s** | Copilot | Resposta "Vou escalar pra Marina..." aparece |
+| **3s** | Service Bus Explorer (refresh) | Aparece **1 mensagem** na queue. Clique nela → payload JSON: `{"ticket_id":..., "tenant":..., "reason":"..."}` |
+| **5s** | n8n Executions (refresh) | Nova execution verde aparece. Clique → expanda os 7 nodes:<br>1. **AMQP Trigger** (consumiu da queue) ✅<br>2. Parse payload ✅<br>3. Build Teams message ✅<br>4. HTTP POST Graph (notificou Marina) ✅<br>5. Build Sheets row ✅<br>6. Sheets append ✅<br>7. Ack ✅ |
+| **8s** | Teams Marina (refresh) | Mensagem do bot aparece: *"Ticket #N escalado — prioridade alta"* com botões `Aceitar` `Rejeitar` |
+| **12s** | Google Sheets `escalations` tab | Linha nova com timestamp, tenant, motivo |
+
+**Recursos exercitados (todos):**
+
+- Copilot Studio → Function → Foundry Agent → Tool `escalate_ticket` → Service Bus queue → n8n workflow (7 nodes) → MS Graph (Teams) + Google Sheets
+
+> **Punchline pedagógica:**
+>
+> - O usuário pegou resposta em **2 segundos**.
+> - Marina foi notificada **8 segundos depois** (acontece em paralelo).
+> - Se Marina não tivesse Teams, **Sheets já tem o registro**.
+> - Se o n8n cair, a mensagem **fica na Service Bus queue até retry** (TTL padrão 14 dias).
+>
+> **Esse desacoplamento é o motivo de usar mensageria** em vez de mais um HTTP call síncrono.
+
+## Passo 8.4 — Os 3 "aha moments" do Lab Final
+
+Antes de partir pro cleanup, fixe estes 3 conceitos:
+
+### 1. "Tool é só uma função que o LLM decide chamar"
+
+Abra **Foundry portal** → seu agent → blade **Tools** → veja as 4 tools registradas:
+
+```json
+[
+  {"name": "search_kb", "description": "Busca KB Apex para FAQs e troubleshooting..."},
+  {"name": "get_ticket", "description": "Consulta dados HelpSphere via MCP..."},
+  {"name": "translate", "description": "Traduz texto entre idiomas..."},
+  {"name": "escalate_ticket", "description": "Escala ticket pro humano via Service Bus..."}
+]
+```
+
+A descrição é em **natural language**. O LLM lê isso e decide qual usar com base na pergunta. **Não tem `if/else` em código nosso** — toda lógica de roteamento mora no LLM.
+
+### 2. "Mesma stack, três contratos diferentes pra três naturezas diferentes"
+
+| Contrato | Quem chama quem | Natureza | Quando usar |
+|----------|-----------------|----------|-------------|
+| **Function HTTP** | Copilot → Function → Foundry Agent | Síncrono request/response | Latência baixa exigida (<3s) |
+| **MCP** | Foundry Agent → MCP Server → HelpSphere | Síncrono **com OAuth + descoberta de tools** | Quando o LLM precisa descobrir capacidades dinamicamente |
+| **Service Bus** | Foundry Agent → SB queue → n8n | **Assíncrono** com garantia de entrega | Quando o consumidor pode demorar / pode falhar / não pode bloquear o usuário |
+
+> **Erro comum:** usar Function HTTP onde precisa de Service Bus. Se o n8n leva 5s para responder, o usuário trava esperando. Service Bus desacopla.
+
+### 3. "Reuso, não rebuild"
+
+| Lab | O que deu pra este | O que este reusou |
+|-----|---------------------|-------------------|
+| **apex-helpsphere** (base SaaS) | SQL + API + Auth Entra + Frontend | Lab Final consultou banco via MCP |
+| **Lab Intermediário** | RAG (AI Search index com 8 PDFs Apex) | Lab Final exercitou via tool `search_kb` |
+| **Lab Final** | Copilot + Foundry + MCP + Speech + SB + n8n | (no Lab Avançado você fecha a história: como essa stack vira **produção real** — governança, custo, safety, runbook, lifecycle) |
+
+> **Nenhum lab inventou do zero.** Você pode reaplicar essa arquitetura em outro domínio trocando o KB e os tools — a costura permanece.
+
+## Passo 8.5 — Cleanup
 
 > **Cleanup — OPCIONAL:**
 > Se você vai fazer Lab Avançado em sequência, **mantenha** `rg-lab-intermediario` rodando.
