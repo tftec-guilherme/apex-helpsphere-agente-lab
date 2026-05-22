@@ -1184,6 +1184,160 @@ Invoke-RestMethod -Method Post -Uri "https://$McpUrl/mcp" `
 
 Deve retornar dados do ticket 1 (do seed do HelpSphere).
 
+### Troubleshooting — `tools/call get_ticket` retorna erro SQL
+
+Se o `tools/list` retornou as 4 tools (auth OAuth OK + MCP transport OK) mas o `tools/call get_ticket` retorna erro tipo:
+
+```
+SQLException: Login failed for user '<token-identified principal>'.
+```
+
+ou
+
+```
+pyodbc.ProgrammingError: ('42S02', "[42S02] [Microsoft][ODBC Driver 18 for SQL Server][SQL Server]
+Cannot find the object 'tbl_tickets' because it does not exist or you do not have permission.")
+```
+
+… significa que a **User-Assigned Managed Identity `mi-helpsphere-ia`** (anexada ao Container App no Passo 4.6) **conseguiu obter token AAD** mas o SQL Server `sql-helpsphere-saas` **não tem um user mapeado** para essa MI no DB `helpsphere`, ou tem o user mas sem grants nas 3 tabelas (`tbl_tickets`, `tbl_comments`, `tbl_tenants`).
+
+#### Por que isso acontece
+
+O `azd up` do `apex-helpsphere` (Bloco 2 — SaaS) cria o `mi-helpsphere-saas-aca-identity` e dá grants para os Container Apps **do próprio SaaS** (tickets-service + dashboard). A `mi-helpsphere-ia` (que vamos usar aqui no Lab Final para o MCP Server) é uma identity **separada criada no Lab Intermediário** (`rg-lab-intermediario`) — ela existe no Entra ID mas **nunca foi adicionada** ao DB `helpsphere` do SaaS, porque na hora do Bloco 2 ainda não existia.
+
+Fix: criar a `mi-helpsphere-ia` como user externo no DB + grants nas 3 tabelas que o MCP Server precisa.
+
+#### Fix via Portal Azure — Query Editor do SQL DB
+
+**Pré-requisito:** você precisa estar logado no Portal Azure com uma conta que é membro do **AAD admin group do SQL Server** (geralmente `helpsphere-sql-admins-saas` criado no Bloco 2). Sem isso, o Query Editor retorna `Login failed` antes mesmo de aceitar comandos.
+
+1. Barra superior do Portal → buscar **`sql-helpsphere-saas`** (server, não database) → clicar
+2. Painel lateral → blade **SQL databases** → clicar no DB **`helpsphere`**
+3. No DB `helpsphere`, painel lateral → blade **Query editor (preview)**
+4. Login → **Active Directory authentication** → **Continue as `<seu@email>`**
+5. Aguardar 10-30s para conectar
+6. Colar e executar em sequência (3 blocos abaixo, um por vez via botão **Run**):
+
+**Bloco 1 — Criar user da MI (1 vez só, idempotente via guard `IF NOT EXISTS`):**
+
+```sql
+IF DATABASE_PRINCIPAL_ID('mi-helpsphere-ia') IS NULL
+    CREATE USER [mi-helpsphere-ia] FROM EXTERNAL PROVIDER;
+GO
+```
+
+> **Linha de output esperada:** `Commands completed successfully.` (sem rows).
+
+**Bloco 2 — Atribuir grants em tbl_tickets + tbl_comments + tbl_tenants (idempotente):**
+
+```sql
+-- tbl_tickets: read + write (alvo das 4 tools)
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tbl_tickets TO [mi-helpsphere-ia];
+
+-- tbl_comments: read + write (alvo do add_comment tool)
+GRANT SELECT, INSERT ON dbo.tbl_comments TO [mi-helpsphere-ia];
+
+-- tbl_tenants: read only (alvo de joins em get_ticket/list_tickets)
+GRANT SELECT ON dbo.tbl_tenants TO [mi-helpsphere-ia];
+GO
+```
+
+> **7 grants no total** — sem REVOKE prévio porque idempotência do GRANT garante que rodar 2x é no-op.
+
+**Bloco 3 — Validar grants aplicados via `sys.database_permissions`:**
+
+```sql
+SELECT
+    o.name AS table_name,
+    dp.permission_name,
+    dp.state_desc
+FROM sys.database_permissions dp
+JOIN sys.objects o ON dp.major_id = o.object_id
+JOIN sys.database_principals u ON dp.grantee_principal_id = u.principal_id
+WHERE u.name = 'mi-helpsphere-ia'
+ORDER BY o.name, dp.permission_name;
+```
+
+> **Saída esperada (7 linhas):**
+>
+> ```
+> table_name      | permission_name | state_desc
+> ----------------+-----------------+-----------
+> tbl_comments    | INSERT          | GRANT
+> tbl_comments    | SELECT          | GRANT
+> tbl_tenants     | SELECT          | GRANT
+> tbl_tickets    | DELETE          | GRANT
+> tbl_tickets    | INSERT          | GRANT
+> tbl_tickets    | SELECT          | GRANT
+> tbl_tickets    | UPDATE          | GRANT
+> ```
+
+<!-- screenshot: passo-4.9-troubleshooting-sql-query-editor.png -->
+
+#### Smoke test SQL antes de re-tentar tools/call MCP
+
+Antes de voltar pro PowerShell e re-rodar `tools/call get_ticket id=1`, valide direto no Query Editor que dados existem e estrutura está OK (3 SELECTs + 1 INSERT):
+
+**Query 1 — Confirma que tabela tem dados:**
+
+```sql
+SELECT TOP 5 ticket_id, subject, status, category
+FROM dbo.tbl_tickets
+ORDER BY ticket_id;
+```
+
+> Esperado: 5 linhas com tickets pt-BR do seed (`ticket_id` 1..5).
+
+**Query 2 — Confirma filtro por status (alvo do `list_tickets` tool):**
+
+```sql
+SELECT COUNT(*) AS total_open
+FROM dbo.tbl_tickets
+WHERE status = 'Open';
+```
+
+> Esperado: número >0 (depende de quantos foram resolvidos manualmente).
+
+**Query 3 — Confirma SELECT por id (alvo direto do `tools/call get_ticket id=1`):**
+
+```sql
+SELECT ticket_id, subject, status, category, created_at, tenant_id
+FROM dbo.tbl_tickets
+WHERE ticket_id = 1;
+```
+
+> Esperado: 1 linha com o ticket #1 ("Devolução de geladeira fora do prazo de 7 dias do CDC" ou similar do seed pt-BR).
+
+**Smoke INSERT — Confirma write path (alvo do `add_comment` tool):**
+
+```sql
+INSERT INTO dbo.tbl_comments (ticket_id, comment, author, created_at)
+VALUES (1, 'Validação SQL Passo 4.9 troubleshooting', 'mi-helpsphere-ia', SYSUTCDATETIME());
+
+-- Confirma o INSERT
+SELECT TOP 1 comment_id, ticket_id, comment, author, created_at
+FROM dbo.tbl_comments
+WHERE ticket_id = 1
+ORDER BY created_at DESC;
+```
+
+> Esperado: 1 linha retornada com `comment_id` auto-gerado, ticket_id=1, e o texto/autor que você inseriu. Se falhar com `Cannot insert NULL into column 'created_at'`, ajuste o nome da coluna conforme schema real (`created_at` vs `created_dt` vs `data_criacao` — varia se seed customizado).
+
+Depois disso, volta pro PowerShell e re-roda o bloco `$CallBody` do `tools/call get_ticket id=1` — deve retornar os dados.
+
+> **Alternativa via Azure CLI / sqlcmd (Linux/Mac/WSL — bash):**
+>
+> ```bash
+> # 🔑 Capture variáveis
+> SQL_SERVER=$(az sql server list --resource-group rg-helpsphere-saas --query "[0].fullyQualifiedDomainName" -o tsv)
+> SQL_TOKEN=$(az account get-access-token --resource https://database.windows.net --query accessToken -o tsv)
+>
+> # Executa os 3 blocos via sqlcmd com AAD token
+> sqlcmd -S $SQL_SERVER -d helpsphere -G --access-token "$SQL_TOKEN" -i create_mi_grants.sql
+> ```
+
+> **Nota arquitetural — por que isso não está automatizado:** o `sql_init.py` do Bloco 2 (SaaS) só conhece as MIs criadas pelo próprio Bicep do SaaS (`helpsphere-saas-aca-identity` + `helpsphere-saas-aca-tickets-identity`). Como `mi-helpsphere-ia` é criada no Lab Intermediário (`rg-lab-intermediario`) — outro RG, outro azd env — não há postdeploy hook que ligue as duas. Tech debt Story 06.41 (backlog): incluir provisioning de `mi-helpsphere-ia` no `sql_init.py` quando flag `enable_lab_final=true`.
+
 ## Passo 4.10 — Atualizar Function App `func-agent-runner` com URL e token MCP
 
 ```powershell
