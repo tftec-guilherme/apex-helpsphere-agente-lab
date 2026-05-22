@@ -4,10 +4,9 @@
 
 **🎯 Entrypoint pedagógico do Lab Final D06**
 
-[![Status](https://img.shields.io/badge/status-v0.4.2--n8n--first--cap11--opcional-success)](./CHANGELOG.md)
+[![Status](https://img.shields.io/badge/status-v0.4.3--n8n--first-success)](./CHANGELOG.md)
 [![Lifecycle](https://img.shields.io/badge/lifecycle-~9h-orange)](#custos-esperados)
 [![Cost](https://img.shields.io/badge/custo-R%24%20100--180-yellow)](./README.md#-custos-esperados-lab-completo)
-[![Optional Cap](https://img.shields.io/badge/opcional-cap%2011%20Bot%20Services-blue)](./docs/11-bot-services-opcional.md)
 
 📘 [**Guia Portal completo — entry-point único**](./docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md)
 
@@ -17,7 +16,7 @@
 
 > Bem-vindo. Este é o **entrypoint** do Lab Final (agente HelpSphere production-grade) da Disciplina 06. Vai te guiar pelo Portal Azure + AI Foundry portal + Copilot Studio + n8n UI passo-a-passo construindo um agente conversacional que classifica tickets, busca conhecimento (RAG) e escala via Service Bus + n8n + Google Sheets.
 >
-> `version-anchor: Q2-2026` · `status: v0.4.2-n8n-first-cap11-opcional`
+> `version-anchor: Q2-2026` · `status: v0.4.3-n8n-first`
 
 ---
 
@@ -31,8 +30,6 @@ Lab production-grade (revisão 2026-05-19). Os **10 capítulos `docs/`** canôni
 - ✅ Custo estimado: R$ 100-180/lab único ([README.md](./README.md#custos-esperados-lab-completo))
 - ✅ Tempo realista: ~9h ponta-a-ponta (lifecycle estimado provision + setup + smoke)
 
-**+1 capítulo opcional:** [`docs/11-bot-services-opcional.md`](./docs/11-bot-services-opcional.md) — Azure Bot Service como alternativa ao Copilot Studio (Cap 03) para canais multi-platform (WhatsApp / SMS / Slack / Direct Line). ~45min se executado. **Não exigido para concluir o Lab Final.**
-
 ### Extensões futuras (fora do escopo deste lab)
 
 Tópicos típicos de "IA no Azure 2026" que **NÃO** entram neste Lab Final, deixados como leitura/exploração independente para o aluno curioso:
@@ -43,7 +40,9 @@ Tópicos típicos de "IA no Azure 2026" que **NÃO** entram neste Lab Final, dei
 - **Custom Document Intelligence** — modelos custom treinados em dataset próprio (este lab usa apenas `prebuilt-layout`).
 - **Anomaly Detector** — caso de uso natural em ITSM: anomalia em volume de tickets por categoria ou tenant.
 
-Esses tópicos podem ser cobertos em disciplinas separadas ou aprofundados por conta própria após concluir os caps 01-10 + (opcional) cap 11.
+Esses tópicos podem ser cobertos em disciplinas separadas ou aprofundados por conta própria após concluir os caps 01-10.
+
+> **Bot Service como alternative pattern enterprise:** o capítulo Bot Service (multi-canal WhatsApp / SMS / Slack / Direct Line) foi realocado para o **Lab Avançado** (`apex-helpsphere-prod-lab/docs/11-bot-services-opcional.md`) — pattern enterprise multi-canal alinha melhor com o discurso CI/CD + Governance + FinOps do Lab Avançado.
 
 Roadmap futuro: screenshots Q2-2026 capturados em execução real e smoke test fim-a-fim documentado.
 
@@ -131,13 +130,11 @@ Depois de validar os 9 pré-requisitos acima, **siga os capítulos `docs/` em or
 | [08 — Service Bus + Sheets](./docs/08-service-bus-google-sheets.md) | ~1h | Service Bus Standard com Topic + 2 Subscriptions (fan-out n8n + Sheets) + Google Sheets connector | Service Bus Standard `sb-helpsphere-final` + Google Sheet |
 | [09 — Cleanup obrigatório](./docs/09-cleanup-obrigatorio.md) | ~15min | **CRÍTICO** — deletar tudo do `rg-lab-final` antes de fechar o lab (PostgreSQL B1ms cobra R$ ~60/mês parado) | nenhum (deleção) |
 | [10 — Troubleshooting](./docs/10-troubleshooting.md) | consulta | Cheat sheet com 75+ surpresas catalogadas + decision tree + comandos diagnósticos | — |
-| [11 — Bot Services (OPCIONAL)](./docs/11-bot-services-opcional.md) | ~45min | Alternativa multi-canal ao Copilot Studio (WhatsApp/SMS/Slack/Direct Line) | Azure Bot `bot-helpsphere-final` Free F0 |
 
 **Ordem de execução cravada** (não pule capítulos — dependências existem):
 
 ```
 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → smoke E2E → 09 (cleanup)
-                                            └─ opcional → 11
 ```
 
 > **Dica:** cap 10 é cheat sheet sob demanda — não precisa ler do início ao fim. Use Ctrl+F com a mensagem exata do erro quando algo travar.

@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [Unreleased]
+
+### Removed
+
+- `docs/11-bot-services-opcional.md` (280L) — capítulo Bot Services realocado para o **Lab Avançado** (`apex-helpsphere-prod-lab`). Racional pedagógico: pattern enterprise multi-canal (WhatsApp / SMS / Slack / Direct Line) alinha melhor com o discurso CI/CD + Content Safety + Governance + FinOps do Lab Avançado do que com o discurso Foundry + Copilot Studio + MCP + Speech + n8n do Lab Final. Aluno que precisa de canais extra-Teams agora encontra Bot Service como **alternative pattern enterprise sem custo APIM Developer** no contexto adequado. [Story 06.37]
+- `PARA-O-ALUNO.md`: badge "Optional Cap" (L10), parágrafo "+1 capítulo opcional" (L34), linha da tabela de capítulos (L134), e ramo `└─ opcional → 11` do bloco de execução. Status badge atualizado de `v0.4.2-n8n-first-cap11-opcional` para `v0.4.3-n8n-first`.
+- `README.md`: **no-op confirmado** — grep `bot-services|Bot Service|11-bot` retornou 0 hits (já estava limpo).
+- `docs/00-Lab_Final_Agente_Workflow_Guia_Portal.md`: **no-op confirmado** — grep retornou 0 hits.
+
+### Notes
+
+- Sister change: `apex-helpsphere-prod-lab` ganha `docs/11-bot-services-opcional.md` em versão condensada (~80-130L) na mesma Story 06.37.
+- Sinergia com Story 06.36 (APIM remove do Lab Avançado): Bot Service entra como "alternativa enterprise multi-canal sem o custo APIM Developer R$ 250/mês".
+
+---
+
 ## [v0.4.1-foundry-v2-sdk] — 2026-05-17
 
 ### Changed — Upgrade `azure-ai-projects` 1.0.0b9 (preview) → 2.1.0 GA + adoção `azure-ai-agents` v1 GA
