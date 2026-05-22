@@ -24,7 +24,7 @@
 ## Pré-requisitos
 
 - ✅ Lab Intermediário concluído (entendimento de RAG, Function App, métricas)
-- ✅ `rg-helpsphere-ia` ainda existindo com Foundry Hub
+- ✅ `rg-lab-intermediario` ainda existindo com Foundry Hub
 - ✅ Quota Azure OpenAI com `gpt-4.1-mini` deployado (do Lab Intermediário) ou re-deploy neste lab
 - ✅ Conta Microsoft 365 com permissão de criar agentes em Copilot Studio (ou trial 30 dias)
 - ✅ Permissão para criar Service Principal e App Registration em Entra ID
@@ -849,25 +849,25 @@ Deve listar `mcp-helpsphere`.
    - **Region:** `East US 2`
 3. Tab **Monitoring**:
    - **Logs destination:** `Azure Log Analytics`
-   - **Log Analytics workspace:** selecione `log-helpsphere-ia` do RG `rg-helpsphere-ia` (compartilhado, criado no Bloco 2)
+   - **Log Analytics workspace:** selecione `log-helpsphere-ia` do RG `rg-lab-intermediario` (compartilhado, criado no Bloco 2)
 4. Tab **Networking**: deixe defaults (managed network, public)
 5. **Review + create** → **Create**
 6. Aguardar provisioning ~3-5min até **Succeeded**
 
 <!-- screenshot: passo-4.4-criar-aca-environment-portal.png -->
 
-> **Atenção:** o ACA Environment usa o Log Analytics Workspace do `rg-helpsphere-ia` (compartilhado, criado no Bloco 2). Se ainda não criou esse RG/workspace, faça o Bloco 2 antes.
+> **Atenção:** o ACA Environment usa o Log Analytics Workspace do `rg-lab-intermediario` (compartilhado, criado no Bloco 2). Se ainda não criou esse RG/workspace, faça o Bloco 2 antes.
 
 **Opção B — via Azure CLI (alternativa mais rápida) — PowerShell:**
 
 ```powershell
 $WorkspaceId = az monitor log-analytics workspace show `
-  --resource-group rg-helpsphere-ia `
+  --resource-group rg-lab-intermediario `
   --workspace-name log-helpsphere-ia `
   --query customerId -o tsv
 
 $WorkspaceKey = az monitor log-analytics workspace get-shared-keys `
-  --resource-group rg-helpsphere-ia `
+  --resource-group rg-lab-intermediario `
   --workspace-name log-helpsphere-ia `
   --query primarySharedKey -o tsv
 
@@ -885,12 +885,12 @@ az containerapp env create `
 
 ## Passo 4.5 — Atribuir RBAC AcrPull ao Managed Identity (do Bloco 2)
 
-A Managed Identity `mi-helpsphere-ia` (criada no Bloco 2 em `rg-helpsphere-ia`) precisa de role `AcrPull` no ACR `acrhelpsphere{rand}` (criado no Passo 1.2) para que o Container App consiga puxar a imagem privada.
+A Managed Identity `mi-helpsphere-ia` (criada no Bloco 2 em `rg-lab-intermediario`) precisa de role `AcrPull` no ACR `acrhelpsphere{rand}` (criado no Passo 1.2) para que o Container App consiga puxar a imagem privada.
 
 ```powershell
 $PrincipalId = az identity show `
   --name mi-helpsphere-ia `
-  --resource-group rg-helpsphere-ia `
+  --resource-group rg-lab-intermediario `
   --query principalId -o tsv
 
 $AcrName = az acr list -g rg-lab-final --query "[0].name" -o tsv
@@ -949,7 +949,7 @@ az role assignment create `
    - **Ingress traffic:** `Accepting traffic from anywhere`
    - **Target port:** `8080`
 6. Tab **Identity**:
-   - **User-assigned managed identity:** **+ Add** → selecionar `mi-helpsphere-ia` (do RG `rg-helpsphere-ia`, criado no Bloco 2)
+   - **User-assigned managed identity:** **+ Add** → selecionar `mi-helpsphere-ia` (do RG `rg-lab-intermediario`, criado no Bloco 2)
 7. Tab **Scaling**:
    - **Min replicas:** `0`
    - **Max replicas:** `1`
@@ -981,8 +981,8 @@ az role assignment create `
 >   --target-port 8080 \
 >   --ingress external \
 >   --registry-server $ACR_NAME.azurecr.io \
->   --registry-identity $(az identity show -n mi-helpsphere-ia -g rg-helpsphere-ia --query id -o tsv) \
->   --user-assigned $(az identity show -n mi-helpsphere-ia -g rg-helpsphere-ia --query id -o tsv) \
+>   --registry-identity $(az identity show -n mi-helpsphere-ia -g rg-lab-intermediario --query id -o tsv) \
+>   --user-assigned $(az identity show -n mi-helpsphere-ia -g rg-lab-intermediario --query id -o tsv) \
 >   --env-vars \
 >     HELPSPHERE_SQL_CONNECTION="$HELPSPHERE_SQL_CONN" \
 >     AZURE_TENANT_ID="<seu-tenant-id>" \
@@ -1274,7 +1274,7 @@ Atribui à Managed Identity `mi-helpsphere-ia` (do Bloco 2) o role `Cognitive Se
 # 🔑 Capture as variáveis (sessão nova? rode este bloco)
 $PrincipalId = az identity show `
   --name mi-helpsphere-ia `
-  --resource-group rg-helpsphere-ia `
+  --resource-group rg-lab-intermediario `
   --query principalId -o tsv
 
 $SpchId = az cognitiveservices account show -n spch-helpsphere -g rg-lab-final --query id -o tsv
@@ -2047,11 +2047,11 @@ Você vai gravar (ou observar via vídeo do professor) demo de 5 tickets.
 ## Passo 8.3 — Cleanup
 
 > **Cleanup — OPCIONAL:**
-> Se você vai fazer Lab Avançado em sequência, **mantenha** `rg-helpsphere-ia` rodando.
+> Se você vai fazer Lab Avançado em sequência, **mantenha** `rg-lab-intermediario` rodando.
 >
 > Se terminou:
 > ```powershell
-> az group delete --name rg-helpsphere-ia --yes --no-wait
+> az group delete --name rg-lab-intermediario --yes --no-wait
 > ```
 > **NÃO esqueça** — custo ~R$ 80-120/mês ativo.
 
@@ -2076,7 +2076,7 @@ Você vai gravar (ou observar via vídeo do professor) demo de 5 tickets.
 1. Acesse `https://copilotstudio.microsoft.com` → agent `HelpSphere Tier 1 Agent`
 2. Menu **Settings** → **Disable** (ou **Delete** se quiser remover)
 
-> **Atenção:** o `rg-helpsphere-ia` (Bloco 2) e o `func-helpsphere-rag` (Lab Intermediário) ainda existem e são consumidos no Lab Avançado. Não delete se for fazer o Lab Avançado em sequência.
+> **Atenção:** o `rg-lab-intermediario` (Bloco 2) e o `func-helpsphere-rag` (Lab Intermediário) ainda existem e são consumidos no Lab Avançado. Não delete se for fazer o Lab Avançado em sequência.
 >
 > Se você deletou `rg-lab-intermediario` ao final do Lab Inter, no Lab Avançado teremos que considerar isso — o Lab Avançado parametriza tudo via Bicep e re-provisiona.
 
