@@ -42,6 +42,8 @@ import logging
 import os
 
 from fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from helpsphere_db import HelpSphereDB
 
@@ -54,6 +56,29 @@ log = logging.getLogger("mcp-helpsphere")
 # do construtor — agora vive em env var OU em run_http_async()/http_app().
 mcp = FastMCP("helpsphere")
 db = HelpSphereDB(os.environ["HELPSPHERE_SQL_CONNECTION"])
+
+
+@mcp.custom_route("/", methods=["GET"])
+async def root_discovery(request: Request) -> JSONResponse:
+    """Endpoint de discovery para Copilot Studio MCP connector.
+
+    O Copilot Studio bate em `GET /` (raiz) ANTES de fazer POST `/mcp` —
+    se receber 404, falha com "Connector request failed: Não foi possível
+    recuperar os itens solicitados". Esta rota retorna 200 com metadata
+    indicando onde está o endpoint MCP real.
+
+    FastMCP serve o transport JSON-RPC em `/mcp/` (com trailing). Esta rota
+    apenas satisfaz o discovery do Copilot Studio.
+    """
+    return JSONResponse({
+        "name": "helpsphere",
+        "version": "1.0",
+        "protocol": "model-context-protocol",
+        "transport": "streamable-http",
+        "mcp_endpoint": "/mcp",
+        "tools_count": 4,
+        "description": "MCP Server HelpSphere — 4 tools sobre SQL DB tickets/comments/tenants",
+    })
 
 
 @mcp.tool()
