@@ -1358,7 +1358,7 @@ Reproduza o `greeting.mp3` — você deve ouvir a frase.
 
 ## Passo 5.5 — Integração com Copilot Studio (canal voz)
 
-Em produção, integraria com Azure Communication Services para receber chamadas. Para o lab demonstramos via API direta — o Copilot Studio chamará a Function no Passo 8.2 (Ticket 4 — caso de voz).
+Em produção, integraria com Azure Communication Services para receber chamadas. Para o lab demonstramos via API direta — o Copilot Studio chamará a Function no Passo 8.4 (Ticket 4 — caso de voz).
 
 **Você vai executar 5 ações em sequência:**
 
@@ -1475,7 +1475,7 @@ func azure functionapp publish $FuncAgentName --python
 
 Output esperado: `Deployment completed successfully` ao final do publish.
 
-> **Validação:** este passo apenas implementa o endpoint. Você vai testá-lo end-to-end no **Passo 8.2 — Ticket 4 (caso de voz)** através do Copilot Studio, que será integrado com a Function no **Passo 8.1**. Por enquanto, basta confirmar que o deploy completou sem erros (`Deployment completed successfully` no output do PowerShell).
+> **Validação:** este passo apenas implementa o endpoint. Você vai testá-lo end-to-end no **Passo 8.4 — Ticket 4 (caso de voz)** através do Copilot Studio, que será integrado com a Function no **Passo 8.1**. Por enquanto, basta confirmar que o deploy completou sem erros (`Deployment completed successfully` no output do PowerShell).
 
 ## ✅ Checkpoint Parte 5
 
@@ -1995,31 +1995,462 @@ Use o arquivo convertido no cURL.
 
 ## Passo 8.1 — Configurar Copilot Studio com Foundry Agent + MCP
 
+> **⚠️ Pre-flight obrigatório:** antes de adicionar a HTTP action no Copilot Studio, garanta que o Function App `func-helpsphere-agent-<rand>` tem **Managed Identity habilitada + RBAC no Foundry Project**. Sem essas 3 sub-etapas, todo `POST /api/agent/chat` retorna **HTTP 500** com `ClientAuthenticationError: Principal does not have access to API/Operation` (visível no Application Insights). O guia anterior (Passo 3.6) deixou o Function App provisionado mas **sem identity nem RBAC** — corrige-se aqui no Bloco 8 porque é onde o erro aparece (no momento da chamada do Copilot Studio).
+
+### Pre-flight 8.1.A — Habilitar System-Assigned Managed Identity no Function App
+
+**No Portal Azure:**
+
+1. Barra superior → buscar **`func-helpsphere-agent-<rand>`** → clicar
+2. Menu **Settings** → **Identity** → aba **System assigned**
+3. **Status:** alterar para `On` → **Save** → confirmar `Yes`
+4. Aguardar ~10s — vai aparecer **Object (principal) ID** (UUID `xxxxxxxx-xxxx-...`)
+5. **Anotar o Object (principal) ID** — usado para troubleshooting (não é o que recebe RBAC neste lab, ver 8.1.B abaixo)
+
+<!-- screenshot: passo-8.1-a-identity-system-assigned.png -->
+
+> **Por que System-Assigned se vamos usar User-Assigned?** Em **Flex Consumption** com User-Assigned MI já atrelada (foi feito no Bloco 4 para o `mi-helpsphere-ia` acessar Storage/ACR), o `DefaultAzureCredential` do SDK Python fica ambíguo sobre qual MI usar e levanta `ManagedIdentityCredential: No managed identity endpoint found` na primeira chamada. Habilitar System-Assigned força o runtime do Flex a injetar as env vars `IDENTITY_ENDPOINT` + `IDENTITY_HEADER` corretamente. A escolha de qual MI usar vem do 8.1.B abaixo.
+
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
+>
+> ```bash
+> az functionapp identity assign \
+>   --name $FUNC_AGENT_NAME \
+>   --resource-group rg-lab-final
+> ```
+
+### Pre-flight 8.1.B — Setar `AZURE_CLIENT_ID` (desambigua qual MI usar)
+
+A Function App tem **2 Managed Identities** atreladas (System-Assigned habilitada em 8.1.A + User-Assigned `mi-helpsphere-ia` herdada do Bloco 2). O `DefaultAzureCredential` precisa de uma pista explícita sobre qual usar — sem isso, escolhe aleatoriamente e a chain falha.
+
+Capture o `clientId` da User-Assigned MI **antes** de configurar o App Setting:
+
+```powershell
+# 🔑 Capture o clientId da User-Assigned mi-helpsphere-ia (sessão nova? rode este bloco)
+$ClientId = az identity show `
+  --name mi-helpsphere-ia `
+  --resource-group rg-lab-intermediario `
+  --query clientId -o tsv
+
+Write-Host "ClientId mi-helpsphere-ia: $ClientId"
+```
+
+**No Portal Azure:**
+
+1. Function App `func-helpsphere-agent-<rand>` → menu **Settings** → **Environment variables** → aba **App settings**
+2. **+ Add**:
+   - **Name:** `AZURE_CLIENT_ID`
+   - **Value:** `<colar o $ClientId capturado acima>`
+3. **Apply** (botão no topo) → **Confirm**
+4. Aguardar restart automático ~30s
+
+<!-- screenshot: passo-8.1-b-azure-client-id-appsetting.png -->
+
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
+>
+> ```bash
+> CLIENT_ID=$(az identity show \
+>   --name mi-helpsphere-ia \
+>   --resource-group rg-lab-intermediario \
+>   --query clientId -o tsv)
+>
+> az functionapp config appsettings set \
+>   --name $FUNC_AGENT_NAME \
+>   --resource-group rg-lab-final \
+>   --settings AZURE_CLIENT_ID="$CLIENT_ID"
+> ```
+
+### Pre-flight 8.1.C — Atribuir role `Foundry User` no PROJECT scope
+
+Mesmo com identity desambiguada, o token gerado precisa ter permissão no **Project** do Foundry (`aifproj-helpshere-rag`) — não basta role na conta AIServices pai. O role correto para data plane do Foundry Agent Service v2 GA é **`Foundry User`** (dataActions `Microsoft.CognitiveServices/*` — cobre `AIServices/agents/*` que o SDK precisa).
+
+> **❌ Não use estes roles** — são legacy e NÃO cobrem as data actions do Foundry Agent Service v2 GA:
+> - `Azure AI Developer` (dataActions só cobrem `OpenAI/SpeechServices/ContentSafety/MaaS` — falta `AIServices/agents/*`)
+> - `Azure AI Administrator` (control plane apenas, sem data actions)
+> - `Cognitive Services User` (não cobre AIServices)
+> - "Azure AI User" (**não existe** como role built-in)
+
+Capture o `principalId` da User-Assigned MI:
+
+```powershell
+# 🔑 Capture o principalId da User-Assigned mi-helpsphere-ia
+$PrincipalId = az identity show `
+  --name mi-helpsphere-ia `
+  --resource-group rg-lab-intermediario `
+  --query principalId -o tsv
+
+Write-Host "PrincipalId mi-helpsphere-ia: $PrincipalId"
+```
+
+**No Portal Azure:**
+
+1. Barra superior → buscar **`aihub-apex-prod`** → clicar no recurso (kind = **AIServices**)
+2. No painel lateral, expandir **Projects** → clicar em **`aifproj-helpshere-rag`** (entra na página do project)
+3. Menu **Resource Management** → **Access control (IAM)**
+4. **+ Add** → **Add role assignment**
+5. Aba **Role:** procurar e selecionar **`Foundry User`** → **Next**
+6. Aba **Members:**
+   - **Assign access to:** `Managed identity`
+   - **+ Select members** → painel lateral → **Managed identity:** `User-assigned managed identity` → procurar **`mi-helpsphere-ia`** → **Select**
+7. **Review + assign** → **Review + assign** (botão final)
+8. Aguardar ~30s-60s para propagação RBAC data plane
+
+<!-- screenshot: passo-8.1-c-rbac-foundry-user-project.png -->
+
+> **Atenção scope:** o role TEM que ser no **project** (`aihub-apex-prod/projects/aifproj-helpshere-rag`), não na conta pai (`aihub-apex-prod`). Atribuir na conta pai retorna `Principal does not have access to API/Operation` mesmo com role correta — é o erro mais comum ao seguir docs antigas que mostram só o scope da account.
+
+> **Alternativa via Azure CLI — funciona apenas com REST PUT direto** (o `az role assignment create` retorna `MissingSubscription` falsamente em projects do Foundry, bug do CLI 2.61+):
+>
+> ```bash
+> TOKEN=$(az account get-access-token --query accessToken -o tsv)
+> PRINCIPAL_ID=$(az identity show -n mi-helpsphere-ia -g rg-lab-intermediario --query principalId -o tsv)
+> SUB_ID=$(az account show --query id -o tsv)
+> ROLE_DEF_ID="/subscriptions/${SUB_ID}/providers/Microsoft.Authorization/roleDefinitions/53ca6127-db72-4b80-b1b0-d745d6d5456d"  # Foundry User
+> PROJECT_SCOPE="/subscriptions/${SUB_ID}/resourceGroups/rg-lab-intermediario/providers/Microsoft.CognitiveServices/accounts/aihub-apex-prod/projects/aifproj-helpshere-rag"
+> RA_NAME=$(python -c "import uuid; print(uuid.uuid4())")
+>
+> curl -X PUT \
+>   "https://management.azure.com${PROJECT_SCOPE}/providers/Microsoft.Authorization/roleAssignments/${RA_NAME}?api-version=2022-04-01" \
+>   -H "Authorization: Bearer $TOKEN" \
+>   -H "Content-Type: application/json" \
+>   -d "{\"properties\":{\"roleDefinitionId\":\"${ROLE_DEF_ID}\",\"principalId\":\"${PRINCIPAL_ID}\",\"principalType\":\"ServicePrincipal\"}}"
+> ```
+
+### Pre-flight 8.1.D — Stop + Start (NÃO Restart) no Function App
+
+**Crítico em Flex Consumption:** o botão **Restart** do portal (e `az functionapp restart`) faz apenas **soft restart** — o host reinicia mas workers Python já carregados mantêm o cliente `DefaultAzureCredential` com **token cached**. Mesmo com RBAC novo aplicado, próxima invocação reutiliza o token velho (sem o data action) e falha de novo.
+
+Para forçar cold start completo e descartar credential cache:
+
+**No Portal Azure:**
+
+1. Function App `func-helpsphere-agent-<rand>` → menu **Overview**
+2. Botão **Stop** (topo da página) → confirmar → aguardar status `Stopped` (~30s)
+3. Botão **Start** → aguardar status `Running` (~30s)
+4. Aguardar mais ~30s para o cold start completar (primeira chamada será lenta)
+
+<!-- screenshot: passo-8.1-d-stop-start-flex-consumption.png -->
+
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
+>
+> ```bash
+> az functionapp stop  --name $FUNC_AGENT_NAME --resource-group rg-lab-final
+> sleep 10
+> az functionapp start --name $FUNC_AGENT_NAME --resource-group rg-lab-final
+> sleep 30
+> ```
+
+### Pre-flight 8.1.E — Validar HTTP 200 antes de configurar Copilot Studio
+
+```powershell
+# 🔑 Capture function key + URL
+$FuncName = "$FUNC_AGENT_NAME"
+$FuncKey  = az functionapp keys list --name $FuncName --resource-group rg-lab-final --query functionKeys.default -o tsv
+
+# Test
+curl.exe -X POST "https://${FuncName}.azurewebsites.net/api/agent/chat?code=${FuncKey}" `
+  -H "Content-Type: application/json" `
+  -d '{"message":"oi"}'
+```
+
+**Saída esperada (HTTP 200):**
+
+```json
+{"thread_id": "thread_xxxxxxxxxxxxxxxxxxxx", "response": "Olá! Como posso ajudar você hoje?"}
+```
+
+Se HTTP 500 persistir, abrir **Application Insights** → **Logs** → query:
+
+```kusto
+exceptions
+| where timestamp > ago(5m)
+| where cloud_RoleName == "func-helpsphere-agent-<rand>"
+| project timestamp, innermostMessage
+| order by timestamp desc
+```
+
+Mensagens conhecidas e correção:
+
+| Mensagem | Sub-etapa que faltou |
+|----------|----------------------|
+| `No managed identity endpoint found` | 8.1.A (habilitar System-Assigned MI) — pode estar habilitada mas worker warm; force Stop+Start (8.1.D) |
+| `ManagedIdentityCredential authentication unavailable` ambígua | 8.1.B (`AZURE_CLIENT_ID` não setada ou valor errado) |
+| `lacks the required data action 'AIServices/agents/read'` | 8.1.C (role atribuída foi `Azure AI Developer`/`Administrator` em vez de `Foundry User`) |
+| `Principal does not have access to API/Operation` | 8.1.C (role correta mas scope na account pai em vez do project) — OU credential cache (faça 8.1.D) |
+
+---
+
+### Configurar HTTP action no Copilot Studio (após 8.1.E retornar HTTP 200)
+
 > Volte agora para o portal Copilot Studio para finalizar a integração.
 
 No agente `HelpSphere Tier 1 Agent`:
 
-1. **Topics** → `Resolver_ticket` → editar
-2. Adicionar **Call an action**:
-   - **Action type:** HTTP request (custom)
-   - **URL:** `https://${FUNC_AGENT_NAME}.azurewebsites.net/api/agent/chat`
-   - **Method:** POST
-   - **Headers:** `x-functions-key: <key>`
-   - **Body:** `{"message": "{{userQuery}}"}`
-   - **Output mapping:** `agentResponse = body.response`
-3. **Send a message:** `{{agentResponse}}`
-4. **Save**
+1. **Topics** → `Resolver_ticket` → botão **`</> Edit code`** (canto superior direito do editor de topic)
+2. Apaga o YAML existente e cola o YAML abaixo (já vem pronto com HTTP action + captura de response em `Topic.agentResponse` + `SendActivity` enviando `response` ao usuário):
 
-5. Adicionalmente, conectar MCP Server diretamente em Copilot Studio:
-   - **Actions** → **+ Add an action** → **Connect to an MCP server**
-   - Server URL: `https://${MCP_URL}/mcp`
-   - Authentication: OAuth 2.0 Entra ID
-   - Tenant ID, Client ID (`app-mcp-helpsphere-client`), Scopes (`api://mcp-helpsphere/.default`)
-   - Test connection → deve listar 4 tools
-   - Selecionar tools liberadas: get_ticket, list_tickets, add_comment, update_status
-   - Save
+```yaml
+kind: AdaptiveDialog
+modelDescription: Use este topic quando o usuário descreve um problema ou pergunta sobre um ticket específico do HelpSphere.
+beginDialog:
+  kind: OnRecognizedIntent
+  id: main
+  intent: {}
+  actions:
+    - kind: Question
+      id: question_T0SNYH
+      interruptionPolicy:
+        allowInterruption: true
 
-## Passo 8.2 — Como tudo se conecta (mapa mental antes da demo)
+      variable: init:Topic.userQuery
+      prompt: Qual o problema do ticket que você precisa de ajuda?
+      entity: StringPrebuiltEntity
+
+    - kind: HttpRequestAction
+      id: QKUlmL
+      method: Post
+      url: https://<FUNC_AGENT_NAME>.azurewebsites.net/api/agent/chat
+      headers:
+        x-functions-key: <FUNCTION_KEY>
+
+      body:
+        kind: JsonRequestContent
+        content:
+          message: =Topic.userQuery
+
+      response: Topic.agentResponse
+
+    - kind: SendActivity
+      id: send_agent_response
+      activity: "{Topic.agentResponse.response}"
+
+inputType: {}
+outputType: {}
+```
+
+3. Substituir os 2 placeholders no YAML:
+   - `<FUNC_AGENT_NAME>` → nome real da Function App (ex.: `func-helpsphere-agent-final`)
+   - `<FUNCTION_KEY>` → function key default (Function App → menu **Functions** → função `chat` → **Function Keys** → copiar `default`)
+4. **Save** → **Test** (painel direito)
+5. Digite no chat: `Como faço para devolver um produto?` → bot deve responder com texto do agente Foundry (não em silêncio)
+
+> **3 pontos críticos do YAML (não mexer):**
+>
+> - `message: =Topic.userQuery` (**com `=` no início** — sintaxe Power Fx, sem isso o `Topic.userQuery` vira string literal)
+> - `response: Topic.agentResponse` (captura o JSON `{"thread_id":"...","response":"..."}` em variável de topic)
+> - `activity: "{Topic.agentResponse.response}"` (acessa o campo `response` do JSON capturado e envia ao usuário)
+
+> **Alternativa designer visual (sem editor YAML):**
+>
+> 1. **Topics** → `Resolver_ticket` → editar
+> 2. Adicionar nó **Question** → variável `userQuery` (String) → prompt "Qual o problema do ticket que você precisa de ajuda?"
+> 3. Adicionar nó **Call an action** → **HTTP request (custom)**:
+>    - URL: `https://<FUNC_AGENT_NAME>.azurewebsites.net/api/agent/chat`
+>    - Method: POST
+>    - Headers: `x-functions-key: <FUNCTION_KEY>`
+>    - Body: `{"message": "{Topic.userQuery}"}`
+>    - **Response data:** ativar → **Save response as:** `agentResponse` (Record) → properties: `thread_id` (String) + `response` (String)
+> 4. Adicionar nó **Send a message**: `{Topic.agentResponse.response}`
+> 5. **Save** → **Test**
+
+6. Conectar MCP Server diretamente em Copilot Studio → **ver Passo 8.2 abaixo** (precisa de pre-config OAuth no App Registration antes de a UI "Connect to an MCP server" funcionar).
+
+## Passo 8.2 — Configurar OAuth do MCP Connector no Copilot Studio
+
+> **⚠️ Por que este passo existe:** o App Registration `app-mcp-helpsphere-client` (criado no Passo 4.7) foi configurado apenas com o redirect URI do n8n (Passo 6 — `/rest/oauth2-credential/callback`). Quando você tenta **Connect** no Copilot Studio MCP UI, o Entra ID rejeita o OAuth dance com erro genérico (`Encountered internal server error. Correlation Id: xxx`) porque `https://global.consent.azure-apim.net/redirect` não está registrado. Também os 3 scopes do server (`helpsphere.kb.read`, `helpsphere.tickets.read`, `helpsphere.tickets.write`) precisam de **admin consent** no tenant para o connector poder pedi-los em nome do bot.
+
+> **Esclarecimento sobre `azure-apim.net`:** apesar do nome, `https://global.consent.azure-apim.net/redirect` é um **endpoint global SaaS da Microsoft para Power Platform connectors** (Copilot Studio, Logic Apps, Power Automate). **Não é o Azure API Management** que você provisiona — é gerenciado pela MS e não tem custo nem provisioning.
+
+### Passo 8.2.A — Adicionar redirect URIs do Copilot Studio ao App Registration cliente
+
+**No Portal Azure:**
+
+1. Barra superior → buscar **`app-mcp-helpsphere-client`** → clicar (em **App registrations**)
+2. Menu lateral → **Authentication**
+3. Em **Platform configurations** → encontrar `Web` (já existe com URI do n8n)
+4. Clicar **Add URI** dentro do bloco Web → adicionar:
+   - `https://global.consent.azure-apim.net/redirect`
+5. Clicar **Add URI** novamente → adicionar:
+   - `https://token.botframework.com/.auth/web/redirect`
+6. Botão **Save** (topo da página)
+7. Confirmar que os 3 URIs aparecem listados:
+   - `https://ca-n8n-helpsphere.<env>.azurecontainerapps.io/rest/oauth2-credential/callback` (n8n, já existia)
+   - `https://global.consent.azure-apim.net/redirect` (Copilot Studio MCP connector — URL base)
+   - `https://token.botframework.com/.auth/web/redirect` (Bot Framework — caso publique como Teams app)
+
+<!-- screenshot: passo-8.2-a-redirect-uris.png -->
+
+> **⚠️ Sufixo dinâmico do Copilot Studio MCP connector:** ao clicar **Connect** no Passo 8.2.D pela primeira vez, o Copilot Studio gera um redirect URI com um **sufixo único** baseado no nome do connector, no formato:
+>
+> ```
+> https://global.consent.azure-apim.net/redirect/<connector-id-encoded>
+> ```
+>
+> Exemplo: `https://global.consent.azure-apim.net/redirect/cr7d4-5fmcp-20help-5f93348c82a09d9032` (onde `cr7d4-5fmcp-20help-...` é o nome do MCP connector "MCP Help" codificado).
+>
+> A URL base `https://global.consent.azure-apim.net/redirect` (item 4 acima) **não é suficiente** — o Entra ID compara o redirect URI bit-for-bit. Ao tentar **Connect** você vai bater no erro:
+>
+> ```
+> AADSTS50011: The redirect URI 'https://global.consent.azure-apim.net/redirect/<sufixo>'
+> specified in the request does not match the redirect URIs configured for the application
+> '<client-app-id>'.
+> ```
+>
+> **Solução:** copie o redirect URI completo da mensagem de erro AADSTS50011 e adicione como 4º URI no App Registration cliente. O sufixo é **fixo por connector** (não muda a cada Connect), então uma vez registrado, funciona indefinidamente — exceto se você deletar e recriar o connector com mesmo nome (pode gerar sufixo diferente).
+>
+> **Loop pedagógico explícito:** este passo é intencionalmente iterativo. Você adiciona a URL base no item 4, tenta Connect no 8.2.D, vê o erro AADSTS50011, copia o URI completo da mensagem, volta aqui e adiciona como 5º URI. Não há jeito de pré-calcular o sufixo antes do primeiro Connect (Microsoft não documenta o algoritmo de encoding).
+>
+> **Alternativa via Azure CLI após capturar a URL específica do erro:**
+>
+> ```bash
+> # ⚠️ Substitua <URI-DO-ERRO> pelo redirect URI exato da mensagem AADSTS50011
+> EXISTING_URIS=$(az ad app show --id $CLIENT_APP_ID --query "web.redirectUris" -o json)
+> NEW_URI="https://global.consent.azure-apim.net/redirect/<URI-DO-ERRO>"
+>
+> # Anexa o novo URI mantendo os existentes
+> az ad app update --id $CLIENT_APP_ID --web-redirect-uris \
+>   $(az ad app show --id $CLIENT_APP_ID --query "web.redirectUris[]" -o tsv) \
+>   "$NEW_URI"
+> ```
+
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
+>
+> ```bash
+> CLIENT_APP_ID=$(az ad app list --display-name app-mcp-helpsphere-client --query "[0].appId" -o tsv)
+> N8N_URI=$(az ad app show --id $CLIENT_APP_ID --query "web.redirectUris[0]" -o tsv)
+>
+> az ad app update --id $CLIENT_APP_ID --web-redirect-uris \
+>   "$N8N_URI" \
+>   "https://global.consent.azure-apim.net/redirect" \
+>   "https://token.botframework.com/.auth/web/redirect"
+> ```
+
+### Passo 8.2.B — Grant admin consent para os scopes do server
+
+**No Portal Azure:**
+
+1. Ainda em `app-mcp-helpsphere-client` → menu **API permissions**
+2. Confirmar que aparecem **3 permissões** para `app-mcp-helpsphere-server` (status atual: `Not granted for <tenant>`):
+   - `helpsphere.kb.read`
+   - `helpsphere.tickets.read`
+   - `helpsphere.tickets.write`
+3. Botão **Grant admin consent for "<seu-tenant>"** (topo da lista, requer ser Owner/Privileged Role Admin da sub)
+4. Confirmar `Yes`
+5. Status das 3 permissões muda para `Granted for <tenant>` com ✅ verde
+
+<!-- screenshot: passo-8.2-b-admin-consent.png -->
+
+> **Se botão estiver desabilitado:** você não é Owner ou Privileged Role Administrator do tenant — peça a um admin para clicar, ou troque para uma sub onde seja Owner.
+
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
+>
+> ```bash
+> az ad app permission admin-consent --id $CLIENT_APP_ID
+> ```
+
+### Passo 8.2.C — Criar Client Secret no App Registration cliente
+
+O Copilot Studio MCP connector usa OAuth 2.0 **Authorization Code flow on behalf of the user**, que exige um **client secret** no App Registration cliente. O `app-mcp-helpsphere-client` foi criado no Passo 4.7 com 1 secret dedicado ao n8n — você precisa criar um **secret novo dedicado ao Copilot Studio** (boa prática: 1 secret por consumer permite rotação independente).
+
+**No Portal Azure:**
+
+1. Buscar `app-mcp-helpsphere-client` → clicar
+2. Menu **Certificates & secrets** → aba **Client secrets**
+3. **+ New client secret**
+4. **Description:** `copilot-studio`
+5. **Expires:** `6 months` (ou `12 months` se quiser menos rotação)
+6. **Add**
+7. **⚠️ COPIE O VALOR DA COLUNA `Value` IMEDIATAMENTE** (não a coluna `Secret ID` — é o `Value` que vira o `client_secret` do OAuth). O valor fica blurado após você sair da página e **não pode ser recuperado depois**.
+8. Cole o valor num bloco de notas temporário ou direto no campo `Client Secret` do Copilot Studio (Passo 8.2.D)
+
+<!-- screenshot: passo-8.2-c-client-secret.png -->
+
+> **Alternativa via Azure CLI (Linux/Mac/WSL — bash):**
+>
+> ```bash
+> # ⚠️ O comando mostra o secret value no stdout — APENAS uma vez.
+> # Use em ambiente confiável, copie imediatamente, e nunca commite o valor.
+> az ad app credential reset \
+>   --id $CLIENT_APP_ID \
+>   --display-name "copilot-studio" \
+>   --years 1 \
+>   --append \
+>   --query "{appId:appId, password:password}" -o json
+> ```
+>
+> Saída esperada: `{"appId":"a164...", "password":"abc.XYZ..."}` — `password` é o `client_secret`.
+
+### Passo 8.2.D — Conectar MCP Server no Copilot Studio
+
+**No Copilot Studio (`https://copilotstudio.microsoft.com`):**
+
+1. Selecionar agente `HelpSphere Tier 1 Agent`
+2. Menu lateral → **Actions** → **+ Add an action**
+3. Painel direito → categoria **Model Context Protocol** → **Connect to an MCP server**
+4. Preencher (substitua `<TENANT_ID>` pelo seu Tenant ID e `<APPID_SERVER>` pelo appId do `app-mcp-helpsphere-server`):
+   - **Server URL:** `https://${MCP_URL}/mcp` (`MCP_URL` capturado no Passo 4.9)
+   - **Authentication:** `OAuth 2.0`
+   - **Authorization URL:** `https://login.microsoftonline.com/<TENANT_ID>/oauth2/v2.0/authorize`
+   - **Token URL:** `https://login.microsoftonline.com/<TENANT_ID>/oauth2/v2.0/token`
+   - **Refresh URL:** `https://login.microsoftonline.com/<TENANT_ID>/oauth2/v2.0/token` (**igual ao Token URL** — Entra ID usa o mesmo endpoint para refresh)
+   - **Scope:** `api://<APPID_SERVER>/.default`
+   - **Client ID:** `<appId de app-mcp-helpsphere-client>`
+   - **Client Secret:** `<o Value que você copiou no Passo 8.2.C>`
+5. Clicar **Connect** → popup de consentimento Entra → **Accept** (se 8.2.B já fez admin consent, popup pode nem aparecer)
+6. Aguardar Copilot Studio fazer test connection → deve aparecer **4 tools** listadas:
+   - `get_ticket`
+   - `list_tickets`
+   - `add_comment`
+   - `update_status`
+7. Selecionar as 4 tools (checkbox) → **Add**
+8. **Save** no topo do agente
+
+<!-- screenshot: passo-8.2-d-mcp-connect-copilot-studio.png -->
+
+**Capturar Tenant ID e App IDs (rodar 1x no início):**
+
+```powershell
+# 🔑 Capture as variáveis OAuth (sessão nova? rode este bloco)
+$TenantId      = az account show --query tenantId -o tsv
+$ClientAppId   = az ad app list --display-name app-mcp-helpsphere-client --query "[0].appId" -o tsv
+$ServerAppId   = az ad app list --display-name app-mcp-helpsphere-server --query "[0].appId" -o tsv
+
+Write-Host "TenantId:    $TenantId"
+Write-Host "ClientAppId: $ClientAppId"
+Write-Host "ServerAppId: $ServerAppId"
+Write-Host ""
+Write-Host "Authorization URL: https://login.microsoftonline.com/$TenantId/oauth2/v2.0/authorize"
+Write-Host "Token URL:         https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token"
+Write-Host "Refresh URL:       https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token"
+Write-Host "Scope:             api://$ServerAppId/.default"
+```
+
+> **Atenção scope `.default`:** o sufixo `/.default` pede TODAS as permissões já consented em 8.2.B (`helpsphere.kb.read` + `helpsphere.tickets.read` + `helpsphere.tickets.write`). É o jeito recomendado para confidential/daemon clients. Alternativa: listar scopes individuais separados por espaço (`api://<APPID_SERVER>/helpsphere.tickets.read api://<APPID_SERVER>/helpsphere.tickets.write`).
+
+> **Por que Refresh URL = Token URL?** Entra ID v2.0 usa o **mesmo endpoint `/token`** para emitir access token (grant_type=`authorization_code`) e renovar (grant_type=`refresh_token`). O Copilot Studio pede campo separado para compatibilidade com providers OAuth 2.0 que têm endpoints distintos (Google, GitHub etc) — para Entra, repete a mesma URL.
+
+### Passo 8.2.E — Validar conexão MCP
+
+1. No agente `HelpSphere Tier 1 Agent` → **Test** (painel direito)
+2. Digite: `Status do ticket 1?`
+3. O bot deve:
+   - Reconhecer o intent `Resolver_ticket` (Passo 8.1 já configurou)
+   - Foundry Agent recebe pergunta, decide chamar tool `get_ticket`
+   - Tool chega ao MCP Server, autenticação OAuth Bearer passa
+   - SQL retorna dados do ticket #1
+   - Resposta: "Ticket #1 — Status: Open · Categoria: Devolução · ..."
+
+**Mensagens de erro conhecidas e correção:**
+
+| Mensagem no Copilot Studio | Sub-etapa que faltou |
+|----------------------------|----------------------|
+| `Encountered internal server error. Correlation Id: xxx` ao clicar Connect | 8.2.A (redirect URI `global.consent.azure-apim.net/redirect` faltando) |
+| `AADSTS65001: User or admin has not consented` | 8.2.B (admin consent não foi dado) |
+| `AADSTS50011: Reply URL does not match` | 8.2.A (URI digitada errada — verificar se não tem barra final ou espaço) |
+| Connect funciona mas Test → bot diz "não tenho acesso a essas informações" | Foundry Agent não está usando a tool — verificar Passo 8.1 (Configurar Copilot Studio com Foundry Agent) |
+| Connect funciona mas tools retornam erro 500 | MCP Server SQL grants — ver Passo 4.9 (CREATE USER FROM EXTERNAL PROVIDER) |
+
+## Passo 8.3 — Como tudo se conecta (mapa mental antes da demo)
 
 Antes de rodar os 5 tickets, **entenda visualmente** quais peças do que você construiu nos Blocos 1-7 são acionadas em cada caso. Cada ticket "acende" uma rota diferente do diagrama abaixo.
 
@@ -2100,7 +2531,7 @@ flowchart LR
 
 > **Propriedade pedagógica:** cada ticket adiciona **uma e somente uma** camada nova. Se você entender T1 (RAG), T2 já é incremental (substitui search_kb por MCP), e assim por diante.
 
-## Passo 8.3 — Demo dos 5 tickets (com "onde olhar")
+## Passo 8.4 — Demo dos 5 tickets (com "onde olhar")
 
 Para cada ticket abaixo, abra **3 abas no navegador**:
 
@@ -2269,7 +2700,7 @@ Para cada ticket abaixo, abra **3 abas no navegador**:
 >
 > **Esse desacoplamento é o motivo de usar mensageria** em vez de mais um HTTP call síncrono.
 
-## Passo 8.4 — Os 3 "aha moments" do Lab Final
+## Passo 8.5 — Os 3 "aha moments" do Lab Final
 
 Antes de partir pro cleanup, fixe estes 3 conceitos:
 
@@ -2308,7 +2739,7 @@ A descrição é em **natural language**. O LLM lê isso e decide qual usar com 
 
 > **Nenhum lab inventou do zero.** Você pode reaplicar essa arquitetura em outro domínio trocando o KB e os tools — a costura permanece.
 
-## Passo 8.5 — Cleanup
+## Passo 8.6 — Cleanup
 
 > **Cleanup — OPCIONAL:**
 > Se você vai fazer Lab Avançado em sequência, **mantenha** `rg-lab-intermediario` rodando.
