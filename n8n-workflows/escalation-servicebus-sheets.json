@@ -1,198 +1,395 @@
 {
-  "name": "HelpSphere Escalation — Service Bus to Sheets/Slack/Email",
+  "name": "HelpSphere Ticket Escalation (Service Bus + Sheets)",
   "nodes": [
     {
-      "parameters": {
-        "operation": "receiveMessages",
-        "topic": "escalations",
-        "subscription": "n8n-consumer",
-        "options": {
-          "maxMessageCount": 10,
-          "lockDuration": 30
-        }
-      },
-      "id": "1a2b3c4d-trigger-servicebus",
+      "id": "node-1-servicebus-trigger",
       "name": "Service Bus Trigger",
-      "type": "n8n-nodes-base.azureServiceBusTrigger",
+      "type": "n8n-nodes-base.amqpTrigger",
       "typeVersion": 1,
-      "position": [220, 300],
-      "credentials": {
-        "azureServiceBusApi": {
-          "id": "{{ $env.SERVICE_BUS_CRED_ID }}",
-          "name": "HelpSphere Service Bus"
-        }
-      }
-    },
-    {
+      "position": [240, 320],
       "parameters": {
-        "functionCode": "// Filter: only process tickets with severity HIGH or CRITICAL\nconst items = $input.all();\nreturn items.filter(item => {\n  const sev = (item.json.severity || '').toUpperCase();\n  return ['HIGH', 'CRITICAL'].includes(sev);\n});"
-      },
-      "id": "2b3c4d5e-filter",
-      "name": "Function: Filter Severity",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [440, 300]
-    },
-    {
-      "parameters": {
-        "dataPropertyName": "severity",
-        "rules": {
-          "rules": [
-            {
-              "value2": "CRITICAL",
-              "operation": "equal"
-            },
-            {
-              "value2": "HIGH",
-              "operation": "equal"
-            }
-          ]
-        }
-      },
-      "id": "3c4d5e6f-switch",
-      "name": "Switch: Severity",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 1,
-      "position": [660, 300]
-    },
-    {
-      "parameters": {
-        "operation": "appendOrUpdate",
-        "documentId": "={{ $env.GOOGLE_SHEET_ID }}",
-        "sheetName": "Escalations",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "timestamp": "={{ $now.toISO() }}",
-            "ticket_id": "={{ $json.ticket_id }}",
-            "severity": "={{ $json.severity }}",
-            "category": "={{ $json.category }}",
-            "persona": "={{ $json.persona }}",
-            "summary": "={{ $json.summary }}",
-            "escalated_by": "helpsphere-agent-v0.1"
-          }
+        "sink": "tickets-escalated/Subscriptions/n8n-escalation-sub",
+        "clientOptions": {
+          "reconnect": true,
+          "reconnect_limit": 10
         },
-        "options": {}
+        "options": {
+          "containerId": "n8n-helpsphere",
+          "autoAcknowledge": true
+        }
       },
-      "id": "4d5e6f7a-sheets-append",
-      "name": "Google Sheets: Append Audit",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4,
-      "position": [880, 200],
+      "notes": "AMQP 1.0 listener no Topic 'tickets-escalated' / Subscription 'n8n-escalation-sub' do namespace sb-helpsphere-final. Sink format: '<topic>/Subscriptions/<subscription>' (AMQP entity path padrao Service Bus). Service Bus suporta AMQP 1.0 nativo (docs.microsoft.com/azure/service-bus-messaging/service-bus-amqp-overview). N8n nao tem first-party Azure Service Bus node — issue n8n-io/n8n#12959.",
       "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "{{ $env.SHEETS_OAUTH_CRED_ID }}",
-          "name": "HelpSphere Sheets OAuth"
+        "amqp": {
+          "id": "REPLACE_WITH_YOUR_AMQP_CRED_ID",
+          "name": "HelpSphere Service Bus AMQP"
         }
       }
     },
     {
+      "id": "node-2-mcp-enrichment",
+      "name": "HTTP MCP — get_ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 320],
       "parameters": {
-        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
-        "httpMethod": "POST",
+        "method": "POST",
+        "url": "=https://ca-mcp-helpsphere.{{ $env.MCP_RAND }}.eastus2.azurecontainerapps.io/tools/call",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "Content-Type",
+              "name": "content-type",
               "value": "application/json"
+            },
+            {
+              "name": "x-tenant-id",
+              "value": "={{ $json.body.tenant_id || 'default' }}"
             }
           ]
         },
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "text",
-              "value": "=:rotating_light: *HelpSphere Escalation* :rotating_light:\\n*Ticket:* {{ $json.ticket_id }}\\n*Severity:* {{ $json.severity }}\\n*Category:* {{ $json.category }}\\n*Persona:* {{ $json.persona }}\\n*Summary:* {{ $json.summary }}"
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"tool\": \"get_ticket\",\n  \"arguments\": {\n    \"ticket_id\": {{ $json.body.ticket_id }},\n    \"include_history\": true\n  }\n}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "responseFormat": "json"
             }
-          ]
-        },
-        "options": {}
+          }
+        }
       },
-      "id": "5e6f7a8b-slack-notify",
-      "name": "HTTP: Slack Notify",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.1,
-      "position": [880, 300]
-    },
-    {
-      "parameters": {
-        "fromEmail": "={{ $env.EMAIL_FROM }}",
-        "toEmail": "={{ $env.EMAIL_TO }}",
-        "subject": "=[HelpSphere CRITICAL] Ticket {{ $json.ticket_id }} — {{ $json.category }}",
-        "text": "=Ticket: {{ $json.ticket_id }}\\nSeverity: {{ $json.severity }}\\nCategory: {{ $json.category }}\\nPersona: {{ $json.persona }}\\nSummary:\\n{{ $json.summary }}\\n\\n--\\nHelpSphere Agent v0.1\\nEscalation timestamp: {{ $now.toISO() }}",
-        "options": {}
-      },
-      "id": "6f7a8b9c-email-notify",
-      "name": "Email: Notify Ops",
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2,
-      "position": [880, 400],
+      "notes": "Enriquece o ticket via MCP Server (Cap 05). Bearer token Entra cravado na credential 'MCP Server Bearer'. Retorna {ticket, similar_tickets, priority, confidenceScore}.",
       "credentials": {
-        "smtp": {
-          "id": "{{ $env.SMTP_CRED_ID }}",
-          "name": "HelpSphere SMTP"
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_MCP_BEARER_CRED_ID",
+          "name": "MCP Server Bearer"
         }
       }
     },
     {
+      "id": "node-3-postgres-audit",
+      "name": "PostgreSQL — Log Audit",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [720, 320],
       "parameters": {
-        "values": {
-          "string": [
+        "operation": "executeQuery",
+        "query": "INSERT INTO escalation_audit (ticket_id, tenant_id, priority, confidence_score, mcp_response, routed_to, created_at) VALUES ($1, $2, $3, $4, $5::jsonb, NULL, CURRENT_TIMESTAMP) RETURNING id;",
+        "options": {
+          "queryReplacement": "={{ $('Service Bus Trigger').item.json.body.ticket_id }},{{ $('Service Bus Trigger').item.json.body.tenant_id || 'default' }},{{ $('Service Bus Trigger').item.json.body.priority || $json.priority || 'medium' }},{{ $json.confidenceScore || 0.5 }},{{ JSON.stringify($json) }}"
+        }
+      },
+      "notes": "INSERT em escalation_audit (PG do n8n metadata DB OU PG dedicado de auditoria). Retorna id auto-gerado para correlação posterior. routed_to ainda NULL — preenchido pelo Switch downstream.",
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_WITH_YOUR_PG_AUDIT_CRED_ID",
+          "name": "HelpSphere PostgreSQL Audit"
+        }
+      }
+    },
+    {
+      "id": "node-4-switch-priority",
+      "name": "Switch — Priority Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [960, 320],
+      "parameters": {
+        "rules": {
+          "values": [
             {
-              "name": "result",
-              "value": "=Escalation processed for ticket {{ $json.ticket_id }} at {{ $now.toISO() }}"
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('HTTP MCP — get_ticket').item.json.confidenceScore }}",
+                    "rightValue": 0.7,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "high-confidence-teams"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Service Bus Trigger').item.json.body.priority || $('HTTP MCP — get_ticket').item.json.priority }}",
+                    "rightValue": "critical",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "critical-teams-bypass"
             }
           ]
         },
-        "options": {}
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "manual-review"
+        }
       },
-      "id": "7a8b9c0d-set-result",
-      "name": "Set: Result",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 1,
-      "position": [1100, 300]
+      "notes": "Roteia por confidenceScore (>=0.7 → Teams card) OU priority='critical' (bypass direto Teams sem checagem confidence). Fallback → manual-review (apenas grava no Sheets/PG sem notificar Teams)."
+    },
+    {
+      "id": "node-5-graph-teams-card",
+      "name": "Microsoft Graph — Teams Adaptive Card",
+      "type": "n8n-nodes-base.microsoftTeams",
+      "typeVersion": 2,
+      "position": [1240, 220],
+      "parameters": {
+        "resource": "channelMessage",
+        "operation": "create",
+        "teamId": "REPLACE_WITH_YOUR_TEAMS_TEAM_ID",
+        "channelId": "REPLACE_WITH_YOUR_ATENDIMENTO_TIER2_CHANNEL_ID",
+        "messageType": "anadaptivecard",
+        "message": "={\n  \"type\": \"AdaptiveCard\",\n  \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n  \"version\": \"1.5\",\n  \"body\": [\n    {\n      \"type\": \"TextBlock\",\n      \"size\": \"Large\",\n      \"weight\": \"Bolder\",\n      \"text\": \"🚨 Ticket Escalado — Tier 2\",\n      \"color\": \"Attention\"\n    },\n    {\n      \"type\": \"FactSet\",\n      \"facts\": [\n        { \"title\": \"Ticket ID:\", \"value\": \"#{{ $('Service Bus Trigger').item.json.body.ticket_id }}\" },\n        { \"title\": \"Tenant:\", \"value\": \"{{ $('Service Bus Trigger').item.json.body.tenant_id || 'default' }}\" },\n        { \"title\": \"Persona:\", \"value\": \"{{ $('Service Bus Trigger').item.json.body.persona || 'cliente' }}\" },\n        { \"title\": \"Categoria:\", \"value\": \"{{ $('Service Bus Trigger').item.json.body.category || 'geral' }}\" },\n        { \"title\": \"Prioridade:\", \"value\": \"{{ $('Service Bus Trigger').item.json.body.priority || $('HTTP MCP — get_ticket').item.json.priority || 'medium' }}\" },\n        { \"title\": \"Confiança IA:\", \"value\": \"{{ $('HTTP MCP — get_ticket').item.json.confidenceScore || 'n/a' }}\" },\n        { \"title\": \"Escalado por:\", \"value\": \"{{ $('Service Bus Trigger').item.json.body.escalated_by || 'helpsphere-tier1-agent' }}\" }\n      ]\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"**Resumo:** {{ $('Service Bus Trigger').item.json.body.summary || 'sem resumo' }}\",\n      \"wrap\": true,\n      \"spacing\": \"Medium\"\n    },\n    {\n      \"type\": \"TextBlock\",\n      \"text\": \"**Audit ID:** {{ $('PostgreSQL — Log Audit').item.json.id }}\",\n      \"isSubtle\": true,\n      \"size\": \"Small\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"type\": \"Action.OpenUrl\",\n      \"title\": \"Abrir no HelpSphere\",\n      \"url\": \"https://app-backend-helpsphere-prod.azurecontainerapps.io/tickets/{{ $('Service Bus Trigger').item.json.body.ticket_id }}\",\n      \"style\": \"positive\"\n    },\n    {\n      \"type\": \"Action.Submit\",\n      \"title\": \"✓ Aceitar\",\n      \"data\": {\n        \"action\": \"accept\",\n        \"ticket_id\": \"{{ $('Service Bus Trigger').item.json.body.ticket_id }}\",\n        \"audit_id\": \"{{ $('PostgreSQL — Log Audit').item.json.id }}\"\n      }\n    },\n    {\n      \"type\": \"Action.Submit\",\n      \"title\": \"✗ Rejeitar\",\n      \"data\": {\n        \"action\": \"reject\",\n        \"ticket_id\": \"{{ $('Service Bus Trigger').item.json.body.ticket_id }}\",\n        \"audit_id\": \"{{ $('PostgreSQL — Log Audit').item.json.id }}\"\n      }\n    },\n    {\n      \"type\": \"Action.Submit\",\n      \"title\": \"↪ Reatribuir\",\n      \"data\": {\n        \"action\": \"reassign\",\n        \"ticket_id\": \"{{ $('Service Bus Trigger').item.json.body.ticket_id }}\",\n        \"audit_id\": \"{{ $('PostgreSQL — Log Audit').item.json.id }}\"\n      }\n    }\n  ]\n}"
+      },
+      "notes": "Adaptive Card v1.5 com 4 actions: OpenUrl (HelpSphere) + 3 Submit (Aceitar/Rejeitar/Reatribuir). Action.Submit envia POST para WEBHOOK_URL do n8n com o data payload — abre handler em outro workflow.",
+      "credentials": {
+        "microsoftTeamsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_GRAPH_OAUTH_CRED_ID",
+          "name": "Microsoft Graph OAuth2"
+        }
+      }
+    },
+    {
+      "id": "node-6-helpsphere-patch",
+      "name": "HTTP PATCH — HelpSphere /tickets/{id}",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1480, 320],
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://app-backend-helpsphere-prod.azurecontainerapps.io/api/tickets/{{ $('Service Bus Trigger').item.json.body.ticket_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-tenant-id",
+              "value": "={{ $('Service Bus Trigger').item.json.body.tenant_id || 'default' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"status\": \"escalated\",\n  \"escalated_at\": \"{{ $now.toISO() }}\",\n  \"escalated_by\": \"{{ $('Service Bus Trigger').item.json.body.escalated_by || 'helpsphere-tier1-agent' }}\",\n  \"escalation_audit_id\": {{ $('PostgreSQL — Log Audit').item.json.id }},\n  \"escalation_reason\": \"{{ $('HTTP MCP — get_ticket').item.json.escalation_reason || 'auto-escalation via agente Tier-1' }}\"\n}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": false
+            }
+          }
+        }
+      },
+      "notes": "PATCH HelpSphere API atualizando status='escalated' + carimbo de auditoria. Header x-functions-key (Bloco 2 backend) ou Bearer Entra (Lab Avancado).",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_HELPSPHERE_API_CRED_ID",
+          "name": "HelpSphere API Key"
+        }
+      }
+    },
+    {
+      "id": "node-7-google-sheets-append",
+      "name": "Google Sheets — Append Audit Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1720, 320],
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $now.toISO() }}",
+            "ticket_id": "={{ $('Service Bus Trigger').item.json.body.ticket_id }}",
+            "severity": "={{ $('Service Bus Trigger').item.json.body.severity || $('Service Bus Trigger').item.json.body.priority || 'HIGH' }}",
+            "category": "={{ $('Service Bus Trigger').item.json.body.category || 'geral' }}",
+            "persona": "={{ $('Service Bus Trigger').item.json.body.persona || 'cliente' }}",
+            "summary": "={{ $('Service Bus Trigger').item.json.body.summary || 'sem resumo' }}",
+            "escalated_by": "={{ $('Service Bus Trigger').item.json.body.escalated_by || 'helpsphere-tier1-agent' }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "timestamp", "displayName": "timestamp", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "ticket_id", "displayName": "ticket_id", "required": true, "defaultMatch": false, "display": true, "type": "number", "canBeUsedToMatch": true },
+            { "id": "severity", "displayName": "severity", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "category", "displayName": "category", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "persona", "displayName": "persona", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "summary", "displayName": "summary", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "escalated_by", "displayName": "escalated_by", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {
+          "useAppend": true
+        }
+      },
+      "notes": "Append linha na planilha 'Apex IA - Auditoria de Escalações HelpSphere' (Cap 08 Passo 8.5). Service Account email helpsphere-sheets-bot@<project>.iam.gserviceaccount.com com Editor sharing.",
+      "credentials": {
+        "googleApi": {
+          "id": "REPLACE_WITH_YOUR_GOOGLE_SHEETS_SA_CRED_ID",
+          "name": "Google Sheets Service Account"
+        }
+      }
     }
   ],
   "connections": {
     "Service Bus Trigger": {
-      "main": [[{ "node": "Function: Filter Severity", "type": "main", "index": 0 }]]
-    },
-    "Function: Filter Severity": {
-      "main": [[{ "node": "Switch: Severity", "type": "main", "index": 0 }]]
-    },
-    "Switch: Severity": {
       "main": [
         [
-          { "node": "Google Sheets: Append Audit", "type": "main", "index": 0 },
-          { "node": "HTTP: Slack Notify", "type": "main", "index": 0 },
-          { "node": "Email: Notify Ops", "type": "main", "index": 0 }
+          {
+            "node": "HTTP MCP — get_ticket",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
-    "Google Sheets: Append Audit": {
-      "main": [[{ "node": "Set: Result", "type": "main", "index": 0 }]]
+    "HTTP MCP — get_ticket": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL — Log Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "HTTP: Slack Notify": {
-      "main": [[{ "node": "Set: Result", "type": "main", "index": 0 }]]
+    "PostgreSQL — Log Audit": {
+      "main": [
+        [
+          {
+            "node": "Switch — Priority Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Email: Notify Ops": {
-      "main": [[{ "node": "Set: Result", "type": "main", "index": 0 }]]
+    "Switch — Priority Route": {
+      "main": [
+        [
+          {
+            "node": "Microsoft Graph — Teams Adaptive Card",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Microsoft Graph — Teams Adaptive Card",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP PATCH — HelpSphere /tickets/{id}",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Microsoft Graph — Teams Adaptive Card": {
+      "main": [
+        [
+          {
+            "node": "HTTP PATCH — HelpSphere /tickets/{id}",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP PATCH — HelpSphere /tickets/{id}": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets — Append Audit Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": false,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "",
+    "timezone": "America/Sao_Paulo"
   },
-  "versionId": "v0.1.0-init",
+  "active": false,
+  "pinData": {},
+  "versionId": "escalation-servicebus-sheets-v0.3.0-amqp",
   "meta": {
-    "templateCreatedBy": "tftec-guilherme/apex-helpsphere-agente-lab",
-    "_comment": "Importar via 'Import from File' no n8n. Configure credentials antes de ativar. Veja n8n-workflows/README.md."
+    "templateCredsSetupCompleted": false,
+    "instanceId": "helpsphere-d06-lab-final-wave4"
   },
   "tags": [
-    { "name": "helpsphere" },
-    { "name": "escalation" },
-    { "name": "lab-final-d06" }
+    {
+      "name": "helpsphere",
+      "createdAt": "2026-05-09T00:00:00.000Z"
+    },
+    {
+      "name": "escalation",
+      "createdAt": "2026-05-09T00:00:00.000Z"
+    },
+    {
+      "name": "service-bus",
+      "createdAt": "2026-05-09T00:00:00.000Z"
+    },
+    {
+      "name": "google-sheets",
+      "createdAt": "2026-05-09T00:00:00.000Z"
+    },
+    {
+      "name": "d06-lab-final-wave4",
+      "createdAt": "2026-05-09T00:00:00.000Z"
+    }
   ]
 }
